@@ -1,0 +1,28 @@
+# Superpowers brainstorming (local-only visual companion state)
+.superpowers/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# Foundry
+out/
+cache/
+broadcast/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

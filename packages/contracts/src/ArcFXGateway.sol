@@ -160,4 +160,51 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         IERC20(token).safeTransfer(to, amount);
         emit FeesWithdrawn(token, to, amount);
     }
+
+    // ── Delegate authorization ─────────────────────────────────────────
+    mapping(address merchant => mapping(address delegate => uint64 expiresAt))
+        public delegateAuthorizations;
+
+    event DelegateAuthorized(address indexed merchant, address indexed delegate, uint64 expiresAt);
+    event DelegateRevoked(address indexed merchant, address indexed delegate);
+
+    error DelegateNotAuthorized();
+
+    function authorizeDelegate(address delegate, uint64 expiresAt) external {
+        if (!merchants[msg.sender].registered) revert NotMerchant();
+        delegateAuthorizations[msg.sender][delegate] = expiresAt;
+        emit DelegateAuthorized(msg.sender, delegate, expiresAt);
+    }
+
+    function revokeDelegate(address delegate) external {
+        delegateAuthorizations[msg.sender][delegate] = 0;
+        emit DelegateRevoked(msg.sender, delegate);
+    }
+
+    function createInvoiceFor(
+        address merchant,
+        bytes32 id,
+        address payIn,
+        uint256 amountOut,
+        uint64 expiresAt
+    ) external {
+        uint64 authExpiry = delegateAuthorizations[merchant][msg.sender];
+        if (authExpiry < block.timestamp) revert DelegateNotAuthorized();
+
+        Merchant memory m = merchants[merchant];
+        if (!m.registered) revert NotMerchant();
+        if (payIn == m.payoutToken) revert UnsupportedPair();
+        if (payIn != address(USDC) && payIn != address(EURC)) revert UnsupportedPair();
+        if (invoices[id].status != InvoiceStatus.None) revert InvoiceAlreadyExists(id);
+
+        invoices[id] = Invoice({
+            merchant:  merchant,
+            payIn:     payIn,
+            amountOut: amountOut,
+            expiresAt: expiresAt,
+            status:    InvoiceStatus.Created,
+            paidBy:    address(0)
+        });
+        emit InvoiceCreated(id, merchant, payIn, amountOut, expiresAt);
+    }
 }

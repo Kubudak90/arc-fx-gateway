@@ -261,4 +261,72 @@ contract ArcFXGatewayTest is Test {
         assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
         assertGt(eurc.balanceOf(merchant) - merchantBefore, 0);
     }
+
+    // ── delegate authorization ─────────────────────────────────────────
+
+    function test_AuthorizeDelegate_Success() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        vm.expectEmit(true, true, false, true, address(gw));
+        emit ArcFXGateway.DelegateAuthorized(merchant, delegate, type(uint64).max);
+        vm.prank(merchant);
+        gw.authorizeDelegate(delegate, type(uint64).max);
+        assertEq(gw.delegateAuthorizations(merchant, delegate), type(uint64).max);
+    }
+
+    function test_AuthorizeDelegate_RevertsForNonMerchant() public {
+        address delegate = makeAddr("delegate");
+        vm.prank(merchant); // not registered
+        vm.expectRevert(ArcFXGateway.NotMerchant.selector);
+        gw.authorizeDelegate(delegate, type(uint64).max);
+    }
+
+    function test_RevokeDelegate_Success() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        vm.startPrank(merchant);
+        gw.authorizeDelegate(delegate, type(uint64).max);
+        gw.revokeDelegate(delegate);
+        vm.stopPrank();
+        assertEq(gw.delegateAuthorizations(merchant, delegate), 0);
+    }
+
+    function test_CreateInvoiceFor_Success() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        vm.prank(merchant);
+        gw.authorizeDelegate(delegate, type(uint64).max);
+
+        bytes32 id = keccak256("auth-1");
+        vm.prank(delegate);
+        gw.createInvoiceFor(merchant, id, address(eurc), 49_990_000, uint64(block.timestamp + 30 minutes));
+
+        (address m, address payIn, uint256 amt, , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(id);
+        assertEq(m, merchant);
+        assertEq(payIn, address(eurc));
+        assertEq(amt, 49_990_000);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Created));
+    }
+
+    function test_CreateInvoiceFor_RevertsIfNotAuthorized() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        bytes32 id = keccak256("auth-2");
+        vm.prank(delegate); // never authorized
+        vm.expectRevert(ArcFXGateway.DelegateNotAuthorized.selector);
+        gw.createInvoiceFor(merchant, id, address(eurc), 1, uint64(block.timestamp + 1 hours));
+    }
+
+    function test_CreateInvoiceFor_RevertsIfDelegateExpired() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        vm.prank(merchant);
+        gw.authorizeDelegate(delegate, uint64(block.timestamp + 1 minutes));
+
+        vm.warp(block.timestamp + 5 minutes);
+        bytes32 id = keccak256("auth-3");
+        vm.prank(delegate);
+        vm.expectRevert(ArcFXGateway.DelegateNotAuthorized.selector);
+        gw.createInvoiceFor(merchant, id, address(eurc), 1, uint64(block.timestamp + 1 hours));
+    }
 }

@@ -199,4 +199,66 @@ contract ArcFXGatewayTest is Test {
         vm.expectRevert();
         gw.pay(id, type(uint128).max);
     }
+
+    // ── withdrawFees ───────────────────────────────────────────────────
+
+    function test_WithdrawFees_OwnerOnly() public {
+        _registerMerchant(); _fundPoolAndCustomer();
+        bytes32 id = keccak256("f");
+        vm.prank(merchant);
+        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer); gw.pay(id, 2_000_000);
+
+        uint256 accrued = gw.protocolFeesAccrued(address(usdc));
+        assertGt(accrued, 0);
+
+        address treasury = makeAddr("treasury");
+        gw.withdrawFees(address(usdc), treasury);
+        assertEq(usdc.balanceOf(treasury), accrued);
+        assertEq(gw.protocolFeesAccrued(address(usdc)), 0);
+    }
+
+    function test_WithdrawFees_RevertsForNonOwner() public {
+        vm.prank(customer);
+        vm.expectRevert();
+        gw.withdrawFees(address(usdc), customer);
+    }
+
+    // ── branch coverage completions ────────────────────────────────────
+
+    function test_CreateInvoice_RevertsOnUnknownPayIn() public {
+        // Branch: payIn != payoutToken AND payIn is not USDC or EURC
+        vm.prank(merchant);
+        gw.registerMerchant(address(usdc));
+        MockERC20 unknown = new MockERC20("Z", "Z", 6);
+        vm.prank(merchant);
+        vm.expectRevert(ArcFXGateway.UnsupportedPair.selector);
+        gw.createInvoice(keccak256("inv-uk"), address(unknown), 100, uint64(block.timestamp + 1 hours));
+    }
+
+    function test_Pay_USDCInEURCOut() public {
+        // Covers the USDC→EURC branch in pay() rate direction logic
+        // Register merchant with EURC payout
+        vm.prank(merchant);
+        gw.registerMerchant(address(eurc));
+
+        usdc.mint(address(pool), 1_000_000 * 1e6);
+        eurc.mint(address(pool), 1_000_000 * 1e6);
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+
+        bytes32 id = keccak256("usdc-in");
+        vm.prank(merchant);
+        // amountOut in EURC: merchant wants 46_000_000 EURC (pool gives EURC per USDC at ~1.0863)
+        gw.createInvoice(id, address(usdc), 46_000_000, uint64(block.timestamp + 1 hours));
+
+        uint256 merchantBefore = eurc.balanceOf(merchant);
+        vm.prank(customer);
+        gw.pay(id, 60_000_000);
+
+        (, , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(id);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
+        assertGt(eurc.balanceOf(merchant) - merchantBefore, 0);
+    }
 }

@@ -154,5 +154,10 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         if (probeOut == 0) return type(uint256).max;
         return (amountOut * probeIn + probeOut - 1) / probeOut;
     }
-    function withdrawFees(address token, address to) external onlyOwner { revert(); }
+    function withdrawFees(address token, address to) external onlyOwner {
+        uint256 amount = protocolFeesAccrued[token];
+        protocolFeesAccrued[token] = 0;
+        IERC20(token).safeTransfer(to, amount);
+        emit FeesWithdrawn(token, to, amount);
+    }
 }

@@ -10,9 +10,9 @@
   },
   "current": {
     "deployedAt": "2026-04-25",
-    "label": "v0.2.0 — OracleAMM-backed (Plan 1.5)",
+    "label": "v0.3.0 — Gateway with delegate authorization (Plan 2a)",
     "contracts": {
-      "ArcFXGateway": "0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D",
+      "ArcFXGateway": "0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
       "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
     },
@@ -24,27 +24,39 @@
       "oracleAnswer": 108630000,
       "oracleAnswerHuman": "1.0863 (real EUR/USD)"
     },
+    "smokeTest": {
+      "registerMerchant": "ok",
+      "authorizeDelegate": {
+        "delegate": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b (deployer self)",
+        "expiresAt": "type(uint64).max"
+      },
+      "createInvoiceFor": {
+        "id": "0x0000000000000000000000000000000000000000000000000000000000000003",
+        "merchant": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b",
+        "amountOut": "50000",
+        "amountOutHuman": "0.05 USDC",
+        "txHash": "0xf22c076de9ac629a880ce629d5490d0a06e1d3fb1c3f166af7b67577a5fcebfd",
+        "invoiceStatusAfter": "1 (Created)"
+      }
+    }
+  },
+  "deprecated_v0.2.0": {
+    "deployedAt": "2026-04-25",
+    "label": "v0.2.0 — Gateway pre-delegate (Plan 1.5)",
+    "reason": "v0.3.0 adds backwards-compatible delegate authorization (createInvoiceFor + authorizeDelegate + revokeDelegate) so the Plan 2 server hot wallet can submit invoices on a merchant's behalf. v0.2.0 still functional but superseded by v0.3.0 for the product flow.",
+    "contracts": {
+      "ArcFXGateway": "0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D",
+      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
+      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
+    },
     "bootstrapLiquidity": {
       "usdc": "5000000",
       "eurc": "4600000",
       "addLiquidityTx": "0x71dd049205e36ae78e5cb1036c628860dbd70f19538f1c896a1f83a2b90d7816"
     },
-    "smokeTest": {
-      "createInvoice": {
-        "id": "0x0000000000000000000000000000000000000000000000000000000000000002",
-        "amountOut": "100000",
-        "amountOutHuman": "0.10 USDC"
-      },
-      "pay": {
-        "txHash": "0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a",
-        "invoiceStatusAfter": "2 (Paid)",
-        "note": "Executed at real EUR/USD = 1.0863. Quote: 0.1 EURC → 0.108587 USDC (gross 0.108630, fee 4 bps = 0.000043). No parity hack."
-      },
-      "poolStateAfter": {
-        "reserve0Usdc": "4900000",
-        "reserve1Eurc": "4692093",
-        "quote_0.1EURC_to_USDC": "108587"
-      }
+    "smokeTest_pay": {
+      "txHash": "0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a",
+      "note": "Real 1.0863 EUR/USD, no parity hack. 0.1 EURC → 0.108587 USDC."
     }
   },
   "deprecated_v0.1.0": {

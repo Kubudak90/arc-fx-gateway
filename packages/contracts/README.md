@@ -89,13 +89,15 @@ Deployed addresses are recorded in `deployments/arc-testnet.json` after a succes
 - **Manual:** SWC registry checklist passes; vendored Saddle pool reviewed patch-by-patch against upstream `master` at vendor time.
 - **Architectural:** immutable construction params, custom errors only, ReentrancyGuard on mutating entry points.
 
-## Live Arc-testnet deployment (v0.2.0 — OracleAMM)
+## Live Arc-testnet deployment (v0.3.0 — Gateway with delegate auth)
 
 | | Address |
 |---|---|
-| ArcFXGateway | [`0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D`](https://testnet.arcscan.app/address/0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D) |
+| ArcFXGateway (v0.3) | [`0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF`](https://testnet.arcscan.app/address/0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF) |
 | OracleAMM | [`0xC2020098aF328ac9CBD274267F424822C400dD66`](https://testnet.arcscan.app/address/0xC2020098aF328ac9CBD274267F424822C400dD66) |
 | MockChainlinkFeed (EUR/USD = 1.0863) | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
+
+v0.3.0 adds `createInvoiceFor` + `authorizeDelegate` + `revokeDelegate` (backwards-compatible) so the Plan 2 server hot wallet can submit invoices on a merchant's behalf. Smoke-test tx: [`0xf22c076d…77a5fcebfd`](https://testnet.arcscan.app/tx/0xf22c076de9ac629a880ce629d5490d0a06e1d3fb1c3f166af7b67577a5fcebfd).
 
 End-to-end smoke-test transaction: [`0x31ddbf35…fc2bf0bd1c2064a`](https://testnet.arcscan.app/tx/0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a) — invoice for 0.10 USDC paid in EURC at the real 1.0863 EUR/USD rate, settled, marked Paid.
 

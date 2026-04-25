@@ -147,4 +147,56 @@ contract ArcFXGatewayTest is Test {
         assertEq(usdc.balanceOf(merchant) - merchantBefore, 49_990_000 - feeUsdc);
         assertEq(gw.protocolFeesAccrued(address(usdc)), feeUsdc);
     }
+
+    // ── pay() guards ───────────────────────────────────────────────────
+
+    function test_Pay_RevertsOnExpired() public {
+        _registerMerchant(); _fundPoolAndCustomer();
+        bytes32 id = keccak256("exp");
+        vm.prank(merchant);
+        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 60));
+        vm.warp(block.timestamp + 120);
+        vm.prank(customer);
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceExpired.selector, id));
+        gw.pay(id, 2_000_000);
+    }
+
+    function test_Pay_RevertsOnReplay() public {
+        _registerMerchant(); _fundPoolAndCustomer();
+        bytes32 id = keccak256("rep");
+        vm.prank(merchant);
+        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer); gw.pay(id, 2_000_000);
+        vm.prank(customer);
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceAlreadyPaid.selector, id));
+        gw.pay(id, 2_000_000);
+    }
+
+    function test_Pay_RevertsOnNotFound() public {
+        vm.prank(customer);
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceNotFound.selector, bytes32(0)));
+        gw.pay(bytes32(0), 1);
+    }
+
+    function test_Pay_RevertsOnSlippageTooTight() public {
+        _registerMerchant(); _fundPoolAndCustomer();
+        bytes32 id = keccak256("slip");
+        vm.prank(merchant);
+        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer);
+        vm.expectRevert();
+        gw.pay(id, 500_000);
+    }
+
+    function test_Pay_RevertsOnOracleDeviation() public {
+        _registerMerchant(); _fundPoolAndCustomer();
+        pool.setRate(0.5e18); // rate far from oracle (1.0863)
+        bytes32 id = keccak256("dev");
+        vm.prank(merchant);
+        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        eurc.mint(customer, 100_000 * 1e6);
+        vm.prank(customer);
+        vm.expectRevert();
+        gw.pay(id, type(uint128).max);
+    }
 }

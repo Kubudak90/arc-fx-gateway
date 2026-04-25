@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/index-events",      "schedule": "*/1 * * * *" },
+    { "path": "/api/cron/dispatch-webhooks", "schedule": "*/1 * * * *" }
+  ]
+}

@@ -108,6 +108,51 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         });
         emit InvoiceCreated(id, msg.sender, payIn, amountOut, expiresAt);
     }
-    function pay(bytes32 id, uint256 maxAmountIn) external nonReentrant { revert(); }
+    function pay(bytes32 id, uint256 maxAmountIn) external nonReentrant {
+        Invoice storage inv = invoices[id];
+        if (inv.status == InvoiceStatus.None)  revert InvoiceNotFound(id);
+        if (inv.status == InvoiceStatus.Paid)  revert InvoiceAlreadyPaid(id);
+        if (block.timestamp > inv.expiresAt)   revert InvoiceExpired(id);
+
+        address payoutToken = merchants[inv.merchant].payoutToken;
+
+        uint8 iIn  = inv.payIn   == address(USDC) ? USDC_INDEX : EURC_INDEX;
+        uint8 jOut = payoutToken == address(USDC) ? USDC_INDEX : EURC_INDEX;
+
+        uint256 amountIn = _estimateAmountIn(iIn, jOut, inv.amountOut);
+        if (amountIn > maxAmountIn) revert SlippageExceeded(amountIn, maxAmountIn);
+
+        IERC20(inv.payIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        IERC20(inv.payIn).forceApprove(address(POOL), amountIn);
+        uint256 received = POOL.swap(iIn, jOut, amountIn, inv.amountOut, block.timestamp + 1);
+
+        // Pool-implied rate (quote per 1 base, 1e18-scaled), for oracle deviation guard.
+        // EURC→USDC: poolRate = received_usdc/amountIn_eurc, expressed in 1e18.
+        // USDC→EURC: invert to compare against EUR/USD oracle.
+        uint256 rateForCheck;
+        if (iIn == EURC_INDEX) {
+            rateForCheck = (received * 1e18) / amountIn;
+        } else {
+            rateForCheck = (amountIn * 1e18) / received;
+        }
+        PriceGuard.check(rateForCheck, ORACLE, MAX_ORACLE_DEVIATION_BPS);
+
+        uint256 fee = (received * PROTOCOL_FEE_BPS) / 10_000;
+        uint256 payout = received - fee;
+        protocolFeesAccrued[payoutToken] += fee;
+
+        inv.status = InvoiceStatus.Paid;
+        inv.paidBy = msg.sender;
+
+        IERC20(payoutToken).safeTransfer(inv.merchant, payout);
+        emit InvoicePaid(id, msg.sender, amountIn, payout, fee);
+    }
+
+    function _estimateAmountIn(uint8 iIn, uint8 jOut, uint256 amountOut) internal view returns (uint256) {
+        uint256 probeIn = 1e6;
+        uint256 probeOut = POOL.calculateSwap(iIn, jOut, probeIn);
+        if (probeOut == 0) return type(uint256).max;
+        return (amountOut * probeIn + probeOut - 1) / probeOut;
+    }
     function withdrawFees(address token, address to) external onlyOwner { revert(); }
 }

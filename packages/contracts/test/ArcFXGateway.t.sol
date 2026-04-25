@@ -26,7 +26,7 @@ contract ArcFXGatewayTest is Test {
         eurc   = new MockERC20("EURC", "EURC", 6);
         oracle = new MockChainlink(8);
         oracle.setAnswer(1.0863e8, block.timestamp);
-        pool   = new MockStableSwapPool(IERC20(address(usdc)), IERC20(address(eurc)), 0.9205e18);
+        pool   = new MockStableSwapPool(IERC20(address(usdc)), IERC20(address(eurc)), 1.0860e18);
         gw     = new ArcFXGateway(
             IStableSwapPool(address(pool)),
             IChainlinkAggregator(address(oracle)),
@@ -115,5 +115,36 @@ contract ArcFXGatewayTest is Test {
         emit ArcFXGateway.InvoiceCreated(id, merchant, address(eurc), 50_000_000, uint64(block.timestamp + 1 hours));
         vm.prank(merchant);
         gw.createInvoice(id, address(eurc), 50_000_000, uint64(block.timestamp + 1 hours));
+    }
+
+    // ── pay() ──────────────────────────────────────────────────────────
+
+    function _fundPoolAndCustomer() internal {
+        usdc.mint(address(pool), 1_000_000 * 1e6);
+        eurc.mint(address(pool), 1_000_000 * 1e6);
+        eurc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        eurc.approve(address(gw), type(uint256).max);
+    }
+
+    function test_Pay_HappyPath() public {
+        _registerMerchant();
+        _fundPoolAndCustomer();
+
+        bytes32 id = keccak256("happy");
+        vm.prank(merchant);
+        gw.createInvoice(id, address(eurc), 49_990_000, uint64(block.timestamp + 1 hours));
+
+        uint256 merchantBefore = usdc.balanceOf(merchant);
+        vm.prank(customer);
+        gw.pay(id, 60_000_000); // generous cushion
+
+        (, , , , ArcFXGateway.InvoiceStatus s, address paidBy) = gw.invoices(id);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
+        assertEq(paidBy, customer);
+
+        uint256 feeUsdc = (49_990_000 * 10) / 10_000;
+        assertEq(usdc.balanceOf(merchant) - merchantBefore, 49_990_000 - feeUsdc);
+        assertEq(gw.protocolFeesAccrued(address(usdc)), feeUsdc);
     }
 }

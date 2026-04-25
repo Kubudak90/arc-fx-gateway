@@ -64,4 +64,56 @@ contract ArcFXGatewayTest is Test {
         vm.prank(merchant);
         gw.registerMerchant(address(usdc));
     }
+
+    // ── createInvoice ──────────────────────────────────────────────────
+
+    function _registerMerchant() internal {
+        vm.prank(merchant);
+        gw.registerMerchant(address(usdc));
+    }
+
+    function test_CreateInvoice_Success() public {
+        _registerMerchant();
+        bytes32 id = keccak256("inv-1");
+        vm.prank(merchant);
+        gw.createInvoice(id, address(eurc), 49_990_000, uint64(block.timestamp + 30 minutes));
+        (address m, address payIn, uint256 amt, uint64 exp, ArcFXGateway.InvoiceStatus s, ) = gw.invoices(id);
+        assertEq(m, merchant);
+        assertEq(payIn, address(eurc));
+        assertEq(amt, 49_990_000);
+        assertEq(exp, uint64(block.timestamp + 30 minutes));
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Created));
+    }
+
+    function test_CreateInvoice_RevertsIfNotMerchant() public {
+        vm.prank(merchant);
+        vm.expectRevert(ArcFXGateway.NotMerchant.selector);
+        gw.createInvoice(keccak256("inv-2"), address(eurc), 1, uint64(block.timestamp + 1 hours));
+    }
+
+    function test_CreateInvoice_RevertsOnDuplicateId() public {
+        _registerMerchant();
+        bytes32 id = keccak256("inv-3");
+        vm.startPrank(merchant);
+        gw.createInvoice(id, address(eurc), 100, uint64(block.timestamp + 1 hours));
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceAlreadyExists.selector, id));
+        gw.createInvoice(id, address(eurc), 100, uint64(block.timestamp + 1 hours));
+        vm.stopPrank();
+    }
+
+    function test_CreateInvoice_RevertsOnUnsupportedPair() public {
+        _registerMerchant(); // payout = USDC
+        vm.prank(merchant);
+        vm.expectRevert(ArcFXGateway.UnsupportedPair.selector);
+        gw.createInvoice(keccak256("inv-4"), address(usdc), 100, uint64(block.timestamp + 1 hours));
+    }
+
+    function test_CreateInvoice_EmitsEvent() public {
+        _registerMerchant();
+        bytes32 id = keccak256("inv-5");
+        vm.expectEmit(true, true, false, true, address(gw));
+        emit ArcFXGateway.InvoiceCreated(id, merchant, address(eurc), 50_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(merchant);
+        gw.createInvoice(id, address(eurc), 50_000_000, uint64(block.timestamp + 1 hours));
+    }
 }

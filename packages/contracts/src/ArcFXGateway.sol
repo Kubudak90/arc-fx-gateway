@@ -86,7 +86,28 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         merchants[msg.sender] = Merchant({ payoutToken: payoutToken, registered: true });
         emit MerchantRegistered(msg.sender, payoutToken);
     }
-    function createInvoice(bytes32 id, address payIn, uint256 amountOut, uint64 expiresAt) external { revert(); }
+    function createInvoice(
+        bytes32 id,
+        address payIn,
+        uint256 amountOut,
+        uint64 expiresAt
+    ) external {
+        Merchant memory m = merchants[msg.sender];
+        if (!m.registered) revert NotMerchant();
+        if (payIn == m.payoutToken) revert UnsupportedPair();
+        if (payIn != address(USDC) && payIn != address(EURC)) revert UnsupportedPair();
+        if (invoices[id].status != InvoiceStatus.None) revert InvoiceAlreadyExists(id);
+
+        invoices[id] = Invoice({
+            merchant:  msg.sender,
+            payIn:     payIn,
+            amountOut: amountOut,
+            expiresAt: expiresAt,
+            status:    InvoiceStatus.Created,
+            paidBy:    address(0)
+        });
+        emit InvoiceCreated(id, msg.sender, payIn, amountOut, expiresAt);
+    }
     function pay(bytes32 id, uint256 maxAmountIn) external nonReentrant { revert(); }
     function withdrawFees(address token, address to) external onlyOwner { revert(); }
 }

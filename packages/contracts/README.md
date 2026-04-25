@@ -83,7 +83,8 @@ Deployed addresses are recorded in `deployments/arc-testnet.json` after a succes
 
 ## Security
 
-- **Static:** Slither + Aderyn run in CI; PR fails on any high/medium finding.
+- **CI:** `.github/workflows/contracts-ci.yml` runs build, tests (default + CI profile), coverage, and Slither on every push. Workflow is configured but inactive on first deploy if the repo owner has GitHub Actions disabled at the account level — enable at https://github.com/settings/actions to activate.
+- **Static:** Slither runs in CI; build fails on any high/medium finding.
 - **Dynamic:** Foundry fuzz (10k runs/property) + invariant (256×64).
 - **Manual:** SWC registry checklist passes; vendored Saddle pool reviewed patch-by-patch against upstream `master` at vendor time.
 - **Architectural:** immutable construction params, custom errors only, ReentrancyGuard on mutating entry points.

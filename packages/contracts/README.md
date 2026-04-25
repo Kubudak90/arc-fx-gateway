@@ -89,6 +89,22 @@ Deployed addresses are recorded in `deployments/arc-testnet.json` after a succes
 - **Manual:** SWC registry checklist passes; vendored Saddle pool reviewed patch-by-patch against upstream `master` at vendor time.
 - **Architectural:** immutable construction params, custom errors only, ReentrancyGuard on mutating entry points.
 
+## Live Arc-testnet deployment
+
+| | Address |
+|---|---|
+| ArcFXGateway | [`0x968E5dc9B675b9BF7C4d68A1e0137ada1A95523C`](https://testnet.arcscan.app/address/0x968E5dc9B675b9BF7C4d68A1e0137ada1A95523C) |
+| StableSwap Pool | [`0xf3e47C06912803FFeae44d6F40aadd470704d123`](https://testnet.arcscan.app/address/0xf3e47C06912803FFeae44d6F40aadd470704d123) |
+| MockChainlinkFeed | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
+
+End-to-end smoke test transaction: [`0x1b927e38…1622f2f8`](https://testnet.arcscan.app/tx/0x1b927e3847252db57035a029696fc9a354bf5e011cc757c8421bd92d1622f2f8) — customer paid 0.100051 EURC, merchant received 0.099947 USDC, 0.000010 USDC fee accrued (10 bps), invoice marked Paid.
+
+Full deployment record: [`deployments/arc-testnet.json`](./deployments/arc-testnet.json)
+
+### Demo limitation (testnet only)
+
+The deployed pool uses Saddle StableSwap with A=200, which assumes the two pooled assets are pegged to the same unit (1:1). USDC and EURC are pegged to *different* units (USD vs EUR), so the pool's implied rate stays near 1:1 regardless of bootstrap balances. To make the deviation guard pass, MockChainlinkFeed is set to **1.00 (parity)** instead of the real EUR/USD rate. For production FX, replace with: (a) a real Chainlink EUR/USD feed, and (b) a constant-product or rebalanced AMM whose price reflects the actual ratio. This is documented as Plan-2 / mainnet roadmap.
+
 ## Pool choice — why Saddle, not Curve
 
 The original plan called for vendoring Curve's Vyper StableSwap. The Curve sources we tried (`curvefi/curve-contract` master) target Vyper 0.2.x, while only Vyper ≥0.3.10 is comfortably installable today. Rather than maintain an old toolchain, we vendored Saddle Finance's Solidity StableSwap port (MIT, last reviewed at upstream master before Saddle's archive). Math is the StableSwap invariant — equivalent behavior, native Foundry compile, no FFI.

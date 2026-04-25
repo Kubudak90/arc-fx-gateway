@@ -1,0 +1,56 @@
+{
+  "network": "arc-testnet",
+  "chainId": 5042002,
+  "rpc": "https://rpc.testnet.arc.network",
+  "explorer": "https://testnet.arcscan.app",
+  "deployedAt": "2026-04-25",
+  "deployer": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b",
+  "contracts": {
+    "ArcFXGateway": "0x968E5dc9B675b9BF7C4d68A1e0137ada1A95523C",
+    "StableSwapPool": "0xf3e47C06912803FFeae44d6F40aadd470704d123",
+    "LPToken": "0x555f5ce3fab4a9aa745f834448ca18d5ef9235dd",
+    "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3",
+    "AmplificationUtils": "0x4b647D3E5c3Ed0FEE209dD9F00feC957b0157E0c",
+    "SwapUtils": "0xade733aD1e05a0C457602a8D1eab39b4F466051A"
+  },
+  "tokens": {
+    "USDC": "0x3600000000000000000000000000000000000000",
+    "EURC": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a"
+  },
+  "config": {
+    "protocolFeeBps": 10,
+    "maxOracleDeviationBps": 50,
+    "poolA": 200,
+    "poolSwapFeeBps": 4,
+    "oracleDecimals": 8,
+    "oracleAnswer": 100000000,
+    "oracleAnswerNote": "Set to 1.00 (parity) so that StableSwap-derived rate (~1:1 between pool tokens) passes the 50bps deviation guard. For production FX, replace with a real Chainlink EUR/USD feed and use a constant-product or rebalanced AMM."
+  },
+  "bootstrapLiquidity": {
+    "usdc": "10000000",
+    "eurc": "9200000",
+    "lpTokensMinted": "0x10a73cebace32552a"
+  },
+  "smokeTest": {
+    "registerMerchant": "0x...",
+    "createInvoice": {
+      "id": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "merchant": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b",
+      "payIn": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+      "amountOut": "100000",
+      "amountOutHuman": "0.10 USDC"
+    },
+    "pay": {
+      "txHash": "0x1b927e3847252db57035a029696fc9a354bf5e011cc757c8421bd92d1622f2f8",
+      "amountInPaid": "100051",
+      "amountInPaidHuman": "0.100051 EURC",
+      "amountReceivedFromPool": "100047",
+      "amountReceivedFromPoolHuman": "0.100047 USDC",
+      "fee": "10",
+      "feeHuman": "0.000010 USDC",
+      "merchantPayout": "99947",
+      "merchantPayoutHuman": "0.099947 USDC",
+      "invoiceStatusAfter": "2 (Paid)"
+    }
+  }
+}

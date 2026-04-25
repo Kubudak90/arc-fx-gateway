@@ -89,21 +89,25 @@ Deployed addresses are recorded in `deployments/arc-testnet.json` after a succes
 - **Manual:** SWC registry checklist passes; vendored Saddle pool reviewed patch-by-patch against upstream `master` at vendor time.
 - **Architectural:** immutable construction params, custom errors only, ReentrancyGuard on mutating entry points.
 
-## Live Arc-testnet deployment
+## Live Arc-testnet deployment (v0.2.0 — OracleAMM)
 
 | | Address |
 |---|---|
-| ArcFXGateway | [`0x968E5dc9B675b9BF7C4d68A1e0137ada1A95523C`](https://testnet.arcscan.app/address/0x968E5dc9B675b9BF7C4d68A1e0137ada1A95523C) |
-| StableSwap Pool | [`0xf3e47C06912803FFeae44d6F40aadd470704d123`](https://testnet.arcscan.app/address/0xf3e47C06912803FFeae44d6F40aadd470704d123) |
-| MockChainlinkFeed | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
+| ArcFXGateway | [`0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D`](https://testnet.arcscan.app/address/0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D) |
+| OracleAMM | [`0xC2020098aF328ac9CBD274267F424822C400dD66`](https://testnet.arcscan.app/address/0xC2020098aF328ac9CBD274267F424822C400dD66) |
+| MockChainlinkFeed (EUR/USD = 1.0863) | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
 
-End-to-end smoke test transaction: [`0x1b927e38…1622f2f8`](https://testnet.arcscan.app/tx/0x1b927e3847252db57035a029696fc9a354bf5e011cc757c8421bd92d1622f2f8) — customer paid 0.100051 EURC, merchant received 0.099947 USDC, 0.000010 USDC fee accrued (10 bps), invoice marked Paid.
+End-to-end smoke-test transaction: [`0x31ddbf35…fc2bf0bd1c2064a`](https://testnet.arcscan.app/tx/0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a) — invoice for 0.10 USDC paid in EURC at the real 1.0863 EUR/USD rate, settled, marked Paid.
 
-Full deployment record: [`deployments/arc-testnet.json`](./deployments/arc-testnet.json)
+Pool quote example: 0.1 EURC → 0.108587 USDC (gross 0.108630 USDC at oracle = 1.0863, minus 4 bps pool fee = 0.108587).
 
-### Demo limitation (testnet only)
+Full deployment record (current + deprecated v0.1.0): [`deployments/arc-testnet.json`](./deployments/arc-testnet.json)
 
-The deployed pool uses Saddle StableSwap with A=200, which assumes the two pooled assets are pegged to the same unit (1:1). USDC and EURC are pegged to *different* units (USD vs EUR), so the pool's implied rate stays near 1:1 regardless of bootstrap balances. To make the deviation guard pass, MockChainlinkFeed is set to **1.00 (parity)** instead of the real EUR/USD rate. For production FX, replace with: (a) a real Chainlink EUR/USD feed, and (b) a constant-product or rebalanced AMM whose price reflects the actual ratio. This is documented as Plan-2 / mainnet roadmap.
+### Pool architecture — OracleAMM
+
+Plan 1.5 replaces Saddle StableSwap with [`OracleAMM`](src/pool/OracleAMM.sol), a Chainlink-priced two-token pool inspired by Lifinity / Mercurial. Every swap reads the live oracle and quotes at `oracle ± swapFeeBps`. There is no bonding curve — capital efficiency is bounded only by reserves and oracle freshness. Suitable for stable FX pairs that move within a narrow band; LPs face oracle-rate convergence as the pool's mark-to-market value.
+
+The legacy Saddle StableSwap port (`src/pool/StableSwap.sol` and helpers) is left in place for reference but is no longer deployed. See [`deployments/arc-testnet.json`](./deployments/arc-testnet.json) for the deprecated v0.1.0 addresses.
 
 ## Pool choice — why Saddle, not Curve
 

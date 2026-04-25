@@ -12,6 +12,7 @@ build/
 out/
 cache/
 broadcast/
+lcov.info
 
 # Env
 .env

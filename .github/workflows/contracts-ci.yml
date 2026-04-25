@@ -1,0 +1,71 @@
+name: contracts-ci
+
+on:
+  push:
+    branches: [main, plan-1-protocol]
+    paths:
+      - "packages/contracts/**"
+      - ".github/workflows/contracts-ci.yml"
+  pull_request:
+    paths:
+      - "packages/contracts/**"
+      - ".github/workflows/contracts-ci.yml"
+
+defaults:
+  run:
+    working-directory: packages/contracts
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Show forge version
+        run: forge --version
+
+      - name: Build
+        run: forge build --sizes
+
+      - name: Unit + integration tests
+        run: forge test -vvv
+
+      - name: Fuzz (10k runs)
+        run: FOUNDRY_PROFILE=ci forge test --match-path "test/ArcFXGateway.fuzz.t.sol"
+
+      - name: Invariant (256 x 64)
+        run: FOUNDRY_PROFILE=ci forge test --match-path "test/ArcFXGateway.invariant.t.sol"
+
+      - name: Coverage
+        run: forge coverage --report summary --report lcov
+
+      - uses: codecov/codecov-action@v4
+        with:
+          files: packages/contracts/lcov.info
+          flags: contracts
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  slither:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Build so Slither finds artefacts
+        working-directory: packages/contracts
+        run: forge build
+
+      - uses: crytic/slither-action@v0.4.0
+        with:
+          target: "packages/contracts"
+          fail-on: medium
+          slither-args: "--filter-paths lib/|test/"

@@ -9,8 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@arc-fx/checkout": "workspace:*",
-    "@arc-fx/checkout-react": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

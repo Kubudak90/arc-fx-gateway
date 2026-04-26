@@ -50,23 +50,28 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
         <DialogHeader>
           <DialogTitle>New invoice</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label>Amount (USD-equivalent)</Label>
-            <Input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <div className="space-y-5 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="invoice-amount">Amount (USD-equivalent)</Label>
+            <Input id="invoice-amount" type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </div>
-          <div>
-            <Label>Customer pays in</Label>
-            <select value={payIn} onChange={(e) => setPayIn(e.target.value as any)} className="w-full h-10 rounded-md border border-input px-3 bg-transparent">
+          <div className="space-y-2">
+            <Label htmlFor="invoice-payin">Customer pays in</Label>
+            <select
+              id="invoice-payin"
+              value={payIn}
+              onChange={(e) => setPayIn(e.target.value as "USDC" | "EURC")}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
               <option value="EURC">EURC</option>
               <option value="USDC">USDC</option>
             </select>
           </div>
-          <div>
-            <Label>Success URL</Label>
-            <Input value={successUrl} onChange={(e) => setSuccessUrl(e.target.value)} />
+          <div className="space-y-2">
+            <Label htmlFor="invoice-success">Success URL</Label>
+            <Input id="invoice-success" value={successUrl} onChange={(e) => setSuccessUrl(e.target.value)} />
           </div>
-          <Button disabled={busy} onClick={handleSubmit} className="w-full">
+          <Button disabled={busy} onClick={handleSubmit} className="w-full mt-2">
             {busy ? "Creating…" : "Create invoice"}
           </Button>
         </div>

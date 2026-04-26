@@ -35,22 +35,23 @@ contract GatewayHandler is Test {
     /// @notice Forge invariant runner calls this with random arguments.
     function createAndPay(uint96 amountOut, bytes32 salt) external {
         callsAttempted++;
-        // Bound: avoid zero-fee dust amounts and avoid blowing the customer's balance.
         amountOut = uint96(bound(uint256(amountOut), 1_000_000, 1_000 * 1e6));
-        bytes32 id = keccak256(abi.encode(salt, amountOut));
+        bytes32 mid = keccak256(abi.encode(salt, amountOut));
 
+        bytes32 g;
         vm.prank(merchant);
-        try gw.createInvoice(id, address(eurc), amountOut, uint64(block.timestamp + 1 hours)) {} catch {
+        try gw.createInvoice(mid, address(eurc), amountOut, uint64(block.timestamp + 1 hours)) returns (bytes32 globalId) {
+            g = globalId;
+        } catch {
             return;
         }
 
         uint256 merchantBefore = usdc.balanceOf(merchant);
         uint256 eurcBefore     = eurc.balanceOf(customer);
-
-        uint256 feesBefore = gw.protocolFeesAccrued(address(usdc));
+        uint256 feesBefore     = gw.protocolFeesAccrued(address(usdc));
 
         vm.prank(customer);
-        try gw.pay(id, type(uint128).max) {
+        try gw.pay(g, type(uint128).max) {
             uint256 paid     = usdc.balanceOf(merchant) - merchantBefore;
             uint256 spent    = eurcBefore - eurc.balanceOf(customer);
             uint256 feeAccr  = gw.protocolFeesAccrued(address(usdc)) - feesBefore;

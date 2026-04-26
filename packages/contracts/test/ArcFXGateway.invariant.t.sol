@@ -38,9 +38,9 @@ contract ArcFXGatewayInvariantTest is Test {
             address(this)
         );
 
-        // Register merchant (USDC payout).
+        // Register merchant (USDC payout, payoutAddress = merchant for simplicity).
         vm.prank(merchant);
-        gw.registerMerchant(address(usdc));
+        gw.registerMerchant(merchant, address(usdc));
 
         // Fund pool and customer.
         usdc.mint(address(pool), 1_000_000 * 1e6);

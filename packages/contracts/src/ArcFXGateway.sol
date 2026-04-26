@@ -11,7 +11,7 @@ import { IChainlinkAggregator } from "./interfaces/IChainlinkAggregator.sol";
 import { PriceGuard } from "./libraries/PriceGuard.sol";
 
 /// @title ArcFXGateway
-/// @notice Atomic swap-and-settle for merchant invoices on Arc.
+/// @notice Merchant checkout + atomic FX settlement on Arc.
 contract ArcFXGateway is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -27,42 +27,71 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
 
     // ── Merchant registry ──────────────────────────────────────────────
     struct Merchant {
+        address payoutAddress;
         address payoutToken;
-        bool    registered;
+        bool    active;
     }
     mapping(address merchant => Merchant) public merchants;
 
     // ── Invoice state ──────────────────────────────────────────────────
-    enum InvoiceStatus { None, Created, Paid, Expired }
+    enum InvoiceStatus { None, Created, Paid }
     struct Invoice {
         address       merchant;
         address       payIn;
+        address       payoutToken;   // locked at creation; merchant changes don't reroute pending invoices
         uint256       amountOut;
         uint64        expiresAt;
         InvoiceStatus status;
         address       paidBy;
     }
-    mapping(bytes32 id => Invoice) public invoices;
+    mapping(bytes32 globalId => Invoice) public invoices;
 
     // ── Accounting ─────────────────────────────────────────────────────
     mapping(address token => uint256) public protocolFeesAccrued;
 
+    // ── Delegate authorization ─────────────────────────────────────────
+    mapping(address merchant => mapping(address delegate => uint64 expiresAt))
+        public delegateAuthorizations;
+
     // ── Events ─────────────────────────────────────────────────────────
-    event MerchantRegistered(address indexed merchant, address payoutToken);
-    event InvoiceCreated(bytes32 indexed id, address indexed merchant, address payIn, uint256 amountOut, uint64 expiresAt);
-    event InvoicePaid(bytes32 indexed id, address indexed payer, uint256 amountIn, uint256 amountOut, uint256 fee);
+    event MerchantRegistered(address indexed merchant, address payoutAddress, address payoutToken);
+    event MerchantPayoutAddressUpdated(address indexed merchant, address oldAddress, address newAddress);
+    event MerchantPayoutTokenUpdated(address indexed merchant, address oldToken, address newToken);
+    event MerchantDeactivated(address indexed merchant);
+    event InvoiceCreated(
+        bytes32 indexed globalId,
+        address indexed merchant,
+        bytes32 indexed merchantInvoiceId,
+        address payIn,
+        address payoutToken,
+        uint256 amountOut,
+        uint64 expiresAt
+    );
+    event InvoicePaid(
+        bytes32 indexed globalId,
+        address indexed payer,
+        uint256 amountIn,
+        uint256 grossReceived,
+        uint256 merchantPayout,
+        uint256 fee
+    );
     event FeesWithdrawn(address indexed token, address indexed to, uint256 amount);
+    event DelegateAuthorized(address indexed merchant, address indexed delegate, uint64 expiresAt);
+    event DelegateRevoked(address indexed merchant, address indexed delegate);
 
     // ── Errors ─────────────────────────────────────────────────────────
     error NotMerchant();
     error MerchantAlreadyRegistered();
+    error MerchantInactive();
     error InvalidPayoutToken();
-    error InvoiceAlreadyExists(bytes32 id);
-    error InvoiceAlreadyPaid(bytes32 id);
-    error InvoiceExpired(bytes32 id);
-    error InvoiceNotFound(bytes32 id);
+    error InvalidPayoutAddress();
+    error InvoiceAlreadyExists(bytes32 globalId);
+    error InvoiceAlreadyPaid(bytes32 globalId);
+    error InvoiceExpired(bytes32 globalId);
+    error InvoiceNotFound(bytes32 globalId);
     error UnsupportedPair();
     error SlippageExceeded(uint256 required, uint256 max);
+    error DelegateNotAuthorized();
 
     // ── Constructor ────────────────────────────────────────────────────
     constructor(
@@ -80,42 +109,124 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         EURC_INDEX = 1;
     }
 
-    function registerMerchant(address payoutToken) external {
-        if (merchants[msg.sender].registered) revert MerchantAlreadyRegistered();
+    // ── Merchant management ────────────────────────────────────────────
+
+    function registerMerchant(address payoutAddress, address payoutToken) external {
+        if (merchants[msg.sender].active) revert MerchantAlreadyRegistered();
+        if (payoutAddress == address(0)) revert InvalidPayoutAddress();
         if (payoutToken != address(USDC) && payoutToken != address(EURC)) revert InvalidPayoutToken();
-        merchants[msg.sender] = Merchant({ payoutToken: payoutToken, registered: true });
-        emit MerchantRegistered(msg.sender, payoutToken);
+        merchants[msg.sender] = Merchant({
+            payoutAddress: payoutAddress,
+            payoutToken:   payoutToken,
+            active:        true
+        });
+        emit MerchantRegistered(msg.sender, payoutAddress, payoutToken);
     }
+
+    function updatePayoutAddress(address newPayoutAddress) external {
+        Merchant storage m = merchants[msg.sender];
+        if (!m.active) revert NotMerchant();
+        if (newPayoutAddress == address(0)) revert InvalidPayoutAddress();
+        address old = m.payoutAddress;
+        m.payoutAddress = newPayoutAddress;
+        emit MerchantPayoutAddressUpdated(msg.sender, old, newPayoutAddress);
+    }
+
+    function updatePayoutToken(address newPayoutToken) external {
+        Merchant storage m = merchants[msg.sender];
+        if (!m.active) revert NotMerchant();
+        if (newPayoutToken != address(USDC) && newPayoutToken != address(EURC)) revert InvalidPayoutToken();
+        address old = m.payoutToken;
+        m.payoutToken = newPayoutToken;
+        emit MerchantPayoutTokenUpdated(msg.sender, old, newPayoutToken);
+    }
+
+    function deactivateMerchant() external {
+        Merchant storage m = merchants[msg.sender];
+        if (!m.active) revert NotMerchant();
+        m.active = false;
+        emit MerchantDeactivated(msg.sender);
+    }
+
+    // ── Invoice creation ───────────────────────────────────────────────
+
     function createInvoice(
-        bytes32 id,
+        bytes32 merchantInvoiceId,
         address payIn,
         uint256 amountOut,
         uint64 expiresAt
-    ) external {
-        Merchant memory m = merchants[msg.sender];
-        if (!m.registered) revert NotMerchant();
-        if (payIn == m.payoutToken) revert UnsupportedPair();
-        if (payIn != address(USDC) && payIn != address(EURC)) revert UnsupportedPair();
-        if (invoices[id].status != InvoiceStatus.None) revert InvoiceAlreadyExists(id);
-
-        invoices[id] = Invoice({
-            merchant:  msg.sender,
-            payIn:     payIn,
-            amountOut: amountOut,
-            expiresAt: expiresAt,
-            status:    InvoiceStatus.Created,
-            paidBy:    address(0)
-        });
-        emit InvoiceCreated(id, msg.sender, payIn, amountOut, expiresAt);
+    ) external returns (bytes32 globalId) {
+        return _createInvoice(msg.sender, merchantInvoiceId, payIn, amountOut, expiresAt);
     }
-    function pay(bytes32 id, uint256 maxAmountIn) external nonReentrant {
-        Invoice storage inv = invoices[id];
-        if (inv.status == InvoiceStatus.None)  revert InvoiceNotFound(id);
-        if (inv.status == InvoiceStatus.Paid)  revert InvoiceAlreadyPaid(id);
-        if (block.timestamp > inv.expiresAt)   revert InvoiceExpired(id);
 
-        address payoutToken = merchants[inv.merchant].payoutToken;
+    function createInvoiceFor(
+        address merchant,
+        bytes32 merchantInvoiceId,
+        address payIn,
+        uint256 amountOut,
+        uint64 expiresAt
+    ) external returns (bytes32 globalId) {
+        uint64 authExpiry = delegateAuthorizations[merchant][msg.sender];
+        if (authExpiry < block.timestamp) revert DelegateNotAuthorized();
+        return _createInvoice(merchant, merchantInvoiceId, payIn, amountOut, expiresAt);
+    }
 
+    function _createInvoice(
+        address merchant,
+        bytes32 merchantInvoiceId,
+        address payIn,
+        uint256 amountOut,
+        uint64 expiresAt
+    ) internal returns (bytes32 globalId) {
+        Merchant memory m = merchants[merchant];
+        if (!m.active) revert MerchantInactive();
+        if (payIn != address(USDC) && payIn != address(EURC)) revert UnsupportedPair();
+
+        globalId = keccak256(abi.encode(merchant, merchantInvoiceId));
+        if (invoices[globalId].status != InvoiceStatus.None) revert InvoiceAlreadyExists(globalId);
+
+        invoices[globalId] = Invoice({
+            merchant:    merchant,
+            payIn:       payIn,
+            payoutToken: m.payoutToken,
+            amountOut:   amountOut,
+            expiresAt:   expiresAt,
+            status:      InvoiceStatus.Created,
+            paidBy:      address(0)
+        });
+        emit InvoiceCreated(globalId, merchant, merchantInvoiceId, payIn, m.payoutToken, amountOut, expiresAt);
+    }
+
+    // ── Pay ────────────────────────────────────────────────────────────
+
+    function pay(bytes32 globalId, uint256 maxAmountIn) external nonReentrant {
+        Invoice storage inv = invoices[globalId];
+        if (inv.status == InvoiceStatus.None) revert InvoiceNotFound(globalId);
+        if (inv.status == InvoiceStatus.Paid) revert InvoiceAlreadyPaid(globalId);
+        if (block.timestamp > inv.expiresAt)  revert InvoiceExpired(globalId);
+
+        address payoutToken    = inv.payoutToken;
+        address payoutAddress  = merchants[inv.merchant].payoutAddress;
+
+        // Same-token direct path: no swap, no oracle deviation check needed.
+        if (inv.payIn == payoutToken) {
+            if (inv.amountOut > maxAmountIn) revert SlippageExceeded(inv.amountOut, maxAmountIn);
+
+            IERC20(inv.payIn).safeTransferFrom(msg.sender, address(this), inv.amountOut);
+
+            uint256 directFee    = (inv.amountOut * PROTOCOL_FEE_BPS) / 10_000;
+            uint256 directPayout = inv.amountOut - directFee;
+            protocolFeesAccrued[payoutToken] += directFee;
+
+            inv.status = InvoiceStatus.Paid;
+            inv.paidBy = msg.sender;
+
+            IERC20(payoutToken).safeTransfer(payoutAddress, directPayout);
+            emit InvoicePaid(globalId, msg.sender, inv.amountOut, inv.amountOut, directPayout, directFee);
+            return;
+        }
+
+        // Swap path
         uint8 iIn  = inv.payIn   == address(USDC) ? USDC_INDEX : EURC_INDEX;
         uint8 jOut = payoutToken == address(USDC) ? USDC_INDEX : EURC_INDEX;
 
@@ -127,8 +238,6 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         uint256 received = POOL.swap(iIn, jOut, amountIn, inv.amountOut, block.timestamp + 1);
 
         // Pool-implied rate (quote per 1 base, 1e18-scaled), for oracle deviation guard.
-        // EURC→USDC: poolRate = received_usdc/amountIn_eurc, expressed in 1e18.
-        // USDC→EURC: invert to compare against EUR/USD oracle.
         uint256 rateForCheck;
         if (iIn == EURC_INDEX) {
             rateForCheck = (received * 1e18) / amountIn;
@@ -137,15 +246,15 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         }
         PriceGuard.check(rateForCheck, ORACLE, MAX_ORACLE_DEVIATION_BPS);
 
-        uint256 fee = (received * PROTOCOL_FEE_BPS) / 10_000;
-        uint256 payout = received - fee;
-        protocolFeesAccrued[payoutToken] += fee;
+        uint256 swapFee    = (received * PROTOCOL_FEE_BPS) / 10_000;
+        uint256 swapPayout = received - swapFee;
+        protocolFeesAccrued[payoutToken] += swapFee;
 
         inv.status = InvoiceStatus.Paid;
         inv.paidBy = msg.sender;
 
-        IERC20(payoutToken).safeTransfer(inv.merchant, payout);
-        emit InvoicePaid(id, msg.sender, amountIn, payout, fee);
+        IERC20(payoutToken).safeTransfer(payoutAddress, swapPayout);
+        emit InvoicePaid(globalId, msg.sender, amountIn, received, swapPayout, swapFee);
     }
 
     function _estimateAmountIn(uint8 iIn, uint8 jOut, uint256 amountOut) internal view returns (uint256) {
@@ -154,6 +263,7 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         if (probeOut == 0) return type(uint256).max;
         return (amountOut * probeIn + probeOut - 1) / probeOut;
     }
+
     function withdrawFees(address token, address to) external onlyOwner {
         uint256 amount = protocolFeesAccrued[token];
         protocolFeesAccrued[token] = 0;
@@ -162,16 +272,9 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     }
 
     // ── Delegate authorization ─────────────────────────────────────────
-    mapping(address merchant => mapping(address delegate => uint64 expiresAt))
-        public delegateAuthorizations;
-
-    event DelegateAuthorized(address indexed merchant, address indexed delegate, uint64 expiresAt);
-    event DelegateRevoked(address indexed merchant, address indexed delegate);
-
-    error DelegateNotAuthorized();
 
     function authorizeDelegate(address delegate, uint64 expiresAt) external {
-        if (!merchants[msg.sender].registered) revert NotMerchant();
+        if (!merchants[msg.sender].active) revert NotMerchant();
         delegateAuthorizations[msg.sender][delegate] = expiresAt;
         emit DelegateAuthorized(msg.sender, delegate, expiresAt);
     }
@@ -179,32 +282,5 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     function revokeDelegate(address delegate) external {
         delegateAuthorizations[msg.sender][delegate] = 0;
         emit DelegateRevoked(msg.sender, delegate);
-    }
-
-    function createInvoiceFor(
-        address merchant,
-        bytes32 id,
-        address payIn,
-        uint256 amountOut,
-        uint64 expiresAt
-    ) external {
-        uint64 authExpiry = delegateAuthorizations[merchant][msg.sender];
-        if (authExpiry < block.timestamp) revert DelegateNotAuthorized();
-
-        Merchant memory m = merchants[merchant];
-        if (!m.registered) revert NotMerchant();
-        if (payIn == m.payoutToken) revert UnsupportedPair();
-        if (payIn != address(USDC) && payIn != address(EURC)) revert UnsupportedPair();
-        if (invoices[id].status != InvoiceStatus.None) revert InvoiceAlreadyExists(id);
-
-        invoices[id] = Invoice({
-            merchant:  merchant,
-            payIn:     payIn,
-            amountOut: amountOut,
-            expiresAt: expiresAt,
-            status:    InvoiceStatus.Created,
-            paidBy:    address(0)
-        });
-        emit InvoiceCreated(id, merchant, payIn, amountOut, expiresAt);
     }
 }

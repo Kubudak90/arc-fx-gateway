@@ -13,7 +13,7 @@ ArcFX.openCheckout(inv);
 
 | | Where |
 |---|---|
-| **Demo merchant** | _to be deployed_ → see Plan 2b deploy task |
+| **Demo merchant** | [`https://arc-fx-demo.vercel.app`](https://arc-fx-demo.vercel.app) — click "Pay €4.50" to try the full flow |
 | **Live checkout app** | [`https://arc-fx-gateway.vercel.app`](https://arc-fx-gateway.vercel.app) — Vercel + Neon Postgres |
 | **Server hot wallet** | [`0x74BB69F48d0dAddB17679534fDa1142c3ab66333`](https://testnet.arcscan.app/address/0x74BB69F48d0dAddB17679534fDa1142c3ab66333) — funds invoice creation gas |
 | **ArcFXGateway v0.3** | [`0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF`](https://testnet.arcscan.app/address/0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF) |

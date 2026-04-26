@@ -23,14 +23,31 @@ const TOKEN_ADDR: Record<"USDC" | "EURC", Address> = {
 
 const INVOICE_TTL_SEC = 30 * 60;
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "content-type, x-arc-api-key",
+  "Access-Control-Max-Age": "86400",
+};
+
+function corsResponse(body: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) headers.set(k, v);
+  return NextResponse.json(body, { ...init, headers });
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 export async function POST(req: NextRequest) {
   const apiKey = req.headers.get("X-Arc-Api-Key") ?? "";
-  if (!apiKey) return NextResponse.json({ error: "missing_api_key" }, { status: 401 });
+  if (!apiKey) return corsResponse({ error: "missing_api_key" }, { status: 401 });
   const merchant = await lookupMerchantByApiKey(apiKey);
-  if (!merchant) return NextResponse.json({ error: "invalid_api_key" }, { status: 401 });
+  if (!merchant) return corsResponse({ error: "invalid_api_key" }, { status: 401 });
 
   const parsed = Body.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: "bad_body", detail: parsed.error.format() }, { status: 400 });
+  if (!parsed.success) return corsResponse({ error: "bad_body", detail: parsed.error.format() }, { status: 400 });
   const { amountUsdc, payInToken, successUrl, cancelUrl, metadata } = parsed.data;
 
   const invoiceId = ("0x" + randomBytes(32).toString("hex")) as Hex;
@@ -49,9 +66,9 @@ export async function POST(req: NextRequest) {
     await publicClient.waitForTransactionReceipt({ hash: txHash });
   } catch (e: any) {
     if (/DelegateNotAuthorized/.test(e?.shortMessage ?? "")) {
-      return NextResponse.json({ error: "delegate_not_authorized" }, { status: 412 });
+      return corsResponse({ error: "delegate_not_authorized" }, { status: 412 });
     }
-    return NextResponse.json({ error: "chain_error", detail: e?.shortMessage ?? String(e) }, { status: 502 });
+    return corsResponse({ error: "chain_error", detail: e?.shortMessage ?? String(e) }, { status: 502 });
   }
 
   await db.insert(invoices).values({
@@ -67,5 +84,5 @@ export async function POST(req: NextRequest) {
   });
 
   const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://checkout.arc-fx.xyz";
-  return NextResponse.json({ invoiceId, url: `${baseUrl}/i/${invoiceId}` }, { status: 201 });
+  return corsResponse({ invoiceId, url: `${baseUrl}/i/${invoiceId}` }, { status: 201 });
 }

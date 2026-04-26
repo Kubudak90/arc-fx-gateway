@@ -46,8 +46,8 @@ describe("POST /api/invoices", () => {
     const apikey = await import("@/lib/auth/apikey");
     (apikey.lookupMerchantByApiKey as any).mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000001",
-      address: "0xmerchant",
-      payoutToken: "0xusdc",
+      address: "0x1111111111111111111111111111111111111111",
+      payoutToken: "0x2222222222222222222222222222222222222222",
     });
     const chain = await import("@/lib/chain/client");
     const writeContract = vi.fn().mockResolvedValue("0xtxhash");

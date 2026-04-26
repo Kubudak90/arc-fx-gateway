@@ -8,7 +8,7 @@ import { decodeEventLog, parseAbi } from "viem";
 const REORG_BUFFER = Number(process.env.INDEXER_REORG_BUFFER_BLOCKS ?? 5);
 
 const InvoicePaidAbi = parseAbi([
-  "event InvoicePaid(bytes32 indexed id, address indexed payer, uint256 amountIn, uint256 amountOut, uint256 fee)",
+  "event InvoicePaid(bytes32 indexed globalId, address indexed payer, uint256 amountIn, uint256 grossReceived, uint256 merchantPayout, uint256 fee)",
 ]);
 
 export async function POST(req: NextRequest) {
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   for (const log of logs) {
     const decoded = decodeEventLog({ abi: InvoicePaidAbi, data: log.data, topics: log.topics });
-    const id = decoded.args.id as string;
+    const id = decoded.args.globalId as string;
     const payer = decoded.args.payer as string;
 
     await db.update(invoices)

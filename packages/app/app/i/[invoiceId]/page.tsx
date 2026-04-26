@@ -18,7 +18,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
       cancelUrl: invoices.cancelUrl,
       paidBy: invoices.paidBy,
       paidTx: invoices.paidTx,
-      payoutToken: merchants.payoutToken,
+      payoutToken: invoices.payoutToken,
       merchantAddress: merchants.address,
     })
     .from(invoices)

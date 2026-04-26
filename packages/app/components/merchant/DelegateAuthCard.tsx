@@ -10,8 +10,8 @@ import { toast } from "sonner";
 const GW_ABI = parseAbi([
   "function authorizeDelegate(address delegate, uint64 expiresAt) external",
   "function delegateAuthorizations(address merchant, address delegate) view returns (uint64)",
-  "function registerMerchant(address payoutToken) external",
-  "function merchants(address) view returns (address payoutToken, bool registered)",
+  "function registerMerchant(address payoutAddress, address payoutToken) external",
+  "function merchants(address) view returns (address payoutAddress, address payoutToken, bool active)",
 ]);
 
 export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress: string | null }) {
@@ -38,17 +38,18 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
     query: { enabled: !!address && !!serverWalletAddress },
   });
 
-  const isRegistered = merchantInfo?.[1] ?? false;
+  const isRegistered = merchantInfo?.[2] ?? false;
   const isAuthorized = authExpiry !== undefined && authExpiry > BigInt(Math.floor(Date.now() / 1000));
 
   async function register() {
+    if (!address) return;
     setBusy("register");
     try {
       const hash = await writeContractAsync({
         address: gateway,
         abi: GW_ABI,
         functionName: "registerMerchant",
-        args: [usdc],
+        args: [address, usdc],
       });
       await publicClient!.waitForTransactionReceipt({ hash });
       toast.success("Registered as merchant on-chain");

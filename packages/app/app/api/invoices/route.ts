@@ -6,7 +6,7 @@ import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { GATEWAY, getServerWalletClient, publicClient } from "@/lib/chain/client";
 import { db } from "@/lib/db/client";
 import { invoices } from "@/lib/db/schema";
-import type { Address, Hex } from "viem";
+import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
 const Body = z.object({
   amountUsdc: z.number().positive(),
@@ -50,7 +50,13 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return corsResponse({ error: "bad_body", detail: parsed.error.format() }, { status: 400 });
   const { amountUsdc, payInToken, successUrl, cancelUrl, metadata } = parsed.data;
 
-  const invoiceId = ("0x" + randomBytes(32).toString("hex")) as Hex;
+  const merchantInvoiceId = ("0x" + randomBytes(32).toString("hex")) as Hex;
+  const globalId = keccak256(
+    encodeAbiParameters(
+      [{ type: "address" }, { type: "bytes32" }],
+      [merchant.address as Address, merchantInvoiceId],
+    ),
+  );
   const amountOut = BigInt(Math.round(amountUsdc * 1_000_000));
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + INVOICE_TTL_SEC);
 
@@ -61,7 +67,7 @@ export async function POST(req: NextRequest) {
       address: GATEWAY,
       abi: GATEWAY_ABI,
       functionName: "createInvoiceFor",
-      args: [merchant.address as Address, invoiceId, TOKEN_ADDR[payInToken], amountOut, expiresAt],
+      args: [merchant.address as Address, merchantInvoiceId, TOKEN_ADDR[payInToken], amountOut, expiresAt],
     });
     await publicClient.waitForTransactionReceipt({ hash: txHash });
   } catch (e: any) {
@@ -72,9 +78,11 @@ export async function POST(req: NextRequest) {
   }
 
   await db.insert(invoices).values({
-    id: invoiceId,
+    id: globalId,
+    merchantInvoiceId,
     merchantId: merchant.id,
     payInToken: TOKEN_ADDR[payInToken],
+    payoutToken: merchant.payoutToken,
     amountOut: amountOut.toString(),
     expiresAt: new Date(Number(expiresAt) * 1000),
     status: "created",
@@ -84,5 +92,5 @@ export async function POST(req: NextRequest) {
   });
 
   const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://checkout.arc-fx.xyz";
-  return corsResponse({ invoiceId, url: `${baseUrl}/i/${invoiceId}` }, { status: 201 });
+  return corsResponse({ invoiceId: globalId, url: `${baseUrl}/i/${globalId}` }, { status: 201 });
 }

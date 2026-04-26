@@ -20,9 +20,11 @@ export const merchants = pgTable("merchants", {
 });
 
 export const invoices = pgTable("invoices", {
-  id: text("id").primaryKey(),
+  id: text("id").primaryKey(), // chain globalId = keccak256(merchant, merchantInvoiceId)
+  merchantInvoiceId: text("merchant_invoice_id").notNull(),
   merchantId: uuid("merchant_id").notNull().references(() => merchants.id),
   payInToken: text("pay_in_token").notNull(),
+  payoutToken: text("payout_token").notNull(), // locked at creation
   amountOut: numeric("amount_out").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   status: invoiceStatus("status").notNull(),

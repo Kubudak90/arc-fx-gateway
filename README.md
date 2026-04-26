@@ -14,7 +14,8 @@ ArcFX.openCheckout(inv);
 | | Where |
 |---|---|
 | **Demo merchant** | _to be deployed_ → see Plan 2b deploy task |
-| **Live checkout app** | _to be deployed_ → see Plan 2b deploy task |
+| **Live checkout app** | [`https://arc-fx-gateway.vercel.app`](https://arc-fx-gateway.vercel.app) — Vercel + Neon Postgres |
+| **Server hot wallet** | [`0x74BB69F48d0dAddB17679534fDa1142c3ab66333`](https://testnet.arcscan.app/address/0x74BB69F48d0dAddB17679534fDa1142c3ab66333) — funds invoice creation gas |
 | **ArcFXGateway v0.3** | [`0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF`](https://testnet.arcscan.app/address/0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF) |
 | **OracleAMM** | [`0xC2020098aF328ac9CBD274267F424822C400dD66`](https://testnet.arcscan.app/address/0xC2020098aF328ac9CBD274267F424822C400dD66) |
 | **MockChainlinkFeed (1.0863 EUR/USD)** | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |

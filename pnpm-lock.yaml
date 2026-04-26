@@ -143,12 +143,6 @@ importers:
 
   packages/demo-merchant:
     dependencies:
-      '@arc-fx/checkout':
-        specifier: workspace:*
-        version: link:../sdk
-      '@arc-fx/checkout-react':
-        specifier: workspace:*
-        version: link:../sdk-react
       react:
         specifier: ^18.3.1
         version: 18.3.1

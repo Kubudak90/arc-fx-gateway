@@ -1,3 +1,6 @@
 .vercel
 .env.production.local
 .env.local
+tsconfig.tsbuildinfo
+test-results/
+playwright-report/

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 
 export interface SessionData {
   merchantAddress?: string;
+  apiKey?: string; // shown once at generation; held in session for dashboard convenience
 }
 
 export const sessionOptions: SessionOptions = {

@@ -1,0 +1,76 @@
+# @arc-fx/app
+
+Next.js 15 app hosting customer checkout (`/i/[invoiceId]`) and merchant dashboard (`/m/*`) for Arc FX Gateway.
+
+## Local development
+
+```bash
+cp .env.example .env   # fill in local values + MASTER_KEY
+docker compose up -d postgres
+pnpm db:push
+pnpm tsx scripts/provision-server-wallet.ts   # one-time
+# add the printed address to NEXT_PUBLIC_SERVER_WALLET_ADDRESS in .env
+# fund it from https://faucet.circle.com (Arc Testnet)
+pnpm dev
+```
+
+Visit http://localhost:3000.
+
+## Tests
+
+```bash
+pnpm test           # vitest (42 unit + UI tests)
+pnpm e2e            # playwright (6 critical flows)
+```
+
+## Pages
+
+| Route | Audience | Description |
+|-------|----------|-------------|
+| `/` | public | Minimal landing page |
+| `/i/[invoiceId]` | customer | Stripe-style hosted checkout — wallet connect, FX quote, approve+pay, mobile QR handoff |
+| `/m/login` | merchant | SIWE auth |
+| `/m/dashboard` | merchant | Invoice list, create new, share QR |
+| `/m/settings` | merchant | API key, webhook URL, on-chain delegate authorization |
+| `/api/invoices` | server-paid | POST: create invoice on-chain via `createInvoiceFor` |
+| `/api/invoices/:id` | public | GET: invoice mirror from DB |
+| `/api/quote` | public | GET: live pool quote |
+| `/api/cron/index-events` | Vercel Cron | every 1m: chain → DB sync |
+| `/api/cron/dispatch-webhooks` | Vercel Cron | every 1m: HMAC-signed webhook delivery |
+
+## Architecture
+
+- **Tailwind v4** with Coinbase-inspired tokens (`#0052ff` accent, 56px pill CTAs)
+- **shadcn/ui** primitives overridden with Coinbase theme
+- **Inter** font (subbing for proprietary CoinbaseDisplay/Sans)
+- **wagmi 2 + viem 2** for chain reads/writes
+- **thirdweb v5** for customer-side wallet connect (WalletConnect QR included)
+- **iron-session** for SIWE-backed merchant auth
+- **drizzle-orm + Vercel Postgres** for state
+- **Vercel Cron** for indexer + webhook dispatcher
+
+## Env vars
+
+| Var | Purpose |
+|-----|---------|
+| `POSTGRES_URL` | Vercel Postgres connection string |
+| `MASTER_KEY` | AES-256-GCM key for server wallet keystore + webhook secrets |
+| `IRON_SESSION_PASSWORD` | Cookie session password (≥32 chars) |
+| `CRON_SECRET` | Bearer token guarding `/api/cron/*` |
+| `GATEWAY_ADDRESS` | ArcFXGateway v0.3 address |
+| `POOL_ADDRESS`, `ORACLE_ADDRESS`, `USDC_ADDRESS`, `EURC_ADDRESS` | Contract addresses |
+| `ARC_TESTNET_RPC` | Arc testnet RPC endpoint |
+| `INDEXER_REORG_BUFFER_BLOCKS` | Default `5` — how far back from head to scan |
+| `PUBLIC_BASE_URL` | Server-side base URL (used in invoice URLs) |
+| `NEXT_PUBLIC_*` | Browser-exposed mirrors of the above |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | from cloud.walletconnect.com (free) |
+| `NEXT_PUBLIC_THIRDWEB_CLIENT_ID` | from thirdweb.com (free) |
+| `NEXT_PUBLIC_SERVER_WALLET_ADDRESS` | output of `provision-server-wallet.ts` |
+
+## Deploy
+
+See [Plan 2b spec §8](../../docs/superpowers/specs/2026-04-25-plan-2b-frontend-design.md#8-deploy) for the full Vercel deploy walkthrough.
+
+## License
+
+MIT.

@@ -21,7 +21,7 @@ contract ArcFXGatewayTest is Test {
     address customer = makeAddr("customer");
 
     function setUp() public virtual {
-        vm.warp(1_700_000_000); // Set a realistic timestamp
+        vm.warp(1_700_000_000);
         usdc   = new MockERC20("USDC", "USDC", 6);
         eurc   = new MockERC20("EURC", "EURC", 6);
         oracle = new MockChainlink(8);
@@ -35,51 +35,137 @@ contract ArcFXGatewayTest is Test {
         );
     }
 
+    // ── Merchant registration ──────────────────────────────────────────
+
     function test_RegisterMerchant_Success() public {
         vm.prank(merchant);
-        gw.registerMerchant(address(usdc));
-        (address payout, bool registered) = gw.merchants(merchant);
-        assertEq(payout, address(usdc));
-        assertTrue(registered);
+        gw.registerMerchant(merchant, address(usdc));
+        (address payoutAddr, address payoutTok, bool active) = gw.merchants(merchant);
+        assertEq(payoutAddr, merchant);
+        assertEq(payoutTok, address(usdc));
+        assertTrue(active);
+    }
+
+    function test_RegisterMerchant_SeparatePayoutAddress() public {
+        address payoutWallet = makeAddr("payout");
+        vm.prank(merchant);
+        gw.registerMerchant(payoutWallet, address(usdc));
+        (address payoutAddr, , ) = gw.merchants(merchant);
+        assertEq(payoutAddr, payoutWallet);
     }
 
     function test_RegisterMerchant_RevertsOnDoubleRegistration() public {
         vm.prank(merchant);
-        gw.registerMerchant(address(usdc));
+        gw.registerMerchant(merchant, address(usdc));
         vm.prank(merchant);
         vm.expectRevert(ArcFXGateway.MerchantAlreadyRegistered.selector);
-        gw.registerMerchant(address(eurc));
+        gw.registerMerchant(merchant, address(eurc));
     }
 
     function test_RegisterMerchant_RevertsOnUnsupportedToken() public {
         MockERC20 other = new MockERC20("X", "X", 18);
         vm.prank(merchant);
         vm.expectRevert(ArcFXGateway.InvalidPayoutToken.selector);
-        gw.registerMerchant(address(other));
+        gw.registerMerchant(merchant, address(other));
+    }
+
+    function test_RegisterMerchant_RevertsOnZeroPayoutAddress() public {
+        vm.prank(merchant);
+        vm.expectRevert(ArcFXGateway.InvalidPayoutAddress.selector);
+        gw.registerMerchant(address(0), address(usdc));
     }
 
     function test_RegisterMerchant_EmitsEvent() public {
         vm.expectEmit(true, false, false, true, address(gw));
-        emit ArcFXGateway.MerchantRegistered(merchant, address(usdc));
+        emit ArcFXGateway.MerchantRegistered(merchant, merchant, address(usdc));
         vm.prank(merchant);
-        gw.registerMerchant(address(usdc));
+        gw.registerMerchant(merchant, address(usdc));
     }
 
-    // ── createInvoice ──────────────────────────────────────────────────
+    // ── Merchant updates ───────────────────────────────────────────────
 
     function _registerMerchant() internal {
         vm.prank(merchant);
-        gw.registerMerchant(address(usdc));
+        gw.registerMerchant(merchant, address(usdc));
     }
+
+    function test_UpdatePayoutAddress_Success() public {
+        _registerMerchant();
+        address newWallet = makeAddr("new-payout");
+        vm.expectEmit(true, false, false, true, address(gw));
+        emit ArcFXGateway.MerchantPayoutAddressUpdated(merchant, merchant, newWallet);
+        vm.prank(merchant);
+        gw.updatePayoutAddress(newWallet);
+        (address payoutAddr, , ) = gw.merchants(merchant);
+        assertEq(payoutAddr, newWallet);
+    }
+
+    function test_UpdatePayoutAddress_RevertsForUnregistered() public {
+        vm.prank(merchant);
+        vm.expectRevert(ArcFXGateway.NotMerchant.selector);
+        gw.updatePayoutAddress(makeAddr("x"));
+    }
+
+    function test_UpdatePayoutAddress_RevertsOnZero() public {
+        _registerMerchant();
+        vm.prank(merchant);
+        vm.expectRevert(ArcFXGateway.InvalidPayoutAddress.selector);
+        gw.updatePayoutAddress(address(0));
+    }
+
+    function test_UpdatePayoutToken_Success() public {
+        _registerMerchant();
+        vm.expectEmit(true, false, false, true, address(gw));
+        emit ArcFXGateway.MerchantPayoutTokenUpdated(merchant, address(usdc), address(eurc));
+        vm.prank(merchant);
+        gw.updatePayoutToken(address(eurc));
+        (, address payoutTok, ) = gw.merchants(merchant);
+        assertEq(payoutTok, address(eurc));
+    }
+
+    function test_UpdatePayoutToken_RevertsOnUnsupported() public {
+        _registerMerchant();
+        MockERC20 other = new MockERC20("X", "X", 18);
+        vm.prank(merchant);
+        vm.expectRevert(ArcFXGateway.InvalidPayoutToken.selector);
+        gw.updatePayoutToken(address(other));
+    }
+
+    function test_DeactivateMerchant_Success() public {
+        _registerMerchant();
+        vm.expectEmit(true, false, false, true, address(gw));
+        emit ArcFXGateway.MerchantDeactivated(merchant);
+        vm.prank(merchant);
+        gw.deactivateMerchant();
+        (, , bool active) = gw.merchants(merchant);
+        assertFalse(active);
+    }
+
+    function test_DeactivateMerchant_BlocksNewInvoices() public {
+        _registerMerchant();
+        vm.prank(merchant);
+        gw.deactivateMerchant();
+        vm.prank(merchant);
+        vm.expectRevert(ArcFXGateway.MerchantInactive.selector);
+        gw.createInvoice(bytes32("inv-1"), address(eurc), 1, uint64(block.timestamp + 1 hours));
+    }
+
+    // ── Invoice creation ───────────────────────────────────────────────
 
     function test_CreateInvoice_Success() public {
         _registerMerchant();
-        bytes32 id = keccak256("inv-1");
+        bytes32 mid = bytes32("inv-1");
         vm.prank(merchant);
-        gw.createInvoice(id, address(eurc), 49_990_000, uint64(block.timestamp + 30 minutes));
-        (address m, address payIn, uint256 amt, uint64 exp, ArcFXGateway.InvoiceStatus s, ) = gw.invoices(id);
+        bytes32 globalId = gw.createInvoice(mid, address(eurc), 49_990_000, uint64(block.timestamp + 30 minutes));
+
+        bytes32 expected = keccak256(abi.encode(merchant, mid));
+        assertEq(globalId, expected);
+
+        (address m, address payIn, address payoutTok, uint256 amt, uint64 exp, ArcFXGateway.InvoiceStatus s, ) =
+            gw.invoices(globalId);
         assertEq(m, merchant);
         assertEq(payIn, address(eurc));
+        assertEq(payoutTok, address(usdc));
         assertEq(amt, 49_990_000);
         assertEq(exp, uint64(block.timestamp + 30 minutes));
         assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Created));
@@ -87,34 +173,88 @@ contract ArcFXGatewayTest is Test {
 
     function test_CreateInvoice_RevertsIfNotMerchant() public {
         vm.prank(merchant);
-        vm.expectRevert(ArcFXGateway.NotMerchant.selector);
-        gw.createInvoice(keccak256("inv-2"), address(eurc), 1, uint64(block.timestamp + 1 hours));
+        vm.expectRevert(ArcFXGateway.MerchantInactive.selector);
+        gw.createInvoice(bytes32("inv-2"), address(eurc), 1, uint64(block.timestamp + 1 hours));
     }
 
     function test_CreateInvoice_RevertsOnDuplicateId() public {
         _registerMerchant();
-        bytes32 id = keccak256("inv-3");
+        bytes32 mid = bytes32("inv-3");
         vm.startPrank(merchant);
-        gw.createInvoice(id, address(eurc), 100, uint64(block.timestamp + 1 hours));
-        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceAlreadyExists.selector, id));
-        gw.createInvoice(id, address(eurc), 100, uint64(block.timestamp + 1 hours));
+        bytes32 globalId = gw.createInvoice(mid, address(eurc), 100, uint64(block.timestamp + 1 hours));
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceAlreadyExists.selector, globalId));
+        gw.createInvoice(mid, address(eurc), 100, uint64(block.timestamp + 1 hours));
         vm.stopPrank();
     }
 
-    function test_CreateInvoice_RevertsOnUnsupportedPair() public {
-        _registerMerchant(); // payout = USDC
+    /// @notice Different merchants using the same merchantInvoiceId must not collide.
+    function test_CreateInvoice_NamespaceIsolation() public {
+        _registerMerchant();
+
+        address merchant2 = makeAddr("merchant2");
+        vm.prank(merchant2);
+        gw.registerMerchant(merchant2, address(usdc));
+
+        bytes32 sharedMid = bytes32("ORDER-1");
+
+        vm.prank(merchant);
+        bytes32 g1 = gw.createInvoice(sharedMid, address(eurc), 100, uint64(block.timestamp + 1 hours));
+
+        vm.prank(merchant2);
+        bytes32 g2 = gw.createInvoice(sharedMid, address(eurc), 200, uint64(block.timestamp + 1 hours));
+
+        assertTrue(g1 != g2);
+
+        (address m1, , , uint256 a1, , , ) = gw.invoices(g1);
+        (address m2, , , uint256 a2, , , ) = gw.invoices(g2);
+        assertEq(m1, merchant);
+        assertEq(m2, merchant2);
+        assertEq(a1, 100);
+        assertEq(a2, 200);
+    }
+
+    function test_CreateInvoice_SameTokenAllowed() public {
+        _registerMerchant(); // payout USDC
+        // Same-token invoice (payIn USDC, payout USDC) is now valid.
+        vm.prank(merchant);
+        bytes32 globalId = gw.createInvoice(bytes32("same"), address(usdc), 100, uint64(block.timestamp + 1 hours));
+        (, address payIn, address payoutTok, , , , ) = gw.invoices(globalId);
+        assertEq(payIn, address(usdc));
+        assertEq(payoutTok, address(usdc));
+    }
+
+    function test_CreateInvoice_RevertsOnUnknownPayIn() public {
+        _registerMerchant();
+        MockERC20 unknown = new MockERC20("Z", "Z", 6);
         vm.prank(merchant);
         vm.expectRevert(ArcFXGateway.UnsupportedPair.selector);
-        gw.createInvoice(keccak256("inv-4"), address(usdc), 100, uint64(block.timestamp + 1 hours));
+        gw.createInvoice(bytes32("unk"), address(unknown), 100, uint64(block.timestamp + 1 hours));
+    }
+
+    function test_CreateInvoice_LocksPayoutTokenAtCreation() public {
+        _registerMerchant(); // USDC
+        vm.prank(merchant);
+        bytes32 globalId = gw.createInvoice(bytes32("lock"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+
+        // Merchant flips payout token after invoice exists.
+        vm.prank(merchant);
+        gw.updatePayoutToken(address(eurc));
+
+        // Invoice still locked to USDC.
+        (, , address payoutTok, , , , ) = gw.invoices(globalId);
+        assertEq(payoutTok, address(usdc));
     }
 
     function test_CreateInvoice_EmitsEvent() public {
         _registerMerchant();
-        bytes32 id = keccak256("inv-5");
-        vm.expectEmit(true, true, false, true, address(gw));
-        emit ArcFXGateway.InvoiceCreated(id, merchant, address(eurc), 50_000_000, uint64(block.timestamp + 1 hours));
+        bytes32 mid = bytes32("inv-5");
+        bytes32 expectedGlobal = keccak256(abi.encode(merchant, mid));
+        vm.expectEmit(true, true, true, true, address(gw));
+        emit ArcFXGateway.InvoiceCreated(
+            expectedGlobal, merchant, mid, address(eurc), address(usdc), 50_000_000, uint64(block.timestamp + 1 hours)
+        );
         vm.prank(merchant);
-        gw.createInvoice(id, address(eurc), 50_000_000, uint64(block.timestamp + 1 hours));
+        gw.createInvoice(mid, address(eurc), 50_000_000, uint64(block.timestamp + 1 hours));
     }
 
     // ── pay() ──────────────────────────────────────────────────────────
@@ -131,15 +271,14 @@ contract ArcFXGatewayTest is Test {
         _registerMerchant();
         _fundPoolAndCustomer();
 
-        bytes32 id = keccak256("happy");
         vm.prank(merchant);
-        gw.createInvoice(id, address(eurc), 49_990_000, uint64(block.timestamp + 1 hours));
+        bytes32 g = gw.createInvoice(bytes32("happy"), address(eurc), 49_990_000, uint64(block.timestamp + 1 hours));
 
         uint256 merchantBefore = usdc.balanceOf(merchant);
         vm.prank(customer);
-        gw.pay(id, 60_000_000); // generous cushion
+        gw.pay(g, 60_000_000);
 
-        (, , , , ArcFXGateway.InvoiceStatus s, address paidBy) = gw.invoices(id);
+        (, , , , , ArcFXGateway.InvoiceStatus s, address paidBy) = gw.invoices(g);
         assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
         assertEq(paidBy, customer);
 
@@ -148,28 +287,63 @@ contract ArcFXGatewayTest is Test {
         assertEq(gw.protocolFeesAccrued(address(usdc)), feeUsdc);
     }
 
-    // ── pay() guards ───────────────────────────────────────────────────
+    /// @notice Same-token payments take the no-swap branch: customer pays exactly amountOut.
+    function test_Pay_SameTokenDirect() public {
+        _registerMerchant(); // payout USDC
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("direct"), address(usdc), 50_000_000, uint64(block.timestamp + 1 hours));
+
+        uint256 merchantBefore = usdc.balanceOf(merchant);
+        uint256 customerBefore = usdc.balanceOf(customer);
+
+        vm.prank(customer);
+        gw.pay(g, 50_000_000);
+
+        uint256 fee = (50_000_000 * 10) / 10_000;
+        assertEq(customerBefore - usdc.balanceOf(customer), 50_000_000, "customer pays exact amount");
+        assertEq(usdc.balanceOf(merchant) - merchantBefore, 50_000_000 - fee, "merchant gets net");
+        assertEq(gw.protocolFeesAccrued(address(usdc)), fee);
+    }
+
+    function test_Pay_SameTokenDirect_EmitsEqualGrossAndAmountIn() public {
+        _registerMerchant();
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("e"), address(usdc), 100_000_000, uint64(block.timestamp + 1 hours));
+
+        uint256 fee    = (100_000_000 * 10) / 10_000;
+        uint256 payout = 100_000_000 - fee;
+        vm.expectEmit(true, true, false, true, address(gw));
+        emit ArcFXGateway.InvoicePaid(g, customer, 100_000_000, 100_000_000, payout, fee);
+        vm.prank(customer);
+        gw.pay(g, 100_000_000);
+    }
 
     function test_Pay_RevertsOnExpired() public {
         _registerMerchant(); _fundPoolAndCustomer();
-        bytes32 id = keccak256("exp");
         vm.prank(merchant);
-        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 60));
+        bytes32 g = gw.createInvoice(bytes32("exp"), address(eurc), 1_000_000, uint64(block.timestamp + 60));
         vm.warp(block.timestamp + 120);
         vm.prank(customer);
-        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceExpired.selector, id));
-        gw.pay(id, 2_000_000);
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceExpired.selector, g));
+        gw.pay(g, 2_000_000);
     }
 
     function test_Pay_RevertsOnReplay() public {
         _registerMerchant(); _fundPoolAndCustomer();
-        bytes32 id = keccak256("rep");
         vm.prank(merchant);
-        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
-        vm.prank(customer); gw.pay(id, 2_000_000);
+        bytes32 g = gw.createInvoice(bytes32("rep"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer); gw.pay(g, 2_000_000);
         vm.prank(customer);
-        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceAlreadyPaid.selector, id));
-        gw.pay(id, 2_000_000);
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceAlreadyPaid.selector, g));
+        gw.pay(g, 2_000_000);
     }
 
     function test_Pay_RevertsOnNotFound() public {
@@ -180,34 +354,93 @@ contract ArcFXGatewayTest is Test {
 
     function test_Pay_RevertsOnSlippageTooTight() public {
         _registerMerchant(); _fundPoolAndCustomer();
-        bytes32 id = keccak256("slip");
         vm.prank(merchant);
-        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        bytes32 g = gw.createInvoice(bytes32("slip"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
         vm.prank(customer);
         vm.expectRevert();
-        gw.pay(id, 500_000);
+        gw.pay(g, 500_000);
     }
 
     function test_Pay_RevertsOnOracleDeviation() public {
         _registerMerchant(); _fundPoolAndCustomer();
-        pool.setRate(0.5e18); // rate far from oracle (1.0863)
-        bytes32 id = keccak256("dev");
+        pool.setRate(0.5e18);
         vm.prank(merchant);
-        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        bytes32 g = gw.createInvoice(bytes32("dev"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
         eurc.mint(customer, 100_000 * 1e6);
         vm.prank(customer);
         vm.expectRevert();
-        gw.pay(id, type(uint128).max);
+        gw.pay(g, type(uint128).max);
+    }
+
+    /// @notice Pay routes to the merchant's CURRENT payoutAddress, even if changed after invoice creation.
+    function test_Pay_UsesCurrentPayoutAddress() public {
+        _registerMerchant(); _fundPoolAndCustomer();
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("addr"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+
+        address newWallet = makeAddr("rotated");
+        vm.prank(merchant);
+        gw.updatePayoutAddress(newWallet);
+
+        vm.prank(customer);
+        gw.pay(g, 2_000_000);
+
+        assertGt(usdc.balanceOf(newWallet), 0, "new wallet got payout");
+        assertEq(usdc.balanceOf(merchant), 0, "old wallet got nothing");
+    }
+
+    /// @notice Pay uses the payoutToken LOCKED at invoice creation, ignoring later updates.
+    function test_Pay_UsesLockedPayoutToken() public {
+        _registerMerchant(); // USDC
+        _fundPoolAndCustomer();
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("tok"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+
+        // Flip payout token after invoice exists.
+        vm.prank(merchant);
+        gw.updatePayoutToken(address(eurc));
+
+        uint256 merchantUsdcBefore = usdc.balanceOf(merchant);
+        uint256 merchantEurcBefore = eurc.balanceOf(merchant);
+
+        vm.prank(customer);
+        gw.pay(g, 2_000_000);
+
+        // Invoice locked to USDC, so merchant receives USDC, not EURC.
+        assertGt(usdc.balanceOf(merchant) - merchantUsdcBefore, 0, "merchant got USDC");
+        assertEq(eurc.balanceOf(merchant), merchantEurcBefore, "merchant got no EURC");
+    }
+
+    function test_Pay_USDCInEURCOut() public {
+        vm.prank(merchant);
+        gw.registerMerchant(merchant, address(eurc));
+
+        usdc.mint(address(pool), 1_000_000 * 1e6);
+        eurc.mint(address(pool), 1_000_000 * 1e6);
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("usdc-in"), address(usdc), 46_000_000, uint64(block.timestamp + 1 hours));
+
+        uint256 merchantBefore = eurc.balanceOf(merchant);
+        vm.prank(customer);
+        gw.pay(g, 60_000_000);
+
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
+        assertGt(eurc.balanceOf(merchant) - merchantBefore, 0);
     }
 
     // ── withdrawFees ───────────────────────────────────────────────────
 
     function test_WithdrawFees_OwnerOnly() public {
         _registerMerchant(); _fundPoolAndCustomer();
-        bytes32 id = keccak256("f");
         vm.prank(merchant);
-        gw.createInvoice(id, address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
-        vm.prank(customer); gw.pay(id, 2_000_000);
+        bytes32 g = gw.createInvoice(bytes32("f"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer); gw.pay(g, 2_000_000);
 
         uint256 accrued = gw.protocolFeesAccrued(address(usdc));
         assertGt(accrued, 0);
@@ -224,41 +457,69 @@ contract ArcFXGatewayTest is Test {
         gw.withdrawFees(address(usdc), customer);
     }
 
-    // ── branch coverage completions ────────────────────────────────────
+    // ── delegate authorization ─────────────────────────────────────────
 
-    function test_CreateInvoice_RevertsOnUnknownPayIn() public {
-        // Branch: payIn != payoutToken AND payIn is not USDC or EURC
+    function test_AuthorizeDelegate_Success() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        vm.expectEmit(true, true, false, true, address(gw));
+        emit ArcFXGateway.DelegateAuthorized(merchant, delegate, type(uint64).max);
         vm.prank(merchant);
-        gw.registerMerchant(address(usdc));
-        MockERC20 unknown = new MockERC20("Z", "Z", 6);
-        vm.prank(merchant);
-        vm.expectRevert(ArcFXGateway.UnsupportedPair.selector);
-        gw.createInvoice(keccak256("inv-uk"), address(unknown), 100, uint64(block.timestamp + 1 hours));
+        gw.authorizeDelegate(delegate, type(uint64).max);
+        assertEq(gw.delegateAuthorizations(merchant, delegate), type(uint64).max);
     }
 
-    function test_Pay_USDCInEURCOut() public {
-        // Covers the USDC→EURC branch in pay() rate direction logic
-        // Register merchant with EURC payout
+    function test_AuthorizeDelegate_RevertsForNonMerchant() public {
+        address delegate = makeAddr("delegate");
         vm.prank(merchant);
-        gw.registerMerchant(address(eurc));
+        vm.expectRevert(ArcFXGateway.NotMerchant.selector);
+        gw.authorizeDelegate(delegate, type(uint64).max);
+    }
 
-        usdc.mint(address(pool), 1_000_000 * 1e6);
-        eurc.mint(address(pool), 1_000_000 * 1e6);
-        usdc.mint(customer, 1_000 * 1e6);
-        vm.prank(customer);
-        usdc.approve(address(gw), type(uint256).max);
+    function test_RevokeDelegate_Success() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        vm.startPrank(merchant);
+        gw.authorizeDelegate(delegate, type(uint64).max);
+        gw.revokeDelegate(delegate);
+        vm.stopPrank();
+        assertEq(gw.delegateAuthorizations(merchant, delegate), 0);
+    }
 
-        bytes32 id = keccak256("usdc-in");
+    function test_CreateInvoiceFor_Success() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
         vm.prank(merchant);
-        // amountOut in EURC: merchant wants 46_000_000 EURC (pool gives EURC per USDC at ~1.0863)
-        gw.createInvoice(id, address(usdc), 46_000_000, uint64(block.timestamp + 1 hours));
+        gw.authorizeDelegate(delegate, type(uint64).max);
 
-        uint256 merchantBefore = eurc.balanceOf(merchant);
-        vm.prank(customer);
-        gw.pay(id, 60_000_000);
+        bytes32 mid = bytes32("auth-1");
+        vm.prank(delegate);
+        bytes32 g = gw.createInvoiceFor(merchant, mid, address(eurc), 49_990_000, uint64(block.timestamp + 30 minutes));
 
-        (, , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(id);
-        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
-        assertGt(eurc.balanceOf(merchant) - merchantBefore, 0);
+        (address m, address payIn, , uint256 amt, , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(m, merchant);
+        assertEq(payIn, address(eurc));
+        assertEq(amt, 49_990_000);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Created));
+    }
+
+    function test_CreateInvoiceFor_RevertsIfNotAuthorized() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        vm.prank(delegate);
+        vm.expectRevert(ArcFXGateway.DelegateNotAuthorized.selector);
+        gw.createInvoiceFor(merchant, bytes32("a"), address(eurc), 1, uint64(block.timestamp + 1 hours));
+    }
+
+    function test_CreateInvoiceFor_RevertsIfDelegateExpired() public {
+        _registerMerchant();
+        address delegate = makeAddr("delegate");
+        vm.prank(merchant);
+        gw.authorizeDelegate(delegate, uint64(block.timestamp + 1 minutes));
+
+        vm.warp(block.timestamp + 5 minutes);
+        vm.prank(delegate);
+        vm.expectRevert(ArcFXGateway.DelegateNotAuthorized.selector);
+        gw.createInvoiceFor(merchant, bytes32("a"), address(eurc), 1, uint64(block.timestamp + 1 hours));
     }
 }

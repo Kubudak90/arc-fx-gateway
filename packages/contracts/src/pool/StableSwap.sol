@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -100,17 +99,16 @@ contract StableSwap is Ownable, Pausable, ReentrancyGuard {
      * StableSwap paper for details
      * @param _fee default swap fee to be initialized with
      * @param _adminFee default adminFee to be initialized with
-     * @param lpTokenTargetAddress the address of an existing LPToken contract to use as a target
      */
     constructor(
         IERC20[] memory _pooledTokens,
         uint8[] memory decimals,
-        string memory /* lpTokenName */,
-        string memory /* lpTokenSymbol */,
+        string memory lpTokenName,
+        string memory lpTokenSymbol,
         uint256 _a,
         uint256 _fee,
         uint256 _adminFee,
-        address lpTokenTargetAddress
+        address /* lpTokenTargetAddress (unused — LPToken deployed directly, see below) */
     ) Ownable(msg.sender) {
         // Check _pooledTokens and precisions parameter
         require(_pooledTokens.length > 1, "_pooledTokens.length <= 1");
@@ -155,9 +153,10 @@ contract StableSwap is Ownable, Pausable, ReentrancyGuard {
             "_adminFee exceeds maximum"
         );
 
-        // Clone and initialize a LPToken contract
-        LPToken lpToken = LPToken(Clones.clone(lpTokenTargetAddress));
-        // Transfer LP token ownership to this contract
+        // Deploy a fresh LPToken (constructor wires name/symbol/owner). The
+        // upstream Saddle pattern used Clones.clone on an upgradeable target; we
+        // ported away from upgradeable contracts so we deploy directly.
+        LPToken lpToken = new LPToken(lpTokenName, lpTokenSymbol);
         lpToken.transferOwnership(address(this));
 
         // Initialize swapStorage struct

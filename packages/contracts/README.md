@@ -89,6 +89,28 @@ Deployed addresses are recorded in `deployments/arc-testnet.json` after a succes
 - **Manual:** SWC registry checklist passes; vendored Saddle pool reviewed patch-by-patch against upstream `master` at vendor time.
 - **Architectural:** immutable construction params, custom errors only, ReentrancyGuard on mutating entry points.
 
+## Live Arc-testnet deployment (v0.3.0 — Gateway with delegate auth)
+
+| | Address |
+|---|---|
+| ArcFXGateway (v0.3) | [`0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF`](https://testnet.arcscan.app/address/0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF) |
+| OracleAMM | [`0xC2020098aF328ac9CBD274267F424822C400dD66`](https://testnet.arcscan.app/address/0xC2020098aF328ac9CBD274267F424822C400dD66) |
+| MockChainlinkFeed (EUR/USD = 1.0863) | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
+
+v0.3.0 adds `createInvoiceFor` + `authorizeDelegate` + `revokeDelegate` (backwards-compatible) so the Plan 2 server hot wallet can submit invoices on a merchant's behalf. Smoke-test tx: [`0xf22c076d…77a5fcebfd`](https://testnet.arcscan.app/tx/0xf22c076de9ac629a880ce629d5490d0a06e1d3fb1c3f166af7b67577a5fcebfd).
+
+End-to-end smoke-test transaction: [`0x31ddbf35…fc2bf0bd1c2064a`](https://testnet.arcscan.app/tx/0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a) — invoice for 0.10 USDC paid in EURC at the real 1.0863 EUR/USD rate, settled, marked Paid.
+
+Pool quote example: 0.1 EURC → 0.108587 USDC (gross 0.108630 USDC at oracle = 1.0863, minus 4 bps pool fee = 0.108587).
+
+Full deployment record (current + deprecated v0.1.0): [`deployments/arc-testnet.json`](./deployments/arc-testnet.json)
+
+### Pool architecture — OracleAMM
+
+Plan 1.5 replaces Saddle StableSwap with [`OracleAMM`](src/pool/OracleAMM.sol), a Chainlink-priced two-token pool inspired by Lifinity / Mercurial. Every swap reads the live oracle and quotes at `oracle ± swapFeeBps`. There is no bonding curve — capital efficiency is bounded only by reserves and oracle freshness. Suitable for stable FX pairs that move within a narrow band; LPs face oracle-rate convergence as the pool's mark-to-market value.
+
+The legacy Saddle StableSwap port (`src/pool/StableSwap.sol` and helpers) is left in place for reference but is no longer deployed. See [`deployments/arc-testnet.json`](./deployments/arc-testnet.json) for the deprecated v0.1.0 addresses.
+
 ## Pool choice — why Saddle, not Curve
 
 The original plan called for vendoring Curve's Vyper StableSwap. The Curve sources we tried (`curvefi/curve-contract` master) target Vyper 0.2.x, while only Vyper ≥0.3.10 is comfortably installable today. Rather than maintain an old toolchain, we vendored Saddle Finance's Solidity StableSwap port (MIT, last reviewed at upstream master before Saddle's archive). Math is the StableSwap invariant — equivalent behavior, native Foundry compile, no FFI.

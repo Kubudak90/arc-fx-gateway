@@ -1,0 +1,77 @@
+{
+  "network": "arc-testnet",
+  "chainId": 5042002,
+  "rpc": "https://rpc.testnet.arc.network",
+  "explorer": "https://testnet.arcscan.app",
+  "deployer": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b",
+  "tokens": {
+    "USDC": "0x3600000000000000000000000000000000000000",
+    "EURC": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a"
+  },
+  "current": {
+    "deployedAt": "2026-04-26",
+    "label": "v0.4.0 — Gateway v2 (Plan 2b: namespacing + merchant updates + same-token + event split)",
+    "contracts": {
+      "ArcFXGateway": "0xA80A5741a09bff1f43dcBF15Df7c598A23163302",
+      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
+      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
+    },
+    "config": {
+      "protocolFeeBps": 10,
+      "maxOracleDeviationBps": 50,
+      "poolSwapFeeBps": 4,
+      "oracleDecimals": 8,
+      "oracleAnswer": 108630000,
+      "oracleAnswerHuman": "1.0863 (real EUR/USD)"
+    },
+    "changes": [
+      "createInvoice/createInvoiceFor take merchantInvoiceId; contract derives globalId = keccak256(merchant, merchantInvoiceId)",
+      "Merchant struct gains payoutAddress (separate from msg.sender) and active flag; updatePayoutAddress, updatePayoutToken, deactivateMerchant added",
+      "pay() takes a no-swap branch when payIn == payoutToken (same-token direct payment)",
+      "InvoicePaid event split: 6 fields (id, payer, amountIn, grossReceived, merchantPayout, fee)",
+      "InvoiceStatus.Expired enum value removed",
+      "Invoice locks payoutToken at creation; later merchant updates do not reroute pending invoices"
+    ]
+  },
+  "deprecated_v0.3.0": {
+    "deployedAt": "2026-04-25",
+    "label": "v0.3.0 — Gateway with delegate authorization (Plan 2a)",
+    "reason": "Replaced by v0.4.0 which adds the PDF-review fixes (#3, #4, #7, #8, #9). v0.3.0 still on-chain but superseded for the product flow.",
+    "contracts": {
+      "ArcFXGateway": "0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF",
+      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
+      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
+    }
+  },
+  "deprecated_v0.2.0": {
+    "deployedAt": "2026-04-25",
+    "label": "v0.2.0 — Gateway pre-delegate (Plan 1.5)",
+    "reason": "v0.3.0 adds backwards-compatible delegate authorization (createInvoiceFor + authorizeDelegate + revokeDelegate) so the Plan 2 server hot wallet can submit invoices on a merchant's behalf. v0.2.0 still functional but superseded by v0.3.0 for the product flow.",
+    "contracts": {
+      "ArcFXGateway": "0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D",
+      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
+      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
+    },
+    "bootstrapLiquidity": {
+      "usdc": "5000000",
+      "eurc": "4600000",
+      "addLiquidityTx": "0x71dd049205e36ae78e5cb1036c628860dbd70f19538f1c896a1f83a2b90d7816"
+    },
+    "smokeTest_pay": {
+      "txHash": "0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a",
+      "note": "Real 1.0863 EUR/USD, no parity hack. 0.1 EURC → 0.108587 USDC."
+    }
+  },
+  "deprecated_v0.1.0": {
+    "deployedAt": "2026-04-25",
+    "label": "Plan 1 — Saddle StableSwap (replaced; left here for reference)",
+    "reason": "StableSwap invariant assumes 1:1 peg between pooled tokens. With USDC/EURC at 1.0863 USD/EUR, the pool's implied rate stayed near 1:1 regardless of bootstrap balances, forcing the oracle to be set to parity to pass the deviation guard. Replaced in Plan 1.5 by OracleAMM (Chainlink-priced, no curve) which trades at the live oracle rate ± a 4 bps fee.",
+    "contracts": {
+      "ArcFXGateway": "0x968E5dc9B675b9BF7C4d68A1e0137ada1A95523C",
+      "StableSwapPool": "0xf3e47C06912803FFeae44d6F40aadd470704d123",
+      "LPToken": "0x555f5ce3fab4a9aa745f834448ca18d5ef9235dd",
+      "AmplificationUtils": "0x4b647D3E5c3Ed0FEE209dD9F00feC957b0157E0c",
+      "SwapUtils": "0xade733aD1e05a0C457602a8D1eab39b4F466051A"
+    }
+  }
+}

@@ -1,0 +1,83 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /* Coinbase brand */
+  --color-cb-blue:        #0052ff;
+  --color-cb-hover:       #578bfa;
+  --color-cb-link:        #0667d0;
+  --color-cb-near-black:  #0a0b0d;
+  --color-cb-dark-card:   #282b31;
+  --color-cb-cool-gray:   #eef0f3;
+  --color-cb-muted-blue:  rgba(91, 97, 110, 0.2);
+
+  /* Fonts (set by next/font in layout.tsx) */
+  --font-display: var(--font-display, "Inter Display"), "Inter", sans-serif;
+  --font-sans:    var(--font-sans, "Inter"), sans-serif;
+  --font-mono:    "JetBrains Mono", monospace;
+
+  /* Radii */
+  --radius-pill: 56px;
+  --radius-full: 100000px;
+
+  /* shadcn semantic mapping */
+  --color-background: var(--color-white);
+  --color-foreground: var(--color-cb-near-black);
+  --color-primary:    var(--color-cb-near-black);
+  --color-primary-foreground: var(--color-white);
+  --color-secondary:  var(--color-cb-cool-gray);
+  --color-secondary-foreground: var(--color-cb-near-black);
+  --color-muted:      var(--color-cb-cool-gray);
+  --color-muted-foreground: #5b616e;
+  --color-accent:     var(--color-cb-blue);
+  --color-accent-foreground: var(--color-white);
+  --color-border:     var(--color-cb-muted-blue);
+  --color-input:      var(--color-cb-muted-blue);
+  --color-ring:       var(--color-cb-blue);
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: var(--color-white);
+
+  --radius: 0.75rem;
+}
+
+/* Pill button — signature Coinbase CTA */
+.btn-cb-pill {
+  border-radius: var(--radius-pill);
+  background: var(--color-cb-near-black);
+  color: var(--color-white);
+  font: 600 16px/1.20 var(--font-sans);
+  letter-spacing: 0.16px;
+  padding: 14px 32px;
+  transition: background 150ms ease;
+  cursor: pointer;
+}
+.btn-cb-pill:hover { background: var(--color-cb-hover); }
+.btn-cb-pill:focus-visible { outline: 2px solid var(--color-cb-near-black); outline-offset: 2px; }
+.btn-cb-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-cb-pill-light {
+  border-radius: var(--radius-pill);
+  background: var(--color-cb-cool-gray);
+  color: var(--color-cb-near-black);
+  font: 600 16px/1.20 var(--font-sans);
+  letter-spacing: 0.16px;
+  padding: 14px 32px;
+  transition: background 150ms ease;
+  cursor: pointer;
+}
+.btn-cb-pill-light:hover { background: var(--color-cb-hover); color: var(--color-white); }
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

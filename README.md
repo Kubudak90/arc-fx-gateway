@@ -1,6 +1,6 @@
 # Arc FX Gateway
 
-Permissionless USDC ⇄ EURC payments on [Arc Network](https://arc.network) — Circle's stablecoin-native L1.
+Stablecoin merchant checkout and FX settlement on [Arc Network](https://arc.network) — Circle's stablecoin-native L1. Merchants invoice in USDC; customers can pay with USDC or EURC; the contract swaps and settles atomically in one transaction.
 
 **One-line merchant integration:**
 ```ts
@@ -16,11 +16,23 @@ ArcFX.openCheckout(inv);
 | **Demo merchant** | [`https://arc-fx-demo.vercel.app`](https://arc-fx-demo.vercel.app) — click "Pay €4.50" to try the full flow |
 | **Live checkout app** | [`https://arc-fx-gateway.vercel.app`](https://arc-fx-gateway.vercel.app) — Vercel + Neon Postgres |
 | **Server hot wallet** | [`0x74BB69F48d0dAddB17679534fDa1142c3ab66333`](https://testnet.arcscan.app/address/0x74BB69F48d0dAddB17679534fDa1142c3ab66333) — funds invoice creation gas |
-| **ArcFXGateway v0.3** | [`0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF`](https://testnet.arcscan.app/address/0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF) |
+| **ArcFXGateway v0.4** | [`0xA80A5741a09bff1f43dcBF15Df7c598A23163302`](https://testnet.arcscan.app/address/0xA80A5741a09bff1f43dcBF15Df7c598A23163302) |
 | **OracleAMM** | [`0xC2020098aF328ac9CBD274267F424822C400dD66`](https://testnet.arcscan.app/address/0xC2020098aF328ac9CBD274267F424822C400dD66) |
 | **MockChainlinkFeed (1.0863 EUR/USD)** | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
 
-Smoke-test transaction (Plan 1.5 happy path): [`0x31ddbf35…1c2064a`](https://testnet.arcscan.app/tx/0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a) — 0.1 EURC → 0.108587 USDC at the real 1.0863 EUR/USD rate.
+Smoke-test transaction (v0.2 happy path, real rate): [`0x31ddbf35…1c2064a`](https://testnet.arcscan.app/tx/0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a) — 0.1 EURC → 0.108587 USDC at the real 1.0863 EUR/USD rate.
+
+## What's new in v0.4
+
+The contract was bumped after a structured review surfaced edge cases worth fixing before iterating further:
+
+- **Namespaced invoice IDs.** Merchants pass their own `merchantInvoiceId` (e.g. `ORDER-1024`); the contract derives a global ID via `keccak256(merchantAddress, merchantInvoiceId)`, so two merchants reusing the same order ID can no longer collide.
+- **Merchant struct expansion.** Separate `payoutAddress` (where money lands) from `msg.sender` (control), plus an `active` flag. New methods: `updatePayoutAddress`, `updatePayoutToken`, `deactivateMerchant`. Wallet rotation no longer requires re-deploying.
+- **Same-token direct payment.** When a customer pays in the same token the merchant takes (USDC → USDC), `pay()` skips the swap path entirely — no AMM round-trip, no slippage cushion.
+- **Event split.** `InvoicePaid` now emits `(amountIn, grossReceived, merchantPayout, fee)` separately, so indexers can record the gross/net distinction without arithmetic.
+- **Locked payout token.** Each invoice records the merchant's `payoutToken` at creation time; later `updatePayoutToken` calls don't reroute pending invoices.
+
+Plus a chunked indexer (9k blocks per pass) so missed cron ticks can't push the next run past the RPC's `eth_getLogs` cap.
 
 ## Packages
 
@@ -35,15 +47,15 @@ Smoke-test transaction (Plan 1.5 happy path): [`0x31ddbf35…1c2064a`](https://t
 ## Architecture
 
 - **OracleAMM**: Chainlink-priced two-token AMM for USDC ⇄ EURC. No bonding curve, no impermanent loss inside oracle range. Trades execute at oracle ± 4 bps fee.
-- **ArcFXGateway v0.3**: Immutable contract holding merchant registry, invoice state, atomic swap-and-settle. Adds `createInvoiceFor` + on-chain delegate authorization so a server hot wallet can submit invoices on behalf of merchants.
+- **ArcFXGateway v0.4**: Immutable contract holding merchant registry, invoice state, atomic swap-and-settle. Supports `createInvoiceFor` + on-chain delegate authorization so a server hot wallet can submit invoices on behalf of merchants. v0.4 adds namespaced invoice IDs, merchant updates, same-token direct payment, and a 6-field `InvoicePaid` event (see "What's new in v0.4" above).
 - **PriceGuard**: Library that rejects swaps deviating >0.5% from the Chainlink reference rate (defense-in-depth).
-- **Hosted app + cron jobs**: Next.js 15 with Vercel Postgres mirror; Vercel Cron at 1-minute granularity for chain → DB sync and HMAC-signed webhook delivery.
+- **Hosted app + cron jobs**: Next.js 15 with Neon Postgres mirror; Vercel Cron at 1-minute granularity for chain → DB sync (chunked 9k blocks per tick to stay inside the testnet RPC's `eth_getLogs` cap) and HMAC-signed webhook delivery.
 
 ## Test status
 
 | Suite | Tests |
 |-------|-------|
-| Contracts (Foundry) | 69 passing — unit + fuzz (10k runs) + invariant (256×64) + deploy scripts |
+| Contracts (Foundry) | 99 passing — unit + fuzz (10k runs) + invariant (256×64) + deploy scripts |
 | App (vitest) | 42 passing — auth, crypto, schema, API routes, cron, UI components |
 | App (Playwright E2E) | 6/6 critical flows passing |
 | SDK (vitest) | 8 passing |

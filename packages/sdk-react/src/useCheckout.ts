@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { ArcFX, type CreateInvoiceParams, type Invoice, type InitOptions } from "@arc-fx/checkout";
+import { Arcora, type CreateInvoiceParams, type Invoice, type InitOptions } from "@arcora/sdk";
 
 export interface UseCheckoutResult {
   checkout: (params: CreateInvoiceParams) => Promise<Invoice>;
@@ -8,7 +8,7 @@ export interface UseCheckoutResult {
 }
 
 export function useCheckout(opts: InitOptions): UseCheckoutResult {
-  ArcFX.init(opts);
+  Arcora.init(opts);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -16,8 +16,8 @@ export function useCheckout(opts: InitOptions): UseCheckoutResult {
     setLoading(true);
     setError(null);
     try {
-      const inv = await ArcFX.createInvoice(params);
-      ArcFX.openCheckout(inv);
+      const inv = await Arcora.createInvoice(params);
+      Arcora.openCheckout(inv);
       return inv;
     } catch (e) {
       setError(e as Error);

@@ -25,7 +25,7 @@ describe("siwe helpers", () => {
     const msg = new SiweMessage({
       domain: "localhost",
       address: acct.address,
-      statement: "Sign in to Arc FX",
+      statement: "Sign in to Arcora",
       uri: "http://localhost:3000",
       version: "1",
       chainId: 5042002,

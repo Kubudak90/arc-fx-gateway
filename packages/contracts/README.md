@@ -1,6 +1,6 @@
 # @arc-fx/contracts
 
-Protocol contracts for **Arc FX Gateway** — a permissionless USDC ⇄ EURC swap layer plus an atomic merchant-settlement contract on [Arc Network](https://arc.network).
+Protocol contracts for **Arcora** — a permissionless USDC ⇄ EURC swap layer plus an atomic merchant-settlement contract on [Arc Network](https://arc.network).
 
 ## Contracts
 

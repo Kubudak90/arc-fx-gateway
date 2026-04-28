@@ -1,16 +1,16 @@
-import { ArcFXError } from "./error";
+import { ArcoraError } from "./error";
 import type { CreateInvoiceParams, Invoice, InitOptions, Environment } from "./types";
 
 const ENV_BASE_URL: Record<Environment, string> = {
-  testnet: "https://checkout-staging.arc-fx.xyz",
-  mainnet: "https://checkout.arc-fx.xyz",
+  testnet: "https://checkout-staging.arcorapay.com",
+  mainnet: "https://checkout.arcorapay.com",
 };
 
 let _opts: InitOptions | undefined;
 
 function init(opts: InitOptions): void { _opts = opts; }
 function getOpts(): InitOptions {
-  if (!_opts) throw new ArcFXError("UNKNOWN", "ArcFX.init was not called");
+  if (!_opts) throw new ArcoraError("UNKNOWN", "Arcora.init was not called");
   return _opts;
 }
 
@@ -28,10 +28,10 @@ function isHttp(u: string): boolean {
 
 async function createInvoice(params: CreateInvoiceParams): Promise<Invoice> {
   if (!isHttp(params.successUrl)) {
-    throw new ArcFXError("INVALID_URL", `successUrl must be http(s): got ${params.successUrl}`);
+    throw new ArcoraError("INVALID_URL", `successUrl must be http(s): got ${params.successUrl}`);
   }
   if (params.cancelUrl && !isHttp(params.cancelUrl)) {
-    throw new ArcFXError("INVALID_URL", `cancelUrl must be http(s): got ${params.cancelUrl}`);
+    throw new ArcoraError("INVALID_URL", `cancelUrl must be http(s): got ${params.cancelUrl}`);
   }
 
   const o = getOpts();
@@ -41,23 +41,23 @@ async function createInvoice(params: CreateInvoiceParams): Promise<Invoice> {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "X-Arc-Api-Key": o.apiKey,
+        "X-Arcora-Api-Key": o.apiKey,
       },
       body: JSON.stringify(params),
     });
   } catch (e) {
-    throw new ArcFXError("NETWORK", "request failed", { cause: e });
+    throw new ArcoraError("NETWORK", "request failed", { cause: e });
   }
 
-  if (res.status === 401) throw new ArcFXError("INVALID_API_KEY", "API key rejected");
+  if (res.status === 401) throw new ArcoraError("INVALID_API_KEY", "API key rejected");
   if (res.status >= 500) {
     const ra = res.headers.get("retry-after");
-    throw new ArcFXError("SERVER_ERROR", `server returned ${res.status}`, {
+    throw new ArcoraError("SERVER_ERROR", `server returned ${res.status}`, {
       retryAfter: ra ? Number(ra) : undefined,
     });
   }
   if (!res.ok) {
-    throw new ArcFXError("UNKNOWN", `unexpected ${res.status}`);
+    throw new ArcoraError("UNKNOWN", `unexpected ${res.status}`);
   }
 
   const json = await res.json() as { invoiceId: string; url: string };
@@ -66,9 +66,9 @@ async function createInvoice(params: CreateInvoiceParams): Promise<Invoice> {
 
 function openCheckout(invoice: { url: string }): void {
   if (typeof window === "undefined") {
-    throw new ArcFXError("UNKNOWN", "openCheckout requires a browser environment");
+    throw new ArcoraError("UNKNOWN", "openCheckout requires a browser environment");
   }
   window.location.href = invoice.url;
 }
 
-export const ArcFX = { init, createInvoice, openCheckout };
+export const Arcora = { init, createInvoice, openCheckout };

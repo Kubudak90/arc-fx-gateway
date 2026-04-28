@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
-import { ArcFX } from "../src";
-import { ArcFXError } from "../src/error";
+import { Arcora } from "../src";
+import { ArcoraError } from "../src/error";
 
 const ORIG_FETCH = globalThis.fetch;
 
 beforeEach(() => {
   globalThis.fetch = vi.fn() as any;
-  ArcFX.init({ apiKey: "ak_test_xxx", environment: "testnet" });
+  Arcora.init({ apiKey: "ak_test_xxx", environment: "testnet" });
 });
 
 afterAll(() => { globalThis.fetch = ORIG_FETCH; });
 
-describe("ArcFX.createInvoice", () => {
+describe("Arcora.createInvoice", () => {
   it("posts to /api/invoices and returns the invoice", async () => {
     (globalThis.fetch as any).mockResolvedValue(
       new Response(JSON.stringify({ invoiceId: "0xabc", url: "https://x/i/0xabc" }), {
@@ -19,7 +19,7 @@ describe("ArcFX.createInvoice", () => {
         headers: { "content-type": "application/json" },
       })
     );
-    const inv = await ArcFX.createInvoice({
+    const inv = await Arcora.createInvoice({
       amountUsdc: 49.99,
       payInToken: "EURC",
       successUrl: "https://merchant.example/ok",
@@ -27,7 +27,7 @@ describe("ArcFX.createInvoice", () => {
     expect(inv).toEqual({ invoiceId: "0xabc", url: "https://x/i/0xabc" });
     const call = (globalThis.fetch as any).mock.calls[0];
     expect(call[1].method).toBe("POST");
-    expect(call[1].headers["X-Arc-Api-Key"]).toBe("ak_test_xxx");
+    expect(call[1].headers["X-Arcora-Api-Key"]).toBe("ak_test_xxx");
   });
 
   it("throws INVALID_API_KEY on 401", async () => {
@@ -35,7 +35,7 @@ describe("ArcFX.createInvoice", () => {
       new Response(JSON.stringify({ error: "invalid_api_key" }), { status: 401 })
     );
     await expect(
-      ArcFX.createInvoice({ amountUsdc: 1, payInToken: "EURC", successUrl: "https://x" })
+      Arcora.createInvoice({ amountUsdc: 1, payInToken: "EURC", successUrl: "https://x" })
     ).rejects.toMatchObject({ code: "INVALID_API_KEY" });
   });
 
@@ -44,10 +44,10 @@ describe("ArcFX.createInvoice", () => {
       new Response("err", { status: 503, headers: { "retry-after": "30" } })
     );
     try {
-      await ArcFX.createInvoice({ amountUsdc: 1, payInToken: "EURC", successUrl: "https://x" });
+      await Arcora.createInvoice({ amountUsdc: 1, payInToken: "EURC", successUrl: "https://x" });
       throw new Error("expected throw");
     } catch (e: any) {
-      expect(e).toBeInstanceOf(ArcFXError);
+      expect(e).toBeInstanceOf(ArcoraError);
       expect(e.code).toBe("SERVER_ERROR");
       expect(e.retryAfter).toBe(30);
     }
@@ -55,12 +55,12 @@ describe("ArcFX.createInvoice", () => {
 
   it("throws INVALID_URL synchronously for non-http successUrl", async () => {
     await expect(
-      ArcFX.createInvoice({ amountUsdc: 1, payInToken: "EURC", successUrl: "javascript:alert(1)" })
+      Arcora.createInvoice({ amountUsdc: 1, payInToken: "EURC", successUrl: "javascript:alert(1)" })
     ).rejects.toMatchObject({ code: "INVALID_URL" });
   });
 });
 
-describe("ArcFX.openCheckout", () => {
+describe("Arcora.openCheckout", () => {
   it("sets window.location.href to invoice.url", () => {
     const setHref = vi.fn();
     Object.defineProperty(globalThis, "window", {
@@ -68,7 +68,7 @@ describe("ArcFX.openCheckout", () => {
       configurable: true,
       writable: true,
     });
-    ArcFX.openCheckout({ url: "https://checkout.arc-fx.xyz/i/0xabc" });
-    expect(setHref).toHaveBeenCalledWith("https://checkout.arc-fx.xyz/i/0xabc");
+    Arcora.openCheckout({ url: "https://checkout.arcorapay.com/i/0xabc" });
+    expect(setHref).toHaveBeenCalledWith("https://checkout.arcorapay.com/i/0xabc");
   });
 });

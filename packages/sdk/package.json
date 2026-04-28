@@ -1,7 +1,7 @@
 {
-  "name": "@arc-fx/checkout",
+  "name": "@arcora/sdk",
   "version": "0.1.0",
-  "description": "Stripe-style checkout SDK for the Arc FX Gateway",
+  "description": "Stripe-style checkout SDK for the Arcora",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

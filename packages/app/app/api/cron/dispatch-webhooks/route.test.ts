@@ -62,7 +62,7 @@ describe("POST /api/cron/dispatch-webhooks", () => {
       "https://merchant/hook",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ "X-Arc-Signature": expect.stringMatching(/^sha256=/) }),
+        headers: expect.objectContaining({ "X-Arcora-Signature": expect.stringMatching(/^sha256=/) }),
       })
     );
   });

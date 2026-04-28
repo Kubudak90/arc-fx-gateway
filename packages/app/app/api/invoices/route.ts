@@ -26,7 +26,7 @@ const INVOICE_TTL_SEC = 30 * 60;
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "content-type, x-arc-api-key",
+  "Access-Control-Allow-Headers": "content-type, x-arcora-api-key",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -41,7 +41,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = req.headers.get("X-Arc-Api-Key") ?? "";
+  const apiKey = req.headers.get("X-Arcora-Api-Key") ?? "";
   if (!apiKey) return corsResponse({ error: "missing_api_key" }, { status: 401 });
   const merchant = await lookupMerchantByApiKey(apiKey);
   if (!merchant) return corsResponse({ error: "invalid_api_key" }, { status: 401 });
@@ -91,6 +91,6 @@ export async function POST(req: NextRequest) {
     cancelUrl: cancelUrl ?? null,
   });
 
-  const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://checkout.arc-fx.xyz";
+  const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://checkout.arcorapay.com";
   return corsResponse({ invoiceId: globalId, url: `${baseUrl}/i/${globalId}` }, { status: 201 });
 }

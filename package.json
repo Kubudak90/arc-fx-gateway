@@ -5,7 +5,7 @@
   "packageManager": "pnpm@9.0.0",
   "engines": { "node": ">=20" },
   "scripts": {
-    "build:contracts": "pnpm --filter @arc-fx/contracts build",
-    "test:contracts": "pnpm --filter @arc-fx/contracts test"
+    "build:contracts": "pnpm --filter @arcora/contracts build",
+    "test:contracts": "pnpm --filter @arcora/contracts test"
   }
 }

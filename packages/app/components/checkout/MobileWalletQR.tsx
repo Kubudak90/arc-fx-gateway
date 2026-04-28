@@ -24,7 +24,7 @@ export function MobileWalletQR({ url, onBack }: MobileWalletQRProps) {
     <div className="space-y-6 text-center py-4">
       <h2 className="font-[family-name:var(--font-display)] text-2xl">Scan with mobile wallet</h2>
 
-      <div className="mx-auto inline-block p-6 bg-white rounded-2xl border border-cb-muted-blue">
+      <div className="mx-auto inline-block p-6 bg-white rounded-2xl border border-arcora-border">
         <QRCodeSVG value={url} size={224} level="M" includeMargin={false} />
       </div>
 
@@ -33,7 +33,7 @@ export function MobileWalletQR({ url, onBack }: MobileWalletQRProps) {
       </p>
 
       <div className="space-y-2">
-        <button onClick={copy} className="btn-cb-pill-light inline-flex items-center gap-2">
+        <button onClick={copy} className="btn-arcora-pill-light inline-flex items-center gap-2">
           <Copy className="size-4" /> {copied ? "Copied!" : "Copy link"}
         </button>
       </div>

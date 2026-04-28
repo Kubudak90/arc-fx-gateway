@@ -64,7 +64,7 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
 
   const sym = symbolForAddress(props.payInTokenAddress);
   return (
-    <Card className={`rounded-2xl ${stale ? "border-cb-blue" : "border-cb-muted-blue"}`}>
+    <Card className={`rounded-2xl ${stale ? "border-arcora-blue" : "border-arcora-border"}`}>
       <CardContent className="p-6 space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">You pay</div>
@@ -75,7 +75,7 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
           )}
         </div>
         {loading && !amountIn ? (
-          <div className="h-8 w-32 rounded bg-cb-cool-gray animate-pulse" />
+          <div className="h-8 w-32 rounded bg-arcora-gray animate-pulse" />
         ) : (
           <div className="font-[family-name:var(--font-display)] text-3xl">
             {amountIn ? formatTokenAmount(amountIn) : "—"} {sym}

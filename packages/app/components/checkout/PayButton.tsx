@@ -81,7 +81,7 @@ export function PayButton({ invoiceId, payInTokenAddress, amountIn, onPaid }: Pa
       <button
         onClick={handlePay}
         disabled={!address || !amountIn || state === "approving" || state === "paying" || state === "success"}
-        className="btn-cb-pill w-full"
+        className="btn-arcora-pill w-full"
       >
         {label[state]}
       </button>
@@ -90,7 +90,7 @@ export function PayButton({ invoiceId, payInTokenAddress, amountIn, onPaid }: Pa
           href={`https://testnet.arcscan.app/tx/${txHash}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="block text-center text-xs text-cb-link hover:underline"
+          className="block text-center text-xs text-arcora-link hover:underline"
         >
           View transaction →
         </a>

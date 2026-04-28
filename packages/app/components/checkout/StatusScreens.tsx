@@ -27,7 +27,7 @@ export function ExpiredScreen({ cancelUrl }: { cancelUrl?: string }) {
       <h2 className="font-[family-name:var(--font-display)] text-3xl">Invoice expired</h2>
       <p className="text-sm text-muted-foreground">Please request a new invoice from the merchant.</p>
       {cancelUrl && (
-        <a href={cancelUrl} className="btn-cb-pill-light inline-block">Return to merchant</a>
+        <a href={cancelUrl} className="btn-arcora-pill-light inline-block">Return to merchant</a>
       )}
     </div>
   );

@@ -50,7 +50,7 @@ export function WebhookSettingsCard({ initialUrl }: { initialUrl: string | null 
         </div>
         {revealedSecret && (
           <div className="space-y-2">
-            <code className="block p-3 bg-cb-cool-gray rounded font-mono text-xs break-all">{revealedSecret}</code>
+            <code className="block p-3 bg-arcora-gray rounded font-mono text-xs break-all">{revealedSecret}</code>
             <p className="text-xs text-muted-foreground">
               Verify webhooks: <code>X-Arcora-Signature</code> = sha256=hex(HMAC-SHA256(body, secret)).
             </p>

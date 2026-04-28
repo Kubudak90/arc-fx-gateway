@@ -59,7 +59,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
       <div className="space-y-3">
         <ConnectButton
           client={thirdwebClient}
-          connectButton={{ label: "Connect wallet", className: "btn-cb-pill w-full" }}
+          connectButton={{ label: "Connect wallet", className: "btn-arcora-pill w-full" }}
           theme="light"
         />
 
@@ -72,7 +72,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
 
         <button
           onClick={() => setShowQR(true)}
-          className="w-full inline-flex items-center justify-center gap-2 text-sm text-cb-link hover:underline py-2"
+          className="w-full inline-flex items-center justify-center gap-2 text-sm text-arcora-link hover:underline py-2"
         >
           <Smartphone className="size-4" /> Pay with mobile wallet
         </button>

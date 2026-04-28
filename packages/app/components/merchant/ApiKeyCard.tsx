@@ -45,7 +45,7 @@ export function ApiKeyCard({ hasMerchant, onBootstrap }: { hasMerchant: boolean;
       <CardContent className="space-y-4">
         {revealedKey ? (
           <>
-            <code className="block p-3 bg-cb-cool-gray rounded font-mono text-xs break-all">{revealedKey}</code>
+            <code className="block p-3 bg-arcora-gray rounded font-mono text-xs break-all">{revealedKey}</code>
             <p className="text-sm text-muted-foreground">
               Save this now — you won&apos;t be able to see it again. Use the rotate button to generate a new one.
             </p>

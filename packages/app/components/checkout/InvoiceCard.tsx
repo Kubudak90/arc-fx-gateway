@@ -12,7 +12,7 @@ export function InvoiceCard({ amountOut, payoutTokenAddress, payInTokenAddress, 
   const amount = formatCurrency(amountOut, payoutTokenAddress);
   const payInSymbol = symbolForAddress(payInTokenAddress);
   return (
-    <Card className="rounded-2xl border-cb-muted-blue">
+    <Card className="rounded-2xl border-arcora-border">
       <CardContent className="p-8">
         <div className="text-sm uppercase tracking-wider text-muted-foreground font-semibold">
           Pay merchant

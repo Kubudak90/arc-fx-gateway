@@ -27,7 +27,7 @@ export function InvoiceShareQRDialog({ invoiceId, onClose }: { invoiceId: string
       <DialogContent>
         <DialogHeader><DialogTitle>Share invoice</DialogTitle></DialogHeader>
         <div className="space-y-4 text-center">
-          <div className="mx-auto inline-block p-6 bg-white rounded-2xl border border-cb-muted-blue print:border-0">
+          <div className="mx-auto inline-block p-6 bg-white rounded-2xl border border-arcora-border print:border-0">
             <QRCodeSVG value={url} size={224} level="M" />
           </div>
           <code className="block text-xs text-muted-foreground break-all px-2">{url}</code>

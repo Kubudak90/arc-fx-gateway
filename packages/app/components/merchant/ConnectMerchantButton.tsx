@@ -57,7 +57,7 @@ export function ConnectMerchantButton() {
   }
 
   return (
-    <button onClick={handleSignIn} disabled={busy} className="btn-cb-pill">
+    <button onClick={handleSignIn} disabled={busy} className="btn-arcora-pill">
       {busy ? "Signing in…" : "Connect wallet"}
     </button>
   );

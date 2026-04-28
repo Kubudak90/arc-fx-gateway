@@ -40,9 +40,9 @@ pnpm e2e            # playwright (6 critical flows)
 
 ## Architecture
 
-- **Tailwind v4** with Coinbase-inspired tokens (`#0052ff` accent, 56px pill CTAs)
-- **shadcn/ui** primitives overridden with Coinbase theme
-- **Inter** font (subbing for proprietary CoinbaseDisplay/Sans)
+- **Tailwind v4** with Arcora brand tokens (`#2563FF` blue, `#00C2A8` teal, `#0B1426` slate, 56px pill CTAs)
+- **shadcn/ui** primitives mapped to Arcora theme variables
+- **Inter** font for both display and body
 - **wagmi 2 + viem 2** for chain reads/writes
 - **thirdweb v5** for customer-side wallet connect (WalletConnect QR included)
 - **iron-session** for SIWE-backed merchant auth

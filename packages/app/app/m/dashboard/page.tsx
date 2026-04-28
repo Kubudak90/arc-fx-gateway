@@ -25,7 +25,7 @@ export default function DashboardPage() {
       <main className="px-6 py-10 max-w-6xl mx-auto space-y-6">
         <h1 className="font-[family-name:var(--font-display)] text-[36px]">Welcome</h1>
         <p className="text-muted-foreground">
-          You&apos;re signed in but no merchant profile yet — finish onboarding in <a href="/m/settings" className="text-cb-link underline">Settings</a>.
+          You&apos;re signed in but no merchant profile yet — finish onboarding in <a href="/m/settings" className="text-arcora-link underline">Settings</a>.
         </p>
       </main>
     );

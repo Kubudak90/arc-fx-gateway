@@ -35,9 +35,8 @@ pnpm e2e            # playwright (6 critical flows)
 | `/api/invoices` | server-paid | POST: create invoice on-chain via `createInvoiceFor` |
 | `/api/invoices/:id` | public | GET: invoice mirror from DB |
 | `/api/quote` | public | GET: live pool quote |
-| `/api/cron/dispatch-webhooks` | Vercel Cron | every 1m: HMAC-signed webhook delivery |
 
-> Chain → DB sync runs as a long-running daemon on the VPS, not a Vercel cron. See `ops/indexer/`.
+> Chain → DB sync and HMAC-signed webhook delivery both run as long-running daemons on the VPS — see `ops/indexer/` and `ops/webhooks/`. Vercel handles only the request-path API; no Vercel cron is in use.
 
 ## Architecture
 

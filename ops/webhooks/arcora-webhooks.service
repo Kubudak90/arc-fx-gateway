@@ -1,0 +1,18 @@
+[Unit]
+Description=Arcora webhook dispatcher daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/arcora-ops/webhooks
+EnvironmentFile=/root/arcora-ops/webhooks/.env
+ExecStart=/usr/bin/node --import tsx/esm run.ts
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=arcora-webhooks
+
+[Install]
+WantedBy=multi-user.target

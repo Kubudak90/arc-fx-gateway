@@ -31,7 +31,7 @@ export function ConnectMerchantButton() {
       const msg = new SiweMessage({
         domain: window.location.host,
         address: acc,
-        statement: "Sign in to Arc FX Gateway",
+        statement: "Sign in to Arcora",
         uri: window.location.origin,
         version: "1",
         chainId: 5042002,

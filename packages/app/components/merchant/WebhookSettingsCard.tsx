@@ -42,7 +42,7 @@ export function WebhookSettingsCard({ initialUrl }: { initialUrl: string | null 
       <CardContent className="space-y-4">
         <div>
           <label className="text-sm font-medium">URL</label>
-          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://your-app.com/webhooks/arc-fx" />
+          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://your-app.com/webhooks/arcora" />
         </div>
         <div className="flex gap-2">
           <Button onClick={save} disabled={busy}>Save</Button>
@@ -52,7 +52,7 @@ export function WebhookSettingsCard({ initialUrl }: { initialUrl: string | null 
           <div className="space-y-2">
             <code className="block p-3 bg-cb-cool-gray rounded font-mono text-xs break-all">{revealedSecret}</code>
             <p className="text-xs text-muted-foreground">
-              Verify webhooks: <code>X-Arc-Signature</code> = sha256=hex(HMAC-SHA256(body, secret)).
+              Verify webhooks: <code>X-Arcora-Signature</code> = sha256=hex(HMAC-SHA256(body, secret)).
             </p>
           </div>
         )}

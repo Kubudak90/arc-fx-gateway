@@ -1,6 +1,6 @@
 # @arc-fx/app
 
-Next.js 15 app hosting customer checkout (`/i/[invoiceId]`) and merchant dashboard (`/m/*`) for Arc FX Gateway.
+Next.js 15 app hosting customer checkout (`/i/[invoiceId]`) and merchant dashboard (`/m/*`) for Arcora.
 
 ## Local development
 
@@ -57,7 +57,7 @@ pnpm e2e            # playwright (6 critical flows)
 | `MASTER_KEY` | AES-256-GCM key for server wallet keystore + webhook secrets |
 | `IRON_SESSION_PASSWORD` | Cookie session password (≥32 chars) |
 | `CRON_SECRET` | Bearer token guarding `/api/cron/*` |
-| `GATEWAY_ADDRESS` | ArcFXGateway v0.3 address |
+| `GATEWAY_ADDRESS` | Arcora Gateway (`ArcFXGateway.sol`) address |
 | `POOL_ADDRESS`, `ORACLE_ADDRESS`, `USDC_ADDRESS`, `EURC_ADDRESS` | Contract addresses |
 | `ARC_TESTNET_RPC` | Arc testnet RPC endpoint |
 | `INDEXER_REORG_BUFFER_BLOCKS` | Default `5` — how far back from head to scan |

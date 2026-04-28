@@ -11,7 +11,7 @@ async function createInvoice(params: {
 }): Promise<{ invoiceId: string; url: string }> {
   const res = await fetch(`${API_BASE}/api/invoices`, {
     method: "POST",
-    headers: { "content-type": "application/json", "X-Arc-Api-Key": API_KEY },
+    headers: { "content-type": "application/json", "X-Arcora-Api-Key": API_KEY },
     body: JSON.stringify(params),
   });
   if (!res.ok) {
@@ -70,7 +70,7 @@ export default function App() {
 
         <div className="footer">
           <a href={API_BASE} target="_blank" rel="noopener noreferrer">
-            Powered by Arc FX Gateway →
+            Powered by Arcora →
           </a>
         </div>
       </div>

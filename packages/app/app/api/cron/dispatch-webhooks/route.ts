@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     try {
       const res = await fetch(row.url, {
         method: "POST",
-        headers: { "content-type": "application/json", "X-Arc-Signature": signature },
+        headers: { "content-type": "application/json", "X-Arcora-Signature": signature },
         body,
       });
       status = res.status;

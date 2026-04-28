@@ -8,8 +8,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swa
 const interDisplay = Inter({ subsets: ["latin"], variable: "--font-display", display: "swap", weight: ["400", "600", "700"] });
 
 export const metadata: Metadata = {
-  title: "Arc FX Gateway",
-  description: "USDC ⇄ EURC payments on Arc Network",
+  title: "Arcora",
+  description: "Stablecoin checkout and FX settlement on Arc",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

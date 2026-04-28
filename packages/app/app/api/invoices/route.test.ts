@@ -37,7 +37,7 @@ describe("POST /api/invoices", () => {
     (m.lookupMerchantByApiKey as any).mockResolvedValue(null);
     const res = await POST(makeReq(
       { amountUsdc: 1, payInToken: "EURC", successUrl: "https://x" },
-      { "X-Arc-Api-Key": "ak_live_bad" }
+      { "X-Arcora-Api-Key": "ak_live_bad" }
     ));
     expect(res.status).toBe(401);
   });
@@ -55,7 +55,7 @@ describe("POST /api/invoices", () => {
 
     const res = await POST(makeReq(
       { amountUsdc: 49.99, payInToken: "EURC", successUrl: "https://m/ok" },
-      { "X-Arc-Api-Key": "ak_live_good" }
+      { "X-Arcora-Api-Key": "ak_live_good" }
     ));
     const body = await res.json();
     expect(res.status).toBe(201);

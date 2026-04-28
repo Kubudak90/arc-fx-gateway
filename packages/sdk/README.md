@@ -1,6 +1,6 @@
 # @arc-fx/checkout
 
-Stripe-style checkout SDK for the [Arc FX Gateway](https://github.com/Kubudak90/arc-fx-gateway) — USDC ⇄ EURC payments on Arc Network. Three functions, zero EVM dependencies, ~1.5 KB gzipped.
+Stripe-style checkout SDK for the [Arcora](https://github.com/Kubudak90/arc-fx-gateway) — USDC ⇄ EURC payments on Arc Network. Three functions, zero EVM dependencies, ~1.5 KB gzipped.
 
 ## Install
 

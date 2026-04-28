@@ -23,7 +23,7 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
     try {
       const res = await fetch("/api/invoices", {
         method: "POST",
-        headers: { "content-type": "application/json", "X-Arc-Api-Key": apiKey },
+        headers: { "content-type": "application/json", "X-Arcora-Api-Key": apiKey },
         body: JSON.stringify({ amountUsdc: Number(amount), payInToken: payIn, successUrl }),
       });
       if (!res.ok) {

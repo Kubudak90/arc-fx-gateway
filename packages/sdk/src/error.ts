@@ -1,4 +1,4 @@
-export type ArcFXErrorCode =
+export type ArcoraErrorCode =
   | "INVALID_API_KEY"
   | "NETWORK"
   | "SERVER_ERROR"
@@ -6,18 +6,18 @@ export type ArcFXErrorCode =
   | "TIMEOUT"
   | "UNKNOWN";
 
-export interface ArcFXErrorOptions {
+export interface ArcoraErrorOptions {
   cause?: unknown;
   retryAfter?: number;
 }
 
-export class ArcFXError extends Error {
-  readonly code: ArcFXErrorCode;
+export class ArcoraError extends Error {
+  readonly code: ArcoraErrorCode;
   readonly retryAfter?: number;
 
-  constructor(code: ArcFXErrorCode, message: string, opts: ArcFXErrorOptions = {}) {
+  constructor(code: ArcoraErrorCode, message: string, opts: ArcoraErrorOptions = {}) {
     super(message, { cause: opts.cause });
-    this.name = "ArcFXError";
+    this.name = "ArcoraError";
     this.code = code;
     this.retryAfter = opts.retryAfter;
   }

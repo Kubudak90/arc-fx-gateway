@@ -1,7 +1,14 @@
 {
   "name": "@arcora/sdk",
-  "version": "0.1.0",
-  "description": "Stripe-style checkout SDK for the Arcora",
+  "version": "1.0.0",
+  "description": "Stripe-style checkout SDK for Arcora — stablecoin payments on Arc Network",
+  "keywords": ["arcora", "stablecoin", "checkout", "payments", "arc", "usdc", "eurc"],
+  "homepage": "https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/packages/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kubudak90/arc-fx-gateway.git",
+    "directory": "packages/sdk"
+  },
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -13,13 +20,18 @@
       "require": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
     "tsup": "^8.3.0",

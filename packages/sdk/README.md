@@ -1,35 +1,37 @@
-# @arc-fx/checkout
+# @arcora/sdk
 
-Stripe-style checkout SDK for the [Arcora](https://github.com/Kubudak90/arc-fx-gateway) — USDC ⇄ EURC payments on Arc Network. Three functions, zero EVM dependencies, ~1.5 KB gzipped.
+Stripe-style checkout SDK for [Arcora](https://github.com/Kubudak90/arc-fx-gateway) — stablecoin payments on Arc Network. Three functions, zero EVM dependencies, ~1.5 KB gzipped.
 
 ## Install
 
 ```bash
-npm install @arc-fx/checkout
+npm install @arcora/sdk
+# or
+pnpm add @arcora/sdk
 ```
 
-For React: `npm install @arc-fx/checkout-react`
+For React: `npm install @arcora/react`
 
 ## Usage
 
 ```ts
-import { ArcFX } from "@arc-fx/checkout";
+import { Arcora } from "@arcora/sdk";
 
-ArcFX.init({ apiKey: "ak_live_...", environment: "testnet" });
+Arcora.init({ apiKey: "ak_live_...", environment: "testnet" });
 
-const invoice = await ArcFX.createInvoice({
+const invoice = await Arcora.createInvoice({
   amountUsdc: 49.99,
   payInToken: "EURC",
   successUrl: "https://my-store.com/success",
 });
 
-ArcFX.openCheckout(invoice);
+Arcora.openCheckout(invoice);
 ```
 
 ### React
 
 ```tsx
-import { CheckoutButton } from "@arc-fx/checkout-react";
+import { CheckoutButton } from "@arcora/react";
 
 <CheckoutButton
   apiKey="ak_live_..."
@@ -47,7 +49,7 @@ import { CheckoutButton } from "@arc-fx/checkout-react";
 ### Hook
 
 ```tsx
-import { useCheckout } from "@arc-fx/checkout-react";
+import { useCheckout } from "@arcora/react";
 
 const { checkout, loading, error } = useCheckout({ apiKey: "ak_live_..." });
 
@@ -58,7 +60,7 @@ const { checkout, loading, error } = useCheckout({ apiKey: "ak_live_..." });
 
 ## API
 
-### `ArcFX.init(options)`
+### `Arcora.init(options)`
 
 | Option | Type | Required |
 |--------|------|----------|
@@ -66,7 +68,7 @@ const { checkout, loading, error } = useCheckout({ apiKey: "ak_live_..." });
 | `environment` | `"testnet" \| "mainnet"` | no, defaults to `testnet` |
 | `baseUrl` | `string` | no, override per environment |
 
-### `ArcFX.createInvoice(params)` → `Promise<{ invoiceId, url }>`
+### `Arcora.createInvoice(params)` → `Promise<{ invoiceId, url }>`
 
 | Param | Type | Required |
 |-------|------|----------|
@@ -76,24 +78,26 @@ const { checkout, loading, error } = useCheckout({ apiKey: "ak_live_..." });
 | `cancelUrl` | `string` | no |
 | `metadata` | `Record<string, string>` | no |
 
-Throws `ArcFXError` on failure with discriminated `code`:
+Throws `ArcoraError` on failure with discriminated `code`:
 - `INVALID_API_KEY` — 401 from server
 - `SERVER_ERROR` — 5xx (includes `retryAfter` if Retry-After header set)
 - `NETWORK` — fetch failed
 - `INVALID_URL` — non-http(s) successUrl/cancelUrl
 - `TIMEOUT`, `UNKNOWN`
 
-### `ArcFX.openCheckout(invoice)`
+### `Arcora.openCheckout(invoice)`
 
-Redirects browser to `invoice.url`. Throws if not in browser environment.
+Redirects browser to `invoice.url`. Throws if not in a browser environment.
 
 ## Error handling
 
 ```ts
+import { Arcora, ArcoraError } from "@arcora/sdk";
+
 try {
-  await ArcFX.createInvoice({ ... });
+  await Arcora.createInvoice({ ... });
 } catch (e) {
-  if (e instanceof ArcFXError) {
+  if (e instanceof ArcoraError) {
     if (e.code === "INVALID_API_KEY") /* ... */;
     if (e.code === "SERVER_ERROR" && e.retryAfter) /* ... */;
   }
@@ -102,7 +106,7 @@ try {
 
 ## Live demo
 
-[https://arc-fx-demo.vercel.app](https://arc-fx-demo.vercel.app) — pay in EURC on Arc testnet. Get test EURC from [faucet.circle.com](https://faucet.circle.com) (select Arc Testnet).
+[arc-fx-gateway.vercel.app](https://arc-fx-gateway.vercel.app) — pay in USDC or EURC on Arc testnet. Get test EURC from [faucet.circle.com](https://faucet.circle.com) (select Arc Testnet).
 
 ## Bundle
 

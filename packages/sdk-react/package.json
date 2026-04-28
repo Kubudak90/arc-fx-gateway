@@ -1,6 +1,14 @@
 {
   "name": "@arcora/react",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "React bindings for the Arcora checkout SDK — drop-in <CheckoutButton /> + useCheckout()",
+  "keywords": ["arcora", "react", "checkout", "stablecoin", "payments", "arc", "hooks"],
+  "homepage": "https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/packages/sdk-react#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kubudak90/arc-fx-gateway.git",
+    "directory": "packages/sdk-react"
+  },
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -12,15 +20,20 @@
       "require": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "tsup",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
-    "@arcora/sdk": "workspace:*"
+    "@arcora/sdk": "workspace:^"
   },
   "devDependencies": {
     "@arcora/sdk": "workspace:*",

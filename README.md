@@ -1,9 +1,11 @@
 # Arcora
 
-Stablecoin merchant checkout and FX settlement on [Arc Network](https://arc.network) — Circle's stablecoin-native L1. Merchants invoice in USDC; customers can pay with USDC or EURC; the contract swaps and settles atomically in one transaction.
+Stablecoin merchant checkout and FX settlement on [Arc Network](https://arc.network) — Circle's stablecoin-native L1. Merchants invoice in their preferred stable; customers can pay in USDC or EURC; the contract swaps and settles atomically in one transaction.
 
 **One-line merchant integration:**
 ```ts
+import { Arcora } from "@arcora/sdk";
+
 Arcora.init({ apiKey });
 const inv = await Arcora.createInvoice({ amountUsdc: 49.99, payInToken: "EURC", successUrl: "..." });
 Arcora.openCheckout(inv);
@@ -20,46 +22,66 @@ Arcora.openCheckout(inv);
 | **OracleAMM** | [`0xC2020098aF328ac9CBD274267F424822C400dD66`](https://testnet.arcscan.app/address/0xC2020098aF328ac9CBD274267F424822C400dD66) |
 | **MockChainlinkFeed (1.0863 EUR/USD)** | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
 
-Smoke-test transaction (v0.2 happy path, real rate): [`0x31ddbf35…1c2064a`](https://testnet.arcscan.app/tx/0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a) — 0.1 EURC → 0.108587 USDC at the real 1.0863 EUR/USD rate.
+Smoke-test transaction (same-token USDC→USDC happy path): [`0x3f2fc3ff…84ef08`](https://testnet.arcscan.app/tx/0x3f2fc3ff446c8a6b206197de3a6cf25226f2ca9c654e11b2b4548609b384ef08) — paid 0.999 USDC + 0.001 USDC fee, no swap.
 
-## What's new in v0.4
+## What's in v1.0
 
-The contract was bumped after a structured review surfaced edge cases worth fixing before iterating further:
+The first shippable Arcora release. Scope: **Arc-only USDC/EURC checkout** with one swap pool, one Chainlink oracle, hosted checkout + merchant dashboard, npm-published SDK. Crosschain payment (any chain CCTP supports) is the v2.0 milestone.
 
-- **Namespaced invoice IDs.** Merchants pass their own `merchantInvoiceId` (e.g. `ORDER-1024`); the contract derives a global ID via `keccak256(merchantAddress, merchantInvoiceId)`, so two merchants reusing the same order ID can no longer collide.
-- **Merchant struct expansion.** Separate `payoutAddress` (where money lands) from `msg.sender` (control), plus an `active` flag. New methods: `updatePayoutAddress`, `updatePayoutToken`, `deactivateMerchant`. Wallet rotation no longer requires re-deploying.
-- **Same-token direct payment.** When a customer pays in the same token the merchant takes (USDC → USDC), `pay()` skips the swap path entirely — no AMM round-trip, no slippage cushion.
-- **Event split.** `InvoicePaid` now emits `(amountIn, grossReceived, merchantPayout, fee)` separately, so indexers can record the gross/net distinction without arithmetic.
-- **Locked payout token.** Each invoice records the merchant's `payoutToken` at creation time; later `updatePayoutToken` calls don't reroute pending invoices.
+Highlights from gateway v0.4 (the contract underpinning v1.0):
 
-Plus a chunked indexer (9k blocks per pass) so missed cron ticks can't push the next run past the RPC's `eth_getLogs` cap.
+- **Namespaced invoice IDs.** Merchants pass their own `merchantInvoiceId`; the contract derives a global ID via `keccak256(merchantAddress, merchantInvoiceId)` so two merchants reusing the same order ID can't collide.
+- **Merchant struct expansion.** Separate `payoutAddress` from `msg.sender`, plus an `active` flag. Wallet/payout rotation no longer requires re-deploying. New methods: `updatePayoutAddress`, `updatePayoutToken`, `deactivateMerchant`.
+- **Same-token direct payment.** When the customer pays in the merchant's payout token (e.g. USDC → USDC), `pay()` skips the swap path entirely.
+- **Event split.** `InvoicePaid` emits `(amountIn, grossReceived, merchantPayout, fee)` so indexers record gross/net without arithmetic.
+- **Locked payout token.** Each invoice records the payout token at creation; later `updatePayoutToken` calls don't reroute pending invoices.
+
+Operational hardening on top of the contract:
+
+- Long-running VPS daemons replace Vercel cron for chain → DB indexing (`arcora-indexer.service`, 30s tick) and HMAC webhook delivery (`arcora-webhooks.service`, 10s tick). Vercel handles only the request-path API.
+- Chunked indexer (9k blocks per pass) so a missed tick can't push the next run past the RPC's `eth_getLogs` cap.
+
+## Roadmap
+
+```
+v1.0 (this release)  Arc-only USDC/EURC checkout
+v1.x                 Refunds · treasury dashboard · plugins · any-stablecoin
+                     payment & checkout (USDT, PYUSD, DAI, regional)
+v2.0                 Crosschain USDC source (every CCTP-supported EVM chain)
+v2.1                 + source-side DEX aggregator (Odos / 1inch)
+v2.2                 + Solana/Sui/non-EVM source
+v3.0                 Intent / solver model (one-signature crosschain UX)
+```
+
+The killer-feature bet: **customer pays from where they are with what they have, merchant settles in their preferred stable on Arc**. v1 is Arc-only as a proving ground; v2 ships the differentiator.
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| [`@arc-fx/checkout`](packages/sdk/) | npm SDK — three-function client library, ~1.5 KB |
-| [`@arc-fx/checkout-react`](packages/sdk-react/) | React hook + button component |
-| [`@arc-fx/app`](packages/app/) | Next.js 15 hosted checkout + merchant dashboard |
-| [`@arc-fx/contracts`](packages/contracts/) | Solidity contracts (Foundry, 69 tests passing) |
-| [`@arc-fx/demo-merchant`](packages/demo-merchant/) | Vite app integrating the SDK in 3 lines |
+| [`@arcora/sdk`](packages/sdk/) | npm SDK — three-function client, ~1.5 KB gzipped |
+| [`@arcora/react`](packages/sdk-react/) | React hook + button component |
+| [`@arcora/app`](packages/app/) | Next.js 15 hosted checkout + merchant dashboard |
+| [`@arcora/contracts`](packages/contracts/) | Solidity contracts (Foundry, 99 tests passing) |
+| [`@arcora/demo-merchant`](packages/demo-merchant/) | Vite app integrating the SDK in ~5 lines |
 
 ## Architecture
 
 - **OracleAMM**: Chainlink-priced two-token AMM for USDC ⇄ EURC. No bonding curve, no impermanent loss inside oracle range. Trades execute at oracle ± 4 bps fee.
-- **Arcora Gateway v0.4**: Immutable contract holding merchant registry, invoice state, atomic swap-and-settle. Supports `createInvoiceFor` + on-chain delegate authorization so a server hot wallet can submit invoices on behalf of merchants. v0.4 adds namespaced invoice IDs, merchant updates, same-token direct payment, and a 6-field `InvoicePaid` event (see "What's new in v0.4" above).
+- **Arcora Gateway v0.4**: Immutable contract holding merchant registry, invoice state, atomic swap-and-settle. Supports `createInvoiceFor` + on-chain delegate authorization so a server hot wallet can submit invoices on behalf of merchants.
 - **PriceGuard**: Library that rejects swaps deviating >0.5% from the Chainlink reference rate (defense-in-depth).
-- **Hosted app + cron jobs**: Next.js 15 with Neon Postgres mirror; Vercel Cron at 1-minute granularity for chain → DB sync (chunked 9k blocks per tick to stay inside the testnet RPC's `eth_getLogs` cap) and HMAC-signed webhook delivery.
+- **Hosted app**: Next.js 15 with Neon Postgres mirror.
+- **Ops layer**: VPS systemd daemons under `ops/indexer/` and `ops/webhooks/` mirror to `/root/arcora-ops/` on the production VPS. The daemons own state-machine progress, chain-event ingestion, and webhook retries with exponential backoff.
 
 ## Test status
 
 | Suite | Tests |
 |-------|-------|
 | Contracts (Foundry) | 99 passing — unit + fuzz (10k runs) + invariant (256×64) + deploy scripts |
-| App (vitest) | 42 passing — auth, crypto, schema, API routes, cron, UI components |
-| App (Playwright E2E) | 6/6 critical flows passing |
+| App (vitest) | 42 passing — auth, crypto, schema, API routes, UI components |
+| App (Playwright E2E) | 5 critical flows passing (the 6th retired with the Vercel cron route) |
 | SDK (vitest) | 8 passing |
-| SDK-React (vitest) | 3 passing |
+| @arcora/react (vitest) | 3 passing |
 
 ## Specs and plans
 
@@ -77,14 +99,18 @@ pnpm install
 docker compose -f packages/app/docker-compose.yml up -d postgres
 cp packages/app/.env.example packages/app/.env
 # fill MASTER_KEY, IRON_SESSION_PASSWORD, CRON_SECRET
-pnpm --filter @arc-fx/app db:push
-pnpm --filter @arc-fx/app dev
+pnpm --filter @arcora/app db:push
+pnpm --filter @arcora/app dev
 ```
 
 Visit http://localhost:3000.
 
 For full setup (server hot wallet, Vercel deploy), see [`packages/app/README.md`](packages/app/README.md).
 
+## Releasing
+
+See [`RELEASING.md`](RELEASING.md) for SDK npm publish + Vercel deploy + tag steps.
+
 ## License
 
-MIT for our code; vendored Saddle StableSwap (in `packages/contracts/src/pool/`) is also MIT (preserved from upstream).
+MIT — see [`LICENSE`](LICENSE). Vendored Saddle StableSwap (in `packages/contracts/src/pool/`) is also MIT (preserved from upstream).

@@ -1,0 +1,18 @@
+[Unit]
+Description=Arcora gateway event indexer (Arc testnet)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/arcora-ops/indexer
+EnvironmentFile=/root/arcora-ops/indexer/.env
+ExecStart=/usr/bin/node --import tsx/esm run.ts
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=arcora-indexer
+
+[Install]
+WantedBy=multi-user.target

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useCheckout } from "../src/useCheckout";
-import { Arcora } from "@arc-fx/checkout";
+import { Arcora } from "@arcora/sdk";
 
-vi.mock("@arc-fx/checkout", () => ({
+vi.mock("@arcora/sdk", () => ({
   Arcora: {
     init: vi.fn(),
     createInvoice: vi.fn(),

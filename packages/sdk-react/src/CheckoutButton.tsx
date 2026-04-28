@@ -1,5 +1,5 @@
 import { useCheckout } from "./useCheckout";
-import type { CreateInvoiceParams, InitOptions } from "@arc-fx/checkout";
+import type { CreateInvoiceParams, InitOptions } from "@arcora/sdk";
 
 export interface CheckoutButtonProps extends InitOptions {
   invoice: CreateInvoiceParams;

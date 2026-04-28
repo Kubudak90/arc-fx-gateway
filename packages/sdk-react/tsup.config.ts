@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   treeshake: true,
-  external: ["react", "@arc-fx/checkout"],
+  external: ["react", "@arcora/sdk"],
 });

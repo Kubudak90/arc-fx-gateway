@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Arcora, type CreateInvoiceParams, type Invoice, type InitOptions } from "@arc-fx/checkout";
+import { Arcora, type CreateInvoiceParams, type Invoice, type InitOptions } from "@arcora/sdk";
 
 export interface UseCheckoutResult {
   checkout: (params: CreateInvoiceParams) => Promise<Invoice>;

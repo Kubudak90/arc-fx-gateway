@@ -36,7 +36,13 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
       const res = await fetch(url);
       const data: QuoteResponse = await res.json();
       const inv = BigInt(data.amountOut);
-      const cushioned = (inv * 101n) / 100n; // +1% safety cushion
+      // The pool's calculateSwap is asked the forward question (X USDC → Y EURC), but
+      // the user actually pays the reverse leg (Y EURC → X USDC). Forward and reverse
+      // diverge slightly under integer rounding + fee, so a flat 1% cushion can fall
+      // 1 wei short and the swap reverts with InsufficientOutput. Bump to 2% and add a
+      // 1000-wei floor so tiny invoice amounts also clear. Long-term fix: ask the AMM
+      // for the inverse quote (calculateSwapForExactOut) and drop the cushion.
+      const cushioned = (inv * 102n) / 100n + 1_000n;
       setAmountIn(cushioned);
       props.onQuote(cushioned);
       fetchedAt.current = Date.now();

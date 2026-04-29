@@ -65,7 +65,10 @@ export function PayButton({ invoiceId, payInTokenAddress, amountIn, onPaid }: Pa
       args: [invoiceId as Hex, amountIn!],
     });
     setTxHash(payHash);
-    await publicClient!.waitForTransactionReceipt({ hash: payHash });
+    const receipt = await publicClient!.waitForTransactionReceipt({ hash: payHash });
+    if (receipt.status !== "success") {
+      throw new Error("Payment reverted on-chain. Try refreshing the quote and paying again.");
+    }
     setState("success");
     onPaid(payHash);
   }

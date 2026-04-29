@@ -34,7 +34,7 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     mapping(address merchant => Merchant) public merchants;
 
     // ── Invoice state ──────────────────────────────────────────────────
-    enum InvoiceStatus { None, Created, Paid }
+    enum InvoiceStatus { None, Created, Paid, Refunded }
     struct Invoice {
         address       merchant;
         address       payIn;
@@ -45,6 +45,15 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         address       paidBy;
     }
     mapping(bytes32 globalId => Invoice) public invoices;
+
+    // ── Payment accounting (for refunds) ───────────────────────────────
+    /// @dev Recorded inside pay() so refundInvoice() knows the exact amounts
+    /// without re-deriving them from oracle math (which drifts).
+    struct InvoicePayment {
+        uint256 merchantPayout;  // amount the merchant received in payoutToken
+        uint256 fee;             // protocol fee taken in payoutToken
+    }
+    mapping(bytes32 globalId => InvoicePayment) public payments;
 
     // ── Accounting ─────────────────────────────────────────────────────
     mapping(address token => uint256) public protocolFeesAccrued;
@@ -78,6 +87,13 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     event FeesWithdrawn(address indexed token, address indexed to, uint256 amount);
     event DelegateAuthorized(address indexed merchant, address indexed delegate, uint64 expiresAt);
     event DelegateRevoked(address indexed merchant, address indexed delegate);
+    event InvoiceRefunded(
+        bytes32 indexed globalId,
+        address indexed refundedTo,
+        address indexed payoutToken,
+        uint256 merchantPayout,
+        uint256 protocolFeeReturned
+    );
 
     // ── Errors ─────────────────────────────────────────────────────────
     error NotMerchant();
@@ -92,6 +108,8 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     error UnsupportedPair();
     error SlippageExceeded(uint256 required, uint256 max);
     error DelegateNotAuthorized();
+    error InvoiceNotRefundable(bytes32 globalId);
+    error InsufficientFeesForRefund(uint256 required, uint256 accrued);
 
     // ── Constructor ────────────────────────────────────────────────────
     constructor(
@@ -220,6 +238,7 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
 
             inv.status = InvoiceStatus.Paid;
             inv.paidBy = msg.sender;
+            payments[globalId] = InvoicePayment({ merchantPayout: directPayout, fee: directFee });
 
             IERC20(payoutToken).safeTransfer(payoutAddress, directPayout);
             emit InvoicePaid(globalId, msg.sender, inv.amountOut, inv.amountOut, directPayout, directFee);
@@ -252,9 +271,49 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
 
         inv.status = InvoiceStatus.Paid;
         inv.paidBy = msg.sender;
+        payments[globalId] = InvoicePayment({ merchantPayout: swapPayout, fee: swapFee });
 
         IERC20(payoutToken).safeTransfer(payoutAddress, swapPayout);
         emit InvoicePaid(globalId, msg.sender, amountIn, received, swapPayout, swapFee);
+    }
+
+    // ── Refund ─────────────────────────────────────────────────────────
+
+    /// @notice Refund a paid invoice. Pulls `merchantPayout` from the merchant's
+    /// wallet (requires payoutToken approve to gateway), forwards it to the
+    /// original payer, and returns the protocol fee from `protocolFeesAccrued`
+    /// to the merchant. The invoice is marked Refunded; second calls revert.
+    /// Callable by the merchant or the contract owner.
+    function refundInvoice(bytes32 globalId) external nonReentrant {
+        Invoice storage inv = invoices[globalId];
+        if (inv.status != InvoiceStatus.Paid) revert InvoiceNotRefundable(globalId);
+        if (msg.sender != inv.merchant && msg.sender != owner()) revert NotMerchant();
+
+        InvoicePayment memory p = payments[globalId];
+        address payoutToken = inv.payoutToken;
+        address refundTo    = inv.paidBy;
+        address merchant    = inv.merchant;
+
+        // The merchant repays the customer the full payout amount and is made
+        // whole by clawing back the protocol fee from accrued. If the owner
+        // already withdrew the fees and the bucket is now short, surface a
+        // clean error instead of an opaque transfer failure.
+        if (protocolFeesAccrued[payoutToken] < p.fee) {
+            revert InsufficientFeesForRefund(p.fee, protocolFeesAccrued[payoutToken]);
+        }
+
+        inv.status = InvoiceStatus.Refunded;
+        protocolFeesAccrued[payoutToken] -= p.fee;
+        delete payments[globalId];
+
+        // Pull payout from merchant → forward to payer.
+        IERC20(payoutToken).safeTransferFrom(merchant, refundTo, p.merchantPayout);
+        // Return the protocol fee (held by this contract) to the merchant.
+        if (p.fee > 0) {
+            IERC20(payoutToken).safeTransfer(merchant, p.fee);
+        }
+
+        emit InvoiceRefunded(globalId, refundTo, payoutToken, p.merchantPayout, p.fee);
     }
 
     /// @dev Inverts the pool's forward swap quote to find the smallest input

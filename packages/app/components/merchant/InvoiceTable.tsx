@@ -7,18 +7,27 @@ import { Button } from "@/components/ui/button";
 import { QrCode } from "lucide-react";
 import { formatCurrency, formatRelativeTime, symbolForAddress } from "@/lib/ui/format";
 import { InvoiceShareQRDialog } from "./InvoiceShareQRDialog";
+import { RefundButton } from "./RefundButton";
 import { useState } from "react";
+
+export type InvoiceStatus = "created" | "paid" | "expired" | "refunded";
 
 export interface InvoiceRow {
   id: string;
   payInToken: string;
   amountOut: string;
-  status: "created" | "paid" | "expired";
+  status: InvoiceStatus;
   paidTx: string | null;
   createdAt: string;
 }
 
-export function InvoiceTable({ invoices, payoutToken }: { invoices: InvoiceRow[]; payoutToken: string }) {
+interface InvoiceTableProps {
+  invoices: InvoiceRow[];
+  payoutToken: string;
+  onChange?: () => void;
+}
+
+export function InvoiceTable({ invoices, payoutToken, onChange }: InvoiceTableProps) {
   const [qrInvoiceId, setQrInvoiceId] = useState<string | null>(null);
 
   return (
@@ -31,7 +40,7 @@ export function InvoiceTable({ invoices, payoutToken }: { invoices: InvoiceRow[]
             <TableHead>Pay-in</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Created</TableHead>
-            <TableHead></TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -44,10 +53,15 @@ export function InvoiceTable({ invoices, payoutToken }: { invoices: InvoiceRow[]
                 <StatusBadge status={inv.status} />
               </TableCell>
               <TableCell className="text-muted-foreground">{formatRelativeTime(inv.createdAt)}</TableCell>
-              <TableCell>
-                <Button size="sm" variant="ghost" onClick={() => setQrInvoiceId(inv.id)}>
-                  <QrCode className="size-4" />
-                </Button>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-1">
+                  {inv.status === "paid" && (
+                    <RefundButton invoiceId={inv.id} payoutToken={payoutToken} onRefunded={onChange} />
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setQrInvoiceId(inv.id)}>
+                    <QrCode className="size-4" />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
@@ -70,16 +84,22 @@ export function InvoiceTable({ invoices, payoutToken }: { invoices: InvoiceRow[]
   );
 }
 
-function StatusBadge({ status }: { status: "created" | "paid" | "expired" }) {
-  const variants = {
-    paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    created: "bg-amber-50 text-amber-700 border-amber-200",
-    expired: "bg-neutral-100 text-neutral-600 border-neutral-200",
+function StatusBadge({ status }: { status: InvoiceStatus }) {
+  const variants: Record<InvoiceStatus, string> = {
+    paid:     "bg-emerald-50 text-emerald-700 border-emerald-200",
+    created:  "bg-amber-50 text-amber-700 border-amber-200",
+    expired:  "bg-neutral-100 text-neutral-600 border-neutral-200",
+    refunded: "bg-sky-50 text-sky-700 border-sky-200",
   };
-  const labels = { paid: "Paid", created: "Pending", expired: "Expired" };
+  const labels: Record<InvoiceStatus, string> = {
+    paid: "Paid", created: "Pending", expired: "Expired", refunded: "Refunded",
+  };
+  const dotColor: Record<InvoiceStatus, string> = {
+    paid: "bg-emerald-500", created: "bg-amber-500", expired: "bg-neutral-400", refunded: "bg-sky-500",
+  };
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${variants[status]}`}>
-      <span className={`size-1.5 rounded-full ${status === "paid" ? "bg-emerald-500" : status === "created" ? "bg-amber-500" : "bg-neutral-400"}`} />
+      <span className={`size-1.5 rounded-full ${dotColor[status]}`} />
       {labels[status]}
     </span>
   );

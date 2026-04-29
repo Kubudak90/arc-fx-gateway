@@ -10,9 +10,9 @@
   },
   "current": {
     "deployedAt": "2026-04-29",
-    "label": "v0.5.0 — Gateway with iterating swap-input estimator (cures 1-wei InsufficientOutput on EURC↔USDC)",
+    "label": "v0.6.0 — Refunds: refundInvoice() + Refunded enum + payments mapping for exact merchantPayout/fee tracking",
     "contracts": {
-      "ArcFXGateway": "0xf9537ab0934105966dce1ebfe9e9725e22cd82c0",
+      "ArcFXGateway": "0xf127c79c73b0801cd1efff8d2c87ac26ef661164",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
       "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
     },
@@ -25,10 +25,23 @@
       "oracleAnswerHuman": "1.0863 (real EUR/USD)"
     },
     "changes": [
-      "_estimateAmountIn now walks forward 1 wei at a time (max 8 steps) until pool.calculateSwap >= amountOut; v0.4's pure linear inverse fell 1 wei short on EURC→USDC (observed live as InsufficientOutput(999_999, 1_000_000))",
-      "deployTx: 0xe9a79b551d312a1874c892bd91691399fd8510ac2806417cf79077134a6437a3"
+      "InvoiceStatus enum gains Refunded (= 3); existing None/Created/Paid values unchanged",
+      "payments[globalId] mapping records exact (merchantPayout, fee) at pay() time so refundInvoice() doesn't have to re-derive them from oracle math",
+      "refundInvoice(bytes32) external nonReentrant: pulls merchantPayout from merchant via transferFrom (requires payoutToken approve to gateway), forwards to inv.paidBy, returns the protocol fee from accrued back to merchant. Callable by merchant or owner.",
+      "InvoiceRefunded event with (globalId, refundedTo, payoutToken, merchantPayout, protocolFeeReturned)",
+      "Errors: InvoiceNotRefundable, InsufficientFeesForRefund (when owner already withdrew accrued fees)"
     ],
-    "deployTx": "0xe9a79b551d312a1874c892bd91691399fd8510ac2806417cf79077134a6437a3"
+    "deployTx": "0x6bff47fe244a4cff53c5b3c97786631c67662b67639a1726068acdf49acbf06c"
+  },
+  "deprecated_v0.5.0": {
+    "deployedAt": "2026-04-29",
+    "label": "v0.5.0 — Iterating _estimateAmountIn (1-wei swap shortfall fix)",
+    "reason": "Replaced by v0.6.0 which adds refundInvoice() + payments mapping. v0.5 kept on-chain for any in-flight settlements but superseded for new merchant onboarding.",
+    "contracts": {
+      "ArcFXGateway": "0xf9537ab0934105966dce1ebfe9e9725e22cd82c0",
+      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
+      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
+    }
   },
   "deprecated_v0.4.0": {
     "deployedAt": "2026-04-26",

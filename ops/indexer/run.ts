@@ -21,9 +21,11 @@ function need(k: string): string {
 const ABI = parseAbi([
   "event InvoiceCreated(bytes32 indexed globalId, address indexed merchant, bytes32 indexed merchantInvoiceId, address payIn, address payoutToken, uint256 amountOut, uint64 expiresAt)",
   "event InvoicePaid(bytes32 indexed globalId, address indexed payer, uint256 amountIn, uint256 grossReceived, uint256 merchantPayout, uint256 fee)",
+  "event InvoiceRefunded(bytes32 indexed globalId, address indexed refundedTo, address indexed payoutToken, uint256 merchantPayout, uint256 protocolFeeReturned)",
 ]);
-const InvoiceCreated = ABI[0];
-const InvoicePaid    = ABI[1];
+const InvoiceCreated  = ABI[0];
+const InvoicePaid     = ABI[1];
+const InvoiceRefunded = ABI[2];
 
 const chain = createPublicClient({ transport: http(RPC) });
 const pool  = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
@@ -45,21 +47,22 @@ async function setLastBlock(v: bigint): Promise<void> {
 }
 
 async function tick(): Promise<{
-  from: bigint; to: bigint; created: number; backfilled: number; paid: number; chunks: number;
+  from: bigint; to: bigint; created: number; backfilled: number; paid: number; refunded: number; chunks: number;
 }> {
   const last = await getLastBlock();
   const head = await chain.getBlockNumber();
   const to   = head - REORG_BUFFER;
   let cursor = last + 1n;
-  let created = 0, backfilled = 0, paid = 0, chunks = 0;
+  let created = 0, backfilled = 0, paid = 0, refunded = 0, chunks = 0;
 
   while (cursor <= to) {
     const tentEnd = cursor + MAX_RANGE - 1n;
     const end = tentEnd > to ? to : tentEnd;
 
-    const [createdLogs, paidLogs] = await Promise.all([
-      chain.getLogs({ address: GATEWAY, event: InvoiceCreated, fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY, event: InvoicePaid,    fromBlock: cursor, toBlock: end }),
+    const [createdLogs, paidLogs, refundedLogs] = await Promise.all([
+      chain.getLogs({ address: GATEWAY, event: InvoiceCreated,  fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: GATEWAY, event: InvoicePaid,     fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: GATEWAY, event: InvoiceRefunded, fromBlock: cursor, toBlock: end }),
     ]);
 
     for (const log of createdLogs) {
@@ -135,12 +138,50 @@ async function tick(): Promise<{
       }
     }
 
+    for (const log of refundedLogs) {
+      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+      if (d.eventName !== "InvoiceRefunded") continue;
+      const id         = d.args.globalId as Hex;
+      const refundedTo = d.args.refundedTo as string;
+
+      const upd = await pool.query<{ id: string; merchant_id: string }>(
+        `update invoices
+           set status = 'refunded', refund_tx = $2, refunded_at = now()
+         where id = $1 and status = 'paid'
+         returning id, merchant_id`,
+        [id, log.transactionHash],
+      );
+      if (!upd.rowCount) continue;
+      refunded++;
+
+      const mr = await pool.query<{ webhook_url: string | null }>(
+        "select webhook_url from merchants where id = $1", [upd.rows[0].merchant_id],
+      );
+      const url = mr.rows[0]?.webhook_url;
+      if (url) {
+        await pool.query(
+          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
+           values ($1, $2, $3::jsonb, 0, now())`,
+          [
+            id, url,
+            JSON.stringify({
+              event_id:    randomUUID(),
+              type:        "invoice.refunded",
+              invoice_id:  id,
+              refunded_to: refundedTo,
+              tx_hash:     log.transactionHash,
+            }),
+          ],
+        );
+      }
+    }
+
     await setLastBlock(end);
     cursor = end + 1n;
     chunks++;
   }
 
-  return { from: last + 1n, to, created, backfilled, paid, chunks };
+  return { from: last + 1n, to, created, backfilled, paid, refunded, chunks };
 }
 
 async function main() {
@@ -154,11 +195,11 @@ async function main() {
   while (true) {
     try {
       const r = await tick();
-      if (r.created || r.paid || r.backfilled || r.chunks > 1) {
+      if (r.created || r.paid || r.refunded || r.backfilled || r.chunks > 1) {
         console.log(JSON.stringify({
           ts: new Date().toISOString(),
           from: r.from.toString(), to: r.to.toString(),
-          created: r.created, backfilled: r.backfilled, paid: r.paid, chunks: r.chunks,
+          created: r.created, backfilled: r.backfilled, paid: r.paid, refunded: r.refunded, chunks: r.chunks,
         }));
       }
     } catch (e) {

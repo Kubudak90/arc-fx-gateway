@@ -6,7 +6,7 @@ const bytea = customType<{ data: Buffer; default: false }>({
   dataType() { return "bytea"; },
 });
 
-export const invoiceStatus = pgEnum("invoice_status", ["created", "paid", "expired"]);
+export const invoiceStatus = pgEnum("invoice_status", ["created", "paid", "expired", "refunded"]);
 
 export const merchants = pgTable("merchants", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -31,6 +31,8 @@ export const invoices = pgTable("invoices", {
   paidBy: text("paid_by"),
   paidTx: text("paid_tx"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
+  refundTx: text("refund_tx"),
+  refundedAt: timestamp("refunded_at", { withTimezone: true }),
   metadata: jsonb("metadata"),
   successUrl: text("success_url").notNull(),
   cancelUrl: text("cancel_url"),

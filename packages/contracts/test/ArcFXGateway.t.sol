@@ -524,6 +524,186 @@ contract ArcFXGatewayTest is Test {
         gw.createInvoiceFor(merchant, bytes32("a"), address(eurc), 1, uint64(block.timestamp + 1 hours));
     }
 
+    // ── refundInvoice() ────────────────────────────────────────────────
+
+    function test_Refund_HappyPath_SameToken() public {
+        _registerMerchant(); // payout USDC
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("rf-st"), address(usdc), 50_000_000, uint64(block.timestamp + 1 hours));
+
+        vm.prank(customer);
+        gw.pay(g, 50_000_000);
+
+        uint256 fee    = (50_000_000 * 10) / 10_000;
+        uint256 payout = 50_000_000 - fee;
+
+        // Merchant approves the gateway to pull `payout` for the refund.
+        vm.prank(merchant);
+        usdc.approve(address(gw), payout);
+
+        uint256 customerBefore = usdc.balanceOf(customer);
+        uint256 merchantBefore = usdc.balanceOf(merchant);
+        uint256 accruedBefore  = gw.protocolFeesAccrued(address(usdc));
+
+        vm.expectEmit(true, true, true, true, address(gw));
+        emit ArcFXGateway.InvoiceRefunded(g, customer, address(usdc), payout, fee);
+        vm.prank(merchant);
+        gw.refundInvoice(g);
+
+        // Status flipped to Refunded.
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Refunded));
+
+        // Customer received the full payout amount back in payoutToken.
+        assertEq(usdc.balanceOf(customer) - customerBefore, payout, "customer refunded payout");
+        // Merchant pays out `payout`, gets back `fee` from accrued. Net change: -payout + fee = -(payout - fee).
+        assertEq(int256(usdc.balanceOf(merchant)) - int256(merchantBefore), -int256(payout) + int256(fee), "merchant net change");
+        // Protocol fee bucket drained.
+        assertEq(gw.protocolFeesAccrued(address(usdc)), accruedBefore - fee, "fee removed from accrued");
+        // payments mapping cleared.
+        (uint256 mp, uint256 f) = gw.payments(g);
+        assertEq(mp, 0); assertEq(f, 0);
+    }
+
+    function test_Refund_HappyPath_SwapBranch() public {
+        _registerMerchant(); _fundPoolAndCustomer();
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("rf-sw"), address(eurc), 49_990_000, uint64(block.timestamp + 1 hours));
+
+        vm.prank(customer);
+        gw.pay(g, 60_000_000);
+
+        // Lookup the actual amounts the gateway recorded.
+        (uint256 storedPayout, uint256 storedFee) = gw.payments(g);
+        assertGt(storedPayout, 0);
+        assertGt(storedFee, 0);
+
+        vm.prank(merchant);
+        usdc.approve(address(gw), storedPayout);
+
+        uint256 customerUsdcBefore = usdc.balanceOf(customer);
+        vm.prank(merchant);
+        gw.refundInvoice(g);
+
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Refunded));
+        // Refund delivered in payoutToken (USDC), not the original payIn (EURC).
+        assertEq(usdc.balanceOf(customer) - customerUsdcBefore, storedPayout);
+    }
+
+    function test_Refund_OwnerCanCall() public {
+        _registerMerchant();
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("rf-own"), address(usdc), 10_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer);
+        gw.pay(g, 10_000_000);
+
+        (uint256 storedPayout, ) = gw.payments(g);
+        vm.prank(merchant);
+        usdc.approve(address(gw), storedPayout);
+
+        // Owner is `address(this)` (set in setUp); owner triggers refund on merchant's behalf.
+        gw.refundInvoice(g);
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Refunded));
+    }
+
+    function test_Refund_RevertsIfNotMerchant() public {
+        _registerMerchant();
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("rf-bad"), address(usdc), 10_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer);
+        gw.pay(g, 10_000_000);
+
+        address stranger = makeAddr("stranger");
+        vm.expectRevert(ArcFXGateway.NotMerchant.selector);
+        vm.prank(stranger);
+        gw.refundInvoice(g);
+    }
+
+    function test_Refund_RevertsIfNotPaid() public {
+        _registerMerchant();
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("rf-cr"), address(usdc), 10_000_000, uint64(block.timestamp + 1 hours));
+
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceNotRefundable.selector, g));
+        vm.prank(merchant);
+        gw.refundInvoice(g);
+    }
+
+    function test_Refund_RevertsOnDoubleRefund() public {
+        _registerMerchant();
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("rf-dbl"), address(usdc), 10_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer);
+        gw.pay(g, 10_000_000);
+
+        (uint256 storedPayout, ) = gw.payments(g);
+        vm.prank(merchant);
+        usdc.approve(address(gw), storedPayout);
+        vm.prank(merchant);
+        gw.refundInvoice(g);
+
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InvoiceNotRefundable.selector, g));
+        vm.prank(merchant);
+        gw.refundInvoice(g);
+    }
+
+    function test_Refund_RevertsIfFeesAlreadyWithdrawn() public {
+        _registerMerchant();
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("rf-w"), address(usdc), 10_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer);
+        gw.pay(g, 10_000_000);
+
+        // Owner pulls all accrued fees out before the merchant tries to refund.
+        gw.withdrawFees(address(usdc), address(this));
+        assertEq(gw.protocolFeesAccrued(address(usdc)), 0);
+
+        (uint256 storedPayout, uint256 storedFee) = gw.payments(g);
+        vm.prank(merchant);
+        usdc.approve(address(gw), storedPayout);
+
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGateway.InsufficientFeesForRefund.selector, storedFee, 0));
+        vm.prank(merchant);
+        gw.refundInvoice(g);
+    }
+
+    function test_Refund_RevertsWithoutMerchantApproval() public {
+        _registerMerchant();
+        usdc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        usdc.approve(address(gw), type(uint256).max);
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("rf-app"), address(usdc), 10_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer);
+        gw.pay(g, 10_000_000);
+
+        // Merchant deliberately did NOT approve the gateway. SafeERC20 reverts on the transferFrom.
+        vm.expectRevert();
+        vm.prank(merchant);
+        gw.refundInvoice(g);
+    }
+
     /// @notice Regression: live OracleAMM returned `999_999` USDC for the
     /// gateway's linearly-estimated EURC input when the merchant target was
     /// `1_000_000`. The old `_estimateAmountIn` reverted with

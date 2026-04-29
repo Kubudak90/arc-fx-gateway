@@ -37,7 +37,7 @@ export default function DashboardPage() {
         <h1 className="font-[family-name:var(--font-display)] text-[36px]">Invoices</h1>
         <CreateInvoiceDialog apiKey={data.apiKey} onCreated={refresh} />
       </div>
-      <InvoiceTable invoices={data.invoices} payoutToken={data.merchant.payoutToken} />
+      <InvoiceTable invoices={data.invoices} payoutToken={data.merchant.payoutToken} onChange={refresh} />
     </main>
   );
 }

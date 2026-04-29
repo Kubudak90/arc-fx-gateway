@@ -6,6 +6,27 @@ const PILLARS = [
   { label: "GLOBAL", body: "Stablecoin-native rails — accept USDC or EURC anywhere, settle in your chosen currency." },
 ] as const;
 
+const STEPS = [
+  {
+    n: "01",
+    title: "Merchant creates an invoice",
+    body: "Three-line SDK call or one click in the dashboard. Set the amount, the stablecoin you want to receive, and the success URL — Arcora returns a hosted checkout link.",
+    code: `await Arcora.createInvoice({\n  amountUsdc: 49.99,\n  payInToken: "EURC",\n  successUrl: "...",\n});`,
+  },
+  {
+    n: "02",
+    title: "Customer pays at the checkout",
+    body: "The customer opens the link, connects their wallet, sees a live FX quote, and approves + pays. Same-token payments skip the swap entirely.",
+    code: `pay(invoiceId, maxAmountIn);`,
+  },
+  {
+    n: "03",
+    title: "Settles on Arc, atomically",
+    body: "One transaction does the FX swap (if needed), takes the protocol fee, sends the merchant their preferred stable, and emits InvoicePaid. Webhook fires once the indexer sees the event.",
+    code: `→ merchantPayout USDC\n→ webhook invoice.paid`,
+  },
+] as const;
+
 type Phase = "shipped" | "next" | "later";
 const ROADMAP: Array<{ tag: string; title: string; body: string; phase: Phase }> = [
   {
@@ -52,6 +73,7 @@ export default function Home() {
       <header className="px-6 py-5 flex items-center justify-between border-b border-arcora-border">
         <ArcoraLogo size={28} />
         <nav className="flex items-center gap-4 text-sm">
+          <a href="#how-it-works" className="text-muted-foreground hover:text-foreground">How it works</a>
           <a href="#roadmap" className="text-muted-foreground hover:text-foreground">Roadmap</a>
           <a href="/m/login" className="text-arcora-link hover:underline">Merchants</a>
           <a href="https://github.com/Kubudak90/arc-fx-gateway" className="text-muted-foreground hover:text-foreground">GitHub</a>
@@ -86,6 +108,39 @@ export default function Home() {
               <p className="mt-3 text-arcora-slate leading-relaxed">{p.body}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section id="how-it-works" className="px-6 pb-24">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="text-sm tracking-[0.2em] uppercase text-arcora-teal font-semibold">How it works</p>
+            <h2 className="mt-3 font-[family-name:var(--font-display)] text-[36px] leading-tight tracking-tight text-arcora-slate">
+              Three steps from invoice to settlement.
+            </h2>
+          </div>
+          <ol className="grid gap-6 md:grid-cols-3">
+            {STEPS.map(step => (
+              <li key={step.n} className="rounded-2xl border border-arcora-border p-6 bg-white flex flex-col">
+                <div className="font-mono text-xs font-semibold tracking-[0.15em] text-arcora-teal">
+                  STEP {step.n}
+                </div>
+                <h3 className="mt-3 font-semibold text-arcora-slate text-lg">{step.title}</h3>
+                <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{step.body}</p>
+                <pre className="mt-5 bg-arcora-slate text-arcora-gray rounded-xl px-4 py-3 text-[11px] leading-relaxed overflow-x-auto font-mono">
+                  <code>{step.code}</code>
+                </pre>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-10 flex justify-center gap-3 text-sm">
+            <a href="https://arc-fx-demo.vercel.app" target="_blank" rel="noopener noreferrer" className="btn-arcora-pill">
+              Try the demo
+            </a>
+            <a href="https://www.npmjs.com/package/@arcora/sdk" target="_blank" rel="noopener noreferrer" className="btn-arcora-pill-light">
+              @arcora/sdk on npm
+            </a>
+          </div>
         </div>
       </section>
 

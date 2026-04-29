@@ -8,6 +8,7 @@ import { mapChainError } from "@/lib/chain/error-mapper";
 
 const ERC20_ABI = parseAbi([
   "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
 ]);
 const GATEWAY_ABI = parseAbi([
   "function pay(bytes32 id, uint256 maxAmountIn) external",
@@ -20,7 +21,7 @@ interface PayButtonProps {
   onPaid: (txHash: Hex) => void;
 }
 
-type State = "idle" | "approving" | "paying" | "success" | "error";
+type State = "idle" | "approving" | "approved" | "paying" | "success" | "error";
 
 export function PayButton({ invoiceId, payInTokenAddress, amountIn, onPaid }: PayButtonProps) {
   const { address } = useAccount();
@@ -33,54 +34,77 @@ export function PayButton({ invoiceId, payInTokenAddress, amountIn, onPaid }: Pa
   const gateway = process.env.NEXT_PUBLIC_GATEWAY_ADDRESS as Address;
   const arcId = 5042002;
 
-  async function handlePay() {
+  async function ensureAllowance(): Promise<void> {
+    const current = await publicClient!.readContract({
+      address: payInTokenAddress,
+      abi: ERC20_ABI,
+      functionName: "allowance",
+      args: [address!, gateway],
+    });
+    if (current >= amountIn!) return;
+
+    setState("approving");
+    const approveHash = await writeContractAsync({
+      address: payInTokenAddress,
+      abi: ERC20_ABI,
+      functionName: "approve",
+      args: [gateway, amountIn!],
+    });
+    await publicClient!.waitForTransactionReceipt({ hash: approveHash });
+    setState("approved");
+    // Brief settle so the next read sees the new allowance — some RPCs lag a tick.
+    await new Promise(r => setTimeout(r, 600));
+  }
+
+  async function submitPay(): Promise<void> {
+    setState("paying");
+    const payHash = await writeContractAsync({
+      address: gateway,
+      abi: GATEWAY_ABI,
+      functionName: "pay",
+      args: [invoiceId as Hex, amountIn!],
+    });
+    setTxHash(payHash);
+    await publicClient!.waitForTransactionReceipt({ hash: payHash });
+    setState("success");
+    onPaid(payHash);
+  }
+
+  async function handleClick() {
     if (!address || !amountIn) return;
     if (chainId !== arcId) {
       toast.error("Switch to Arc Testnet to continue");
       return;
     }
     try {
-      setState("approving");
-      const approveHash = await writeContractAsync({
-        address: payInTokenAddress,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [gateway, amountIn],
-      });
-      await publicClient!.waitForTransactionReceipt({ hash: approveHash });
-
-      setState("paying");
-      const payHash = await writeContractAsync({
-        address: gateway,
-        abi: GATEWAY_ABI,
-        functionName: "pay",
-        args: [invoiceId as Hex, amountIn],
-      });
-      setTxHash(payHash);
-      await publicClient!.waitForTransactionReceipt({ hash: payHash });
-
-      setState("success");
-      onPaid(payHash);
+      // If a previous attempt already approved, skip straight to pay on retry.
+      if (state !== "approved") {
+        await ensureAllowance();
+      }
+      await submitPay();
     } catch (e) {
+      // Allowance is on-chain; never roll the user back to "approve again" if pay fails.
       setState("error");
       toast.error(mapChainError(e));
-      setTimeout(() => setState("idle"), 2000);
     }
   }
 
   const label: Record<State, string> = {
-    idle: "Pay",
-    approving: "Approving EURC…",
-    paying: "Paying…",
-    success: "Paid ✓",
-    error: "Try again",
+    idle:      "Pay",
+    approving: "Approving…",
+    approved:  "Awaiting payment confirmation…",
+    paying:    "Paying…",
+    success:   "Paid ✓",
+    error:     "Retry payment",
   };
+
+  const inFlight = state === "approving" || state === "approved" || state === "paying";
 
   return (
     <div className="space-y-2">
       <button
-        onClick={handlePay}
-        disabled={!address || !amountIn || state === "approving" || state === "paying" || state === "success"}
+        onClick={handleClick}
+        disabled={!address || !amountIn || inFlight || state === "success"}
         className="btn-arcora-pill w-full"
       >
         {label[state]}

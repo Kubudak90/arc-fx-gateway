@@ -54,19 +54,59 @@ export async function seedMerchant(opts: {
   return { merchantId: result.rows[0].id, apiKey, address };
 }
 
-export async function seedInvoice(opts: {
+interface SeedInvoiceOpts {
   merchantId: string;
-  status?: "created" | "paid" | "expired";
+  status?: "created" | "paid" | "expired" | "refunded";
   expiresAtSecondsFromNow?: number;
-}): Promise<string> {
+  payInToken?: string;
+  payoutToken?: string;
+  amountOut?: string;          // raw 6-dec units, default "49990000" (49.99)
+  // Required for status=paid|refunded (so /m/treasury aggregations are sensible).
+  amountIn?: string;
+  merchantPayout?: string;
+  protocolFee?: string;
+  paidTx?: string;
+  refundTx?: string;
+}
+
+export async function seedInvoice(opts: SeedInvoiceOpts): Promise<string> {
   const pool = newPool();
-  const id = "0x" + Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString("hex").slice(0, 64);
+  const id    = "0x" + Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString("hex").slice(0, 64);
+  // merchant_invoice_id became NOT NULL with v0.4's namespacing; tests must mint one.
+  const minv  = "0x" + Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString("hex").slice(0, 64);
+  const status = opts.status ?? "created";
+  const isPaidLike = status === "paid" || status === "refunded";
+
   await pool.query(
-    `INSERT INTO invoices (id, merchant_id, pay_in_token, amount_out, expires_at, status, success_url)
-     VALUES ($1, $2, $3, $4, NOW() + ($5 || ' seconds')::interval, $6, $7)`,
-    [id, opts.merchantId, "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a", "49990000",
-     opts.expiresAtSecondsFromNow ?? 1800, opts.status ?? "created",
-     "http://localhost:4000/?paid=1"],
+    `INSERT INTO invoices (
+       id, merchant_invoice_id, merchant_id,
+       pay_in_token, payout_token, amount_out, expires_at, status, success_url,
+       amount_in, merchant_payout, protocol_fee,
+       paid_tx, paid_at,
+       refund_tx, refunded_at
+     ) VALUES (
+       $1, $2, $3,
+       $4, $5, $6, NOW() + ($7 || ' seconds')::interval, $8, $9,
+       $10, $11, $12,
+       $13, ${isPaidLike ? "NOW()" : "NULL"},
+       $14, ${status === "refunded" ? "NOW()" : "NULL"}
+     )`,
+    [
+      id,
+      minv,
+      opts.merchantId,
+      opts.payInToken  ?? "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a", // EURC
+      opts.payoutToken ?? "0x3600000000000000000000000000000000000000", // USDC
+      opts.amountOut   ?? "49990000",
+      opts.expiresAtSecondsFromNow ?? 1800,
+      status,
+      "http://localhost:4000/?paid=1",
+      isPaidLike ? (opts.amountIn       ?? "49990000") : null,
+      isPaidLike ? (opts.merchantPayout ?? "49940010") : null,
+      isPaidLike ? (opts.protocolFee    ?? "49990")    : null,
+      isPaidLike ? (opts.paidTx         ?? "0x" + "ab".repeat(32)) : null,
+      status === "refunded" ? (opts.refundTx ?? "0x" + "cd".repeat(32)) : null,
+    ],
   );
   await pool.end();
   return id;

@@ -18,23 +18,33 @@ Arcora.openCheckout(inv);
 | **Demo merchant** | [`https://arc-fx-demo.vercel.app`](https://arc-fx-demo.vercel.app) — click "Pay €4.50" to try the full flow |
 | **Live checkout app** | [`https://arc-fx-gateway.vercel.app`](https://arc-fx-gateway.vercel.app) — Vercel + Neon Postgres |
 | **Server hot wallet** | [`0x74BB69F48d0dAddB17679534fDa1142c3ab66333`](https://testnet.arcscan.app/address/0x74BB69F48d0dAddB17679534fDa1142c3ab66333) — funds invoice creation gas |
-| **Arcora Gateway v0.4** | [`0xA80A5741a09bff1f43dcBF15Df7c598A23163302`](https://testnet.arcscan.app/address/0xA80A5741a09bff1f43dcBF15Df7c598A23163302) |
+| **Arcora Gateway v0.6** | [`0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3`](https://testnet.arcscan.app/address/0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3) |
 | **OracleAMM** | [`0xC2020098aF328ac9CBD274267F424822C400dD66`](https://testnet.arcscan.app/address/0xC2020098aF328ac9CBD274267F424822C400dD66) |
 | **MockChainlinkFeed (1.0863 EUR/USD)** | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
 
-Smoke-test transaction (same-token USDC→USDC happy path): [`0x3f2fc3ff…84ef08`](https://testnet.arcscan.app/tx/0x3f2fc3ff446c8a6b206197de3a6cf25226f2ca9c654e11b2b4548609b384ef08) — paid 0.999 USDC + 0.001 USDC fee, no swap.
+Sample transactions on the live deploy:
 
-## What's in v1.0
+| Flow | Tx | Notes |
+|---|---|---|
+| Same-token USDC → USDC | [`0x3f2fc3ff…`](https://testnet.arcscan.app/tx/0x3f2fc3ff446c8a6b206197de3a6cf25226f2ca9c654e11b2b4548609b384ef08) | No swap; paid 0.999 USDC + 0.001 fee |
+| Swap EURC → USDC | [`0xa35cdab6…`](https://testnet.arcscan.app/tx/0xa35cdab6d75e5538df32f998bb35b118b61d43d32e0c9a6a2605b61b54745ae8) | OracleAMM, 1-wei iterating estimator (v0.5 fix) |
+| Refund (same-token) | [`0xa1a3471f…`](https://testnet.arcscan.app/tx/0xa1a3471fa4e3d69dc9e1274834343ab36707869b3d0547f867e8a17bdcc63188) | Customer gets payout back, merchant fee returned from accrued |
+| Refund (swap) | [`0x2dc24ed9…`](https://testnet.arcscan.app/tx/0x2dc24ed9125b9d1bee4303ae5de3034f5e7834faf5b5962c2ccca7e90733cc42) | Refund delivered in payout token (USDC) regardless of original payIn (EURC) |
 
-The first shippable Arcora release. Scope: **Arc-only USDC/EURC checkout** with one swap pool, one Chainlink oracle, hosted checkout + merchant dashboard, npm-published SDK. Crosschain payment (any chain CCTP supports) is the v2.0 milestone.
+## What's in v1.0.x
 
-Highlights from gateway v0.4 (the contract underpinning v1.0):
+The first shippable Arcora release. Scope: **Arc-only USDC/EURC checkout** with one swap pool, one Chainlink oracle, hosted checkout + merchant dashboard, npm-published SDK, refund flow, and a per-merchant treasury view. Crosschain payment (any chain CCTP supports) is the v2.0 milestone.
+
+Latest contract is **gateway v0.6** at [`0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3`](https://testnet.arcscan.app/address/0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3). Key features delivered across the v1.0.x line:
 
 - **Namespaced invoice IDs.** Merchants pass their own `merchantInvoiceId`; the contract derives a global ID via `keccak256(merchantAddress, merchantInvoiceId)` so two merchants reusing the same order ID can't collide.
 - **Merchant struct expansion.** Separate `payoutAddress` from `msg.sender`, plus an `active` flag. Wallet/payout rotation no longer requires re-deploying. New methods: `updatePayoutAddress`, `updatePayoutToken`, `deactivateMerchant`.
 - **Same-token direct payment.** When the customer pays in the merchant's payout token (e.g. USDC → USDC), `pay()` skips the swap path entirely.
 - **Event split.** `InvoicePaid` emits `(amountIn, grossReceived, merchantPayout, fee)` so indexers record gross/net without arithmetic.
 - **Locked payout token.** Each invoice records the payout token at creation; later `updatePayoutToken` calls don't reroute pending invoices.
+- **Iterating swap-input estimator** (v0.5). Linear inverse of the pool's forward quote walks 1 wei at a time until the swap actually delivers `merchantPayout`; cures the 1-wei `InsufficientOutput` revert that bit live EURC→USDC payments before.
+- **Refunds** (v0.6). `refundInvoice(globalId)` callable by merchant or owner. Pulls the original `merchantPayout` from the merchant's wallet via `transferFrom`, forwards to the customer, and returns the protocol fee from accrued back to the merchant. Refund always settles in the payout token regardless of original payIn.
+- **Treasury dashboard** at `/m/treasury` — per-stable KPI cards (net received, gross volume, refunded, fees) + activity feed.
 
 Operational hardening on top of the contract:
 
@@ -44,16 +54,18 @@ Operational hardening on top of the contract:
 ## Roadmap
 
 ```
-v1.0 (this release)  Arc-only USDC/EURC checkout
-v1.x                 Refunds · treasury dashboard · plugins · any-stablecoin
-                     payment & checkout (USDT, PYUSD, DAI, regional)
-v2.0                 Crosschain USDC source (every CCTP-supported EVM chain)
-v2.1                 + source-side DEX aggregator (Odos / 1inch)
-v2.2                 + Solana/Sui/non-EVM source
-v3.0                 Intent / solver model (one-signature crosschain UX)
+v1.0   live   Arc-only USDC/EURC checkout + refunds + treasury + npm SDK
+v1.x   next   Any stablecoin on Arc — USDT, PYUSD, DAI, regional fiat-pegged
+                (spec: docs/superpowers/specs/2026-04-29-plan-3-multi-stablecoin.md)
+v2.0   next   Crosschain USDC source via CCTP — Ethereum, Arbitrum, Base,
+                Optimism, Polygon, Avalanche, Linea, Codex
+v2.1   later  + source-side DEX aggregator (Odos / 1inch) so customers can
+                pay in native ETH or any ERC-20
+v2.2   later  + Solana / Sui / non-EVM
+v3.0   later  Intent / solver model — one signature, full route executed
 ```
 
-The killer-feature bet: **customer pays from where they are with what they have, merchant settles in their preferred stable on Arc**. v1 is Arc-only as a proving ground; v2 ships the differentiator.
+The killer-feature bet: **customer pays from where they are with what they have, merchant settles in their preferred stable on Arc**. v1 is Arc-only as a proving ground; v2 ships the differentiator. Public version of this is on the landing page at [arc-fx-gateway.vercel.app/#roadmap](https://arc-fx-gateway.vercel.app/#roadmap).
 
 ## Packages
 
@@ -77,8 +89,8 @@ The killer-feature bet: **customer pays from where they are with what they have,
 
 | Suite | Tests |
 |-------|-------|
-| Contracts (Foundry) | 99 passing — unit + fuzz (10k runs) + invariant (256×64) + deploy scripts |
-| App (vitest) | 42 passing — auth, crypto, schema, API routes, UI components |
+| Contracts (Foundry) | 117 passing — unit + fuzz (10k runs) + invariant (256×64) + deploy scripts; refund + 1-wei estimator regressions covered |
+| App (vitest) | 46 passing — auth, crypto, schema, API routes (incl. treasury aggregator), UI components |
 | App (Playwright E2E) | 5 critical flows passing (the 6th retired with the Vercel cron route) |
 | SDK (vitest) | 8 passing |
 | @arcora/sdk-react (vitest) | 3 passing |

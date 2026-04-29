@@ -6,44 +6,46 @@
     <title>Acme Coffee · Pay with stablecoin</title>
     <style>
       :root {
-        --cb-blue: #0052ff;
-        --cb-hover: #578bfa;
-        --cb-black: #0a0b0d;
-        --cb-gray: #5b616e;
-        --cb-cool: #eef0f3;
+        --arcora-blue:       #2563ff;
+        --arcora-blue-light: #3d7cff;
+        --arcora-teal:       #00c2a8;
+        --arcora-slate:      #0b1426;
+        --arcora-gray:       #e6ecf2;
+        --arcora-muted-fg:   #5b6478;
+        --arcora-border:     rgba(11, 20, 38, 0.12);
       }
       *, *::before, *::after { box-sizing: border-box; }
       body {
         margin: 0;
         font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
         background: #fff;
-        color: var(--cb-black);
+        color: var(--arcora-slate);
         -webkit-font-smoothing: antialiased;
       }
       main { display: grid; place-items: center; min-height: 100vh; padding: 24px; }
       .card {
-        max-width: 420px;
+        max-width: 440px;
         width: 100%;
         text-align: center;
         padding: 40px 32px;
-        border: 1px solid rgba(91, 97, 110, 0.12);
+        border: 1px solid var(--arcora-border);
         border-radius: 24px;
         background: #fff;
       }
       .brand {
         font-size: 14px;
         font-weight: 600;
-        color: var(--cb-gray);
+        color: var(--arcora-muted-fg);
         text-transform: uppercase;
         letter-spacing: 1px;
         margin-bottom: 24px;
       }
-      h1 { font-size: 28px; margin: 0 0 12px; line-height: 1.2; }
-      p { color: var(--cb-gray); margin: 0 0 32px; font-size: 16px; }
+      h1 { font-size: 28px; margin: 0 0 12px; line-height: 1.2; color: var(--arcora-slate); }
+      p { color: var(--arcora-muted-fg); margin: 0 0 32px; font-size: 16px; }
       .pay-btn {
         padding: 16px 36px;
         border-radius: 56px;
-        background: var(--cb-black);
+        background: var(--arcora-slate);
         color: #fff;
         font-weight: 600;
         border: none;
@@ -52,7 +54,7 @@
         letter-spacing: 0.16px;
         transition: background 150ms ease;
       }
-      .pay-btn:hover:not(:disabled) { background: var(--cb-hover); }
+      .pay-btn:hover:not(:disabled) { background: var(--arcora-blue); }
       .pay-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .status {
         margin-top: 28px;
@@ -70,8 +72,9 @@
         font-size: 13px;
       }
       .footer a {
-        color: var(--cb-blue);
+        color: var(--arcora-blue);
         text-decoration: none;
+        font-weight: 500;
       }
       .footer a:hover { text-decoration: underline; }
     </style>

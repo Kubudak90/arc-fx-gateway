@@ -146,8 +146,8 @@ importers:
   packages/demo-merchant:
     dependencies:
       '@arcora/sdk':
-        specifier: workspace:*
-        version: link:../sdk
+        specifier: ^1.0.0
+        version: 1.0.0
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -227,6 +227,9 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@arcora/sdk@1.0.0':
+    resolution: {integrity: sha512-gTZk9F6Jhs4A4SaGdC4BuyNkl8opBG6ASvkShe5mI5Y5yzH0ymP/OKa3M1OvvEWsyc/SbGXW1nA5RU+i+sDiUA==}
 
   '@babel/code-frame@7.29.0':
     resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
@@ -6361,6 +6364,8 @@ snapshots:
   '@adraffy/ens-normalize@1.11.1': {}
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@arcora/sdk@1.0.0': {}
 
   '@babel/code-frame@7.29.0':
     dependencies:

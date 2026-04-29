@@ -9,10 +9,10 @@
     "EURC": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a"
   },
   "current": {
-    "deployedAt": "2026-04-26",
-    "label": "v0.4.0 — Gateway v2 (Plan 2b: namespacing + merchant updates + same-token + event split)",
+    "deployedAt": "2026-04-29",
+    "label": "v0.5.0 — Gateway with iterating swap-input estimator (cures 1-wei InsufficientOutput on EURC↔USDC)",
     "contracts": {
-      "ArcFXGateway": "0xA80A5741a09bff1f43dcBF15Df7c598A23163302",
+      "ArcFXGateway": "0xf9537ab0934105966dce1ebfe9e9725e22cd82c0",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
       "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
     },
@@ -23,6 +23,21 @@
       "oracleDecimals": 8,
       "oracleAnswer": 108630000,
       "oracleAnswerHuman": "1.0863 (real EUR/USD)"
+    },
+    "changes": [
+      "_estimateAmountIn now walks forward 1 wei at a time (max 8 steps) until pool.calculateSwap >= amountOut; v0.4's pure linear inverse fell 1 wei short on EURC→USDC (observed live as InsufficientOutput(999_999, 1_000_000))",
+      "deployTx: 0xe9a79b551d312a1874c892bd91691399fd8510ac2806417cf79077134a6437a3"
+    ],
+    "deployTx": "0xe9a79b551d312a1874c892bd91691399fd8510ac2806417cf79077134a6437a3"
+  },
+  "deprecated_v0.4.0": {
+    "deployedAt": "2026-04-26",
+    "label": "v0.4.0 — Gateway v2 (namespacing + merchant updates + same-token + event split)",
+    "reason": "Replaced by v0.5.0 to fix _estimateAmountIn 1-wei shortfall that broke EURC↔USDC swap pay() in production.",
+    "contracts": {
+      "ArcFXGateway": "0xA80A5741a09bff1f43dcBF15Df7c598A23163302",
+      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
+      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
     },
     "changes": [
       "createInvoice/createInvoiceFor take merchantInvoiceId; contract derives globalId = keccak256(merchant, merchantInvoiceId)",

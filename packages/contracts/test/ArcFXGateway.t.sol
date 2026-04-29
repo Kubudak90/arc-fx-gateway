@@ -9,6 +9,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { MockERC20 } from "./helpers/MockERC20.sol";
 import { MockChainlink } from "./helpers/MockChainlink.sol";
 import { MockStableSwapPool } from "./helpers/MockStableSwapPool.sol";
+import { ShortByOnePool } from "./helpers/ShortByOnePool.sol";
 
 contract ArcFXGatewayTest is Test {
     MockERC20            usdc;
@@ -521,5 +522,47 @@ contract ArcFXGatewayTest is Test {
         vm.prank(delegate);
         vm.expectRevert(ArcFXGateway.DelegateNotAuthorized.selector);
         gw.createInvoiceFor(merchant, bytes32("a"), address(eurc), 1, uint64(block.timestamp + 1 hours));
+    }
+
+    /// @notice Regression: live OracleAMM returned `999_999` USDC for the
+    /// gateway's linearly-estimated EURC input when the merchant target was
+    /// `1_000_000`. The old `_estimateAmountIn` reverted with
+    /// `InsufficientOutput(999_999, 1_000_000)`. Verify the iterating
+    /// estimator now walks forward 1 wei and the swap clears.
+    function test_Pay_RecoversFromOneWeiPoolShortfall() public {
+        // Replace the linear MockStableSwapPool with a quote that's
+        // deliberately 1 wei short of the linear extrapolation.
+        ShortByOnePool shortPool = new ShortByOnePool(
+            IERC20(address(usdc)), IERC20(address(eurc)), 1_085_866
+        );
+        gw = new ArcFXGateway(
+            IStableSwapPool(address(shortPool)),
+            IChainlinkAggregator(address(oracle)),
+            10,
+            address(this)
+        );
+        // Wide-open oracle deviation guard for this contrived rate.
+        oracle.setAnswer(1.0859e8, block.timestamp);
+
+        // Fund the pool's USDC side so it can pay out, and fund the customer.
+        usdc.mint(address(shortPool), 10_000 * 1e6);
+        eurc.mint(customer, 1_000 * 1e6);
+        vm.prank(customer);
+        eurc.approve(address(gw), type(uint256).max);
+
+        _registerMerchant();
+
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(
+            bytes32("shortfall"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours)
+        );
+
+        // Without the iterator, this reverts with InsufficientOutput(999_999, 1_000_000).
+        vm.prank(customer);
+        gw.pay(g, 2_000_000);
+
+        (, , , , , ArcFXGateway.InvoiceStatus s, address paidBy) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
+        assertEq(paidBy, customer);
     }
 }

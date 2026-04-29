@@ -257,11 +257,27 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         emit InvoicePaid(globalId, msg.sender, amountIn, received, swapPayout, swapFee);
     }
 
-    function _estimateAmountIn(uint8 iIn, uint8 jOut, uint256 amountOut) internal view returns (uint256) {
-        uint256 probeIn = 1e6;
+    /// @dev Inverts the pool's forward swap quote to find the smallest input
+    /// that produces at least `amountOut`. The pool's `calculateSwap` is
+    /// monotone-non-decreasing but not strictly proportional under integer
+    /// rounding, so a pure linear inverse can fall a wei or two short. We seed
+    /// with the linear ceiling, then walk forward 1 wei at a time until the
+    /// quoted output meets the target. Bounded so a degenerate pool can never
+    /// freeze pay() — if the loop bails out, the swap call downstream reverts
+    /// cleanly with `InsufficientOutput`.
+    uint256 private constant ESTIMATE_MAX_STEPS = 8;
+
+    function _estimateAmountIn(uint8 iIn, uint8 jOut, uint256 amountOut) internal view returns (uint256 amountIn) {
+        uint256 probeIn  = 1e6;
         uint256 probeOut = POOL.calculateSwap(iIn, jOut, probeIn);
         if (probeOut == 0) return type(uint256).max;
-        return (amountOut * probeIn + probeOut - 1) / probeOut;
+
+        amountIn = (amountOut * probeIn + probeOut - 1) / probeOut;
+
+        for (uint256 i = 0; i < ESTIMATE_MAX_STEPS; i++) {
+            if (POOL.calculateSwap(iIn, jOut, amountIn) >= amountOut) return amountIn;
+            unchecked { amountIn++; }
+        }
     }
 
     function withdrawFees(address token, address to) external onlyOwner {

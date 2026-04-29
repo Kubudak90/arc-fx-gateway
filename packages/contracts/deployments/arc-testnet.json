@@ -12,7 +12,7 @@
     "deployedAt": "2026-04-29",
     "label": "v0.6.0 — Refunds: refundInvoice() + Refunded enum + payments mapping for exact merchantPayout/fee tracking",
     "contracts": {
-      "ArcFXGateway": "0xf127c79c73b0801cd1efff8d2c87ac26ef661164",
+      "ArcFXGateway": "0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
       "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
     },
@@ -31,7 +31,8 @@
       "InvoiceRefunded event with (globalId, refundedTo, payoutToken, merchantPayout, protocolFeeReturned)",
       "Errors: InvoiceNotRefundable, InsufficientFeesForRefund (when owner already withdrew accrued fees)"
     ],
-    "deployTx": "0x6bff47fe244a4cff53c5b3c97786631c67662b67639a1726068acdf49acbf06c"
+    "deployTx": "0x78f8da52c8e41321fe022659e38db711209c09e929d75cb9fb27dbe4bea24d37",
+    "deployNotes": "First v0.6 broadcast (hash 0x6bff47fe…) reported success in foundry's broadcast file but the tx never confirmed on Arc testnet — the 0xf127c79c… address has no code. Redeployed with --legacy flag at 0x7c113740…; this is the canonical v0.6."
   },
   "deprecated_v0.5.0": {
     "deployedAt": "2026-04-29",

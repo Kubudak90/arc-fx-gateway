@@ -1,5 +1,5 @@
 {
-  "name": "@arcora/react",
+  "name": "@arcora/sdk-react",
   "version": "1.0.0",
   "description": "React bindings for the Arcora checkout SDK — drop-in <CheckoutButton /> + useCheckout()",
   "keywords": ["arcora", "react", "checkout", "stablecoin", "payments", "arc", "hooks"],

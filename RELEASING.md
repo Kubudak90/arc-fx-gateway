@@ -1,6 +1,6 @@
 # Releasing Arcora
 
-Steps to cut a release. Two surfaces ship together: **published npm packages** (`@arcora/sdk`, `@arcora/react`) and the **hosted app** on Vercel.
+Steps to cut a release. Two surfaces ship together: **published npm packages** (`@arcora/sdk`, `@arcora/sdk-react`) and the **hosted app** on Vercel.
 
 ## 1. Pre-flight
 
@@ -20,7 +20,7 @@ For an x.y.z release, update `version` in:
 - `packages/sdk/package.json`
 - `packages/sdk-react/package.json`
 
-Match versions across the two packages so a `npm i @arcora/sdk @arcora/react` always resolves a compatible pair. The `workspace:^` peer dependency on `@arcora/sdk` rewrites to a real version automatically at publish time.
+Match versions across the two packages so a `npm i @arcora/sdk @arcora/sdk-react` always resolves a compatible pair. The `workspace:^` peer dependency on `@arcora/sdk` rewrites to a real version automatically at publish time.
 
 ## 3. Update CHANGELOG
 
@@ -43,7 +43,7 @@ Add a section to `CHANGELOG.md`:
 
 ```bash
 pnpm --filter @arcora/sdk publish --dry-run --no-git-checks
-pnpm --filter @arcora/react publish --dry-run --no-git-checks
+pnpm --filter @arcora/sdk-react publish --dry-run --no-git-checks
 ```
 
 Confirm tarball contents include `dist/`, `LICENSE`, `README.md`, `package.json` and **nothing else**.
@@ -71,7 +71,7 @@ Then publish (requires 2FA on every release):
 
 ```bash
 pnpm --filter @arcora/sdk publish --no-git-checks
-pnpm --filter @arcora/react publish --no-git-checks
+pnpm --filter @arcora/sdk-react publish --no-git-checks
 ```
 
 `pnpm` rewrites `workspace:^` to the actual version at publish time, so consumers receive a clean tarball with no `workspace:` references.
@@ -103,7 +103,7 @@ gh release create vX.Y.Z --title "vX.Y.Z" --notes-file CHANGELOG-X.Y.Z.md
 ## 9. Verify
 
 - `npm view @arcora/sdk version` matches the new tag.
-- `npm view @arcora/react version` matches.
+- `npm view @arcora/sdk-react version` matches.
 - The "Demo merchant" link in the README still works end-to-end (browser).
 
 ## Troubleshooting

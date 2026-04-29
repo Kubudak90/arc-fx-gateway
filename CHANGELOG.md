@@ -9,7 +9,7 @@ First shippable Arcora release. Arc-only stablecoin checkout and FX settlement: 
 ### Added
 - **Arcora Gateway v0.4** at `0xA80A5741a09bff1f43dcBF15Df7c598A23163302` on Arc testnet.
 - **`@arcora/sdk`** — three-function checkout client (`init` / `createInvoice` / `openCheckout`), zero EVM deps, ~1.5 KB gzipped.
-- **`@arcora/react`** — `<CheckoutButton />` and `useCheckout()` for drop-in React integration.
+- **`@arcora/sdk-react`** — `<CheckoutButton />` and `useCheckout()` for drop-in React integration.
 - **Hosted checkout app** at `arc-fx-gateway.vercel.app`: SIWE merchant auth, invoice creation via server hot wallet, customer-side wallet connect (MetaMask + WalletConnect), live FX quote display.
 - **Merchant dashboard** under `/m/`: invoice list, create new, share QR, API key + webhook URL settings.
 - **VPS-resident ops daemons** (`arcora-indexer.service`, `arcora-webhooks.service`) with systemd `Restart=always`, replacing Vercel cron for chain → DB sync and webhook delivery.
@@ -29,7 +29,7 @@ First shippable Arcora release. Arc-only stablecoin checkout and FX settlement: 
 - App (vitest): 42 passing.
 - App (Playwright E2E): 5 critical flows passing.
 - SDK (vitest): 8 passing.
-- `@arcora/react` (vitest): 3 passing.
+- `@arcora/sdk-react` (vitest): 3 passing.
 
 ### Known limitations
 - Single AMM pool (USDC/EURC); other stables (USDT, PYUSD, DAI, regional) deferred to v1.x.

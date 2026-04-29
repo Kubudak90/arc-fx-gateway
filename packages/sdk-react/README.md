@@ -1,13 +1,13 @@
-# @arcora/react
+# @arcora/sdk-react
 
 React bindings for [`@arcora/sdk`](https://www.npmjs.com/package/@arcora/sdk) — drop-in `<CheckoutButton />` and `useCheckout()` hook for Arcora stablecoin payments on Arc Network.
 
 ## Install
 
 ```bash
-npm install @arcora/react @arcora/sdk
+npm install @arcora/sdk-react @arcora/sdk
 # or
-pnpm add @arcora/react @arcora/sdk
+pnpm add @arcora/sdk-react @arcora/sdk
 ```
 
 `@arcora/sdk` is a peer dependency.
@@ -15,7 +15,7 @@ pnpm add @arcora/react @arcora/sdk
 ## Quick start
 
 ```tsx
-import { CheckoutButton } from "@arcora/react";
+import { CheckoutButton } from "@arcora/sdk-react";
 
 export function Checkout() {
   return (
@@ -39,7 +39,7 @@ export function Checkout() {
 For more control, use `useCheckout`:
 
 ```tsx
-import { useCheckout } from "@arcora/react";
+import { useCheckout } from "@arcora/sdk-react";
 
 function Pay() {
   const { checkout, loading, error } = useCheckout({

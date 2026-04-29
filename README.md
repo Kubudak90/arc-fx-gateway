@@ -60,7 +60,7 @@ The killer-feature bet: **customer pays from where they are with what they have,
 | Package | Description |
 |---------|-------------|
 | [`@arcora/sdk`](packages/sdk/) | npm SDK — three-function client, ~1.5 KB gzipped |
-| [`@arcora/react`](packages/sdk-react/) | React hook + button component |
+| [`@arcora/sdk-react`](packages/sdk-react/) | React hook + button component |
 | [`@arcora/app`](packages/app/) | Next.js 15 hosted checkout + merchant dashboard |
 | [`@arcora/contracts`](packages/contracts/) | Solidity contracts (Foundry, 99 tests passing) |
 | [`@arcora/demo-merchant`](packages/demo-merchant/) | Vite app integrating the SDK in ~5 lines |
@@ -81,7 +81,7 @@ The killer-feature bet: **customer pays from where they are with what they have,
 | App (vitest) | 42 passing — auth, crypto, schema, API routes, UI components |
 | App (Playwright E2E) | 5 critical flows passing (the 6th retired with the Vercel cron route) |
 | SDK (vitest) | 8 passing |
-| @arcora/react (vitest) | 3 passing |
+| @arcora/sdk-react (vitest) | 3 passing |
 
 ## Specs and plans
 

@@ -10,7 +10,7 @@ npm install @arcora/sdk
 pnpm add @arcora/sdk
 ```
 
-For React: `npm install @arcora/react`
+For React: `npm install @arcora/sdk-react`
 
 ## Usage
 
@@ -31,7 +31,7 @@ Arcora.openCheckout(invoice);
 ### React
 
 ```tsx
-import { CheckoutButton } from "@arcora/react";
+import { CheckoutButton } from "@arcora/sdk-react";
 
 <CheckoutButton
   apiKey="ak_live_..."
@@ -49,7 +49,7 @@ import { CheckoutButton } from "@arcora/react";
 ### Hook
 
 ```tsx
-import { useCheckout } from "@arcora/react";
+import { useCheckout } from "@arcora/sdk-react";
 
 const { checkout, loading, error } = useCheckout({ apiKey: "ak_live_..." });
 

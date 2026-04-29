@@ -103,15 +103,19 @@ async function tick(): Promise<{
     for (const log of paidLogs) {
       const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
       if (d.eventName !== "InvoicePaid") continue;
-      const id    = d.args.globalId as Hex;
-      const payer = d.args.payer as string;
+      const id              = d.args.globalId as Hex;
+      const payer           = d.args.payer as string;
+      const amountIn        = (d.args.amountIn        as bigint).toString();
+      const merchantPayout  = (d.args.merchantPayout  as bigint).toString();
+      const protocolFee     = (d.args.fee             as bigint).toString();
 
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
-           set status = 'paid', paid_by = $2, paid_tx = $3, paid_at = now()
+           set status = 'paid', paid_by = $2, paid_tx = $3, paid_at = now(),
+               amount_in = $4, merchant_payout = $5, protocol_fee = $6
          where id = $1 and status = 'created'
          returning id, merchant_id`,
-        [id, payer, log.transactionHash],
+        [id, payer, log.transactionHash, amountIn, merchantPayout, protocolFee],
       );
       if (!upd.rowCount) continue;
       paid++;

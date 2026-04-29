@@ -15,6 +15,13 @@
       "when": 1777479253307,
       "tag": "0001_stale_newton_destine",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777482151617,
+      "tag": "0002_legal_flatman",
+      "breakpoints": true
     }
   ]
 }

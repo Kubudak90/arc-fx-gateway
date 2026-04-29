@@ -2,6 +2,25 @@
 
 All notable changes to Arcora are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project follows [Semantic Versioning](https://semver.org/) for the published `@arcora/*` npm packages.
 
+## [1.0.2] — 2026-04-29
+
+Refunds, treasury dashboard, and one nasty deploy lesson. SDK npm artifacts unchanged so no version bump there.
+
+### Added
+- **Refunds (`v1.x #1`)** — `refundInvoice(bytes32)` on the gateway, callable by merchant or owner. Pulls the original `merchantPayout` from the merchant's wallet (requires `payoutToken` approve), forwards to `inv.paidBy`, and returns the protocol fee from accrued back to the merchant. Reverts cleanly on `InvoiceNotRefundable` and `InsufficientFeesForRefund` when the owner has already withdrawn fees. New `payments[globalId]` mapping records exact `(merchantPayout, fee)` at pay-time so refunds don't have to re-derive them. New `Refunded` enum value, `InvoiceRefunded` event, 8 foundry tests (suite at 117).
+- **Treasury dashboard (`v1.x #2`)** at `/m/treasury` — per-stable KPI cards (net received, gross volume, refunded, fees) plus a 20-row activity feed with refunds shown as negative deltas. New `/api/merchant/treasury` aggregate. Migration `0002` adds `amount_in`, `merchant_payout`, `protocol_fee` numeric columns to the invoices table; the indexer populates them from the `InvoicePaid` event going forward.
+- Refund button on the dashboard's invoice list with the same hardened state machine as `PayButton` (allowance pre-check, single-prompt when sufficient, retry-without-re-approve on revert).
+- Webhook event `invoice.refunded` enqueued by the indexer when it sees `InvoiceRefunded`.
+
+### Fixed
+- **Foundry broadcast can lie on Arc testnet.** A `forge script --broadcast` reported `ONCHAIN EXECUTION COMPLETE & SUCCESSFUL` and wrote a clean broadcast file at address `0xf127c79c…`, but `cast tx` returned `tx not found` and the address had no bytecode. A user `pay()` against the empty address technically succeeded as a no-op (status `0x1`, zero logs). Redeployed v0.6 with `--legacy` at `0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3` (deployTx `0x78f8da52…`); verified by reading `cast code` before claiming success. Operational note in `RELEASING.md`-equivalent memory: always verify deploys with `cast receipt` (status=1) AND non-empty `cast code` before trusting foundry's broadcast file.
+
+### Operational
+- v0.5 deprecated; v0.6 canonical at `0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3`. Vercel envs and the VPS `arcora-indexer.service` `.env` repointed; daemon restarted.
+- DB migrations `0001_stale_newton_destine.sql` (refund columns + enum value) and `0002_legal_flatman.sql` (treasury columns) applied to Neon prod.
+
+[1.0.2]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.2
+
 ## [1.0.1] — 2026-04-29
 
 Hotfix release. Live EURC↔USDC swap payments reverted on-chain with `InsufficientOutput(999_999, 1_000_000)`; the gateway's linear `_estimateAmountIn` fell one wei short of the actual `OracleAMM.calculateSwap` output, and the customer-supplied `maxAmountIn` couldn't compensate because `pay()` sized the swap from the gateway's own estimate. The hosted checkout reported `Paid ✓` for these reverted txs, masking the failure until the indexer left the rows at `created`.

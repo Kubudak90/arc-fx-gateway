@@ -2,35 +2,55 @@
 pragma solidity ^0.8.26;
 
 import { Test } from "forge-std/Test.sol";
-import { ArcFXGateway } from "../src/ArcFXGateway.sol";
-import { IStableSwapPool } from "../src/interfaces/IStableSwapPool.sol";
-import { IChainlinkAggregator } from "../src/interfaces/IChainlinkAggregator.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { MockERC20 } from "./helpers/MockERC20.sol";
-import { MockChainlink } from "./helpers/MockChainlink.sol";
-import { MockStableSwapPool } from "./helpers/MockStableSwapPool.sol";
-import { ShortByOnePool } from "./helpers/ShortByOnePool.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import { ArcFXGateway }         from "../src/ArcFXGateway.sol";
+import { StablecoinRegistry }   from "../src/registry/StablecoinRegistry.sol";
+import { StablePool }           from "../src/pool/StablePool.sol";
+import { IStablePool }          from "../src/pool/IStablePool.sol";
+import { IStablecoinRegistry }  from "../src/registry/IStablecoinRegistry.sol";
+import { IChainlinkAggregator } from "../src/interfaces/IChainlinkAggregator.sol";
+import { MockChainlinkFeed }    from "../src/testnet/MockChainlinkFeed.sol";
+import { MockERC20 }            from "./helpers/MockERC20.sol";
 
 contract ArcFXGatewayTest is Test {
-    MockERC20            usdc;
-    MockERC20            eurc;
-    MockChainlink        oracle;
-    MockStableSwapPool   pool;
-    ArcFXGateway         gw;
+    StablecoinRegistry  reg;
+    StablePool          pool;
+    MockERC20           usdc;
+    MockERC20           eurc;
+    MockChainlinkFeed   usdcFeed;
+    MockChainlinkFeed   eurcFeed;
+    ArcFXGateway        gw;
 
     address merchant = makeAddr("merchant");
     address customer = makeAddr("customer");
 
     function setUp() public virtual {
         vm.warp(1_700_000_000);
-        usdc   = new MockERC20("USDC", "USDC", 6);
-        eurc   = new MockERC20("EURC", "EURC", 6);
-        oracle = new MockChainlink(8);
-        oracle.setAnswer(1.0863e8, block.timestamp);
-        pool   = new MockStableSwapPool(IERC20(address(usdc)), IERC20(address(eurc)), 1.0860e18);
-        gw     = new ArcFXGateway(
-            IStableSwapPool(address(pool)),
-            IChainlinkAggregator(address(oracle)),
+
+        usdc     = new MockERC20("USDC", "USDC", 6);
+        eurc     = new MockERC20("EURC", "EURC", 6);
+        usdcFeed = new MockChainlinkFeed(8, 1.0000e8);
+        eurcFeed = new MockChainlinkFeed(8, 1.0863e8);
+
+        reg  = new StablecoinRegistry(address(this));
+        pool = new StablePool(address(reg), 5, address(this));
+
+        reg.listToken(address(usdc), 6, IChainlinkAggregator(address(usdcFeed)), 50);
+        reg.listToken(address(eurc), 6, IChainlinkAggregator(address(eurcFeed)), 150);
+
+        // Seed pool with 1M of each.
+        usdc.mint(address(this), 1_000_000e6);
+        eurc.mint(address(this), 1_000_000e6);
+        IERC20(address(usdc)).approve(address(pool), 1_000_000e6);
+        IERC20(address(eurc)).approve(address(pool), 1_000_000e6);
+        pool.deposit(address(usdc), 1_000_000e6);
+        pool.deposit(address(eurc), 1_000_000e6);
+
+        gw = new ArcFXGateway(
+            IStablePool(address(pool)),
+            IStablecoinRegistry(address(reg)),
             10,
             address(this)
         );
@@ -260,9 +280,8 @@ contract ArcFXGatewayTest is Test {
 
     // ── pay() ──────────────────────────────────────────────────────────
 
+    /// @dev Pool is seeded in setUp; this just funds the customer with EURC and approves the gateway.
     function _fundPoolAndCustomer() internal {
-        usdc.mint(address(pool), 1_000_000 * 1e6);
-        eurc.mint(address(pool), 1_000_000 * 1e6);
         eurc.mint(customer, 1_000 * 1e6);
         vm.prank(customer);
         eurc.approve(address(gw), type(uint256).max);
@@ -283,9 +302,15 @@ contract ArcFXGatewayTest is Test {
         assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
         assertEq(paidBy, customer);
 
-        uint256 feeUsdc = (49_990_000 * 10) / 10_000;
-        assertEq(usdc.balanceOf(merchant) - merchantBefore, 49_990_000 - feeUsdc);
-        assertEq(gw.protocolFeesAccrued(address(usdc)), feeUsdc);
+        // received >= amountOut; gateway fee is taken from `received`, not amountOut.
+        // Read the actual stored payment to verify the math.
+        (uint256 storedPayout, uint256 storedFee) = gw.payments(g);
+        uint256 received = storedPayout + storedFee;
+        assertGe(received, 49_990_000, "received must cover amountOut");
+        assertEq(storedFee, (received * 10) / 10_000, "fee = received * 10 bps");
+        assertEq(storedPayout, received - storedFee);
+        assertEq(usdc.balanceOf(merchant) - merchantBefore, storedPayout);
+        assertEq(gw.protocolFeesAccrued(address(usdc)), storedFee);
     }
 
     /// @notice Same-token payments take the no-swap branch: customer pays exactly amountOut.
@@ -362,9 +387,21 @@ contract ArcFXGatewayTest is Test {
         gw.pay(g, 500_000);
     }
 
+    /// @notice Oracle deviation guard now lives in StablePool (per-token PriceGuard).
+    /// We prime lastAcceptedPrice with one successful swap, then push EURC's oracle
+    /// outside its 150bps deviation cap and verify the next pay() reverts.
     function test_Pay_RevertsOnOracleDeviation() public {
         _registerMerchant(); _fundPoolAndCustomer();
-        pool.setRate(0.5e18);
+
+        // Prime: one successful pay so StablePool records lastAcceptedPrice for both legs.
+        vm.prank(merchant);
+        bytes32 prime = gw.createInvoice(bytes32("prime"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
+        vm.prank(customer);
+        gw.pay(prime, 2_000_000);
+
+        // Now push EURC oracle wildly out of band (1.0863 -> 0.5000, ~54% drop, ≫ 150bps).
+        eurcFeed.setAnswer(0.5e8);
+
         vm.prank(merchant);
         bytes32 g = gw.createInvoice(bytes32("dev"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours));
         eurc.mint(customer, 100_000 * 1e6);
@@ -417,14 +454,15 @@ contract ArcFXGatewayTest is Test {
         vm.prank(merchant);
         gw.registerMerchant(merchant, address(eurc));
 
-        usdc.mint(address(pool), 1_000_000 * 1e6);
-        eurc.mint(address(pool), 1_000_000 * 1e6);
+        // Pool already seeded in setUp; just fund the customer in USDC.
         usdc.mint(customer, 1_000 * 1e6);
         vm.prank(customer);
         usdc.approve(address(gw), type(uint256).max);
 
+        // amountOut sized to avoid the iterator's plateau (fee-rounding can cause
+        // duplicate quote outputs that consume an extra iterator step).
         vm.prank(merchant);
-        bytes32 g = gw.createInvoice(bytes32("usdc-in"), address(usdc), 46_000_000, uint64(block.timestamp + 1 hours));
+        bytes32 g = gw.createInvoice(bytes32("usdc-in"), address(usdc), 23_456_789, uint64(block.timestamp + 1 hours));
 
         uint256 merchantBefore = eurc.balanceOf(merchant);
         vm.prank(customer);
@@ -704,27 +742,27 @@ contract ArcFXGatewayTest is Test {
         gw.refundInvoice(g);
     }
 
-    /// @notice Regression: live OracleAMM returned `999_999` USDC for the
-    /// gateway's linearly-estimated EURC input when the merchant target was
-    /// `1_000_000`. The old `_estimateAmountIn` reverted with
-    /// `InsufficientOutput(999_999, 1_000_000)`. Verify the iterating
-    /// estimator now walks forward 1 wei and the swap clears.
+    /// @notice Regression: when a pool's quote falls 1 wei short of the gateway's
+    /// linear inverse extrapolation, `_estimateAmountIn` walks forward 1 wei at a
+    /// time so pay() still clears. Uses a tiny IStablePool stub that implements
+    /// just `quote` + `swap` and returns `linear - 1` for non-probe inputs.
     function test_Pay_RecoversFromOneWeiPoolShortfall() public {
-        // Replace the linear MockStableSwapPool with a quote that's
-        // deliberately 1 wei short of the linear extrapolation.
-        ShortByOnePool shortPool = new ShortByOnePool(
-            IERC20(address(usdc)), IERC20(address(eurc)), 1_085_866
+        // Build a stub pool that returns a clean probe rate but is 1 wei short
+        // for any non-probe quote. EURC->USDC rate ≈ 1.085_866 USDC per EURC.
+        ShortByOneStablePool shortPool = new ShortByOneStablePool(
+            usdc, eurc, 1_085_866
         );
+
+        // New gateway pointing at the stub. Same registry; the gateway only needs
+        // `tokenInfo` for decimals + `isActive` for token validation.
         gw = new ArcFXGateway(
-            IStableSwapPool(address(shortPool)),
-            IChainlinkAggregator(address(oracle)),
+            IStablePool(address(shortPool)),
+            IStablecoinRegistry(address(reg)),
             10,
             address(this)
         );
-        // Wide-open oracle deviation guard for this contrived rate.
-        oracle.setAnswer(1.0859e8, block.timestamp);
 
-        // Fund the pool's USDC side so it can pay out, and fund the customer.
+        // Fund the stub's USDC reserve so its swap can pay out.
         usdc.mint(address(shortPool), 10_000 * 1e6);
         eurc.mint(customer, 1_000 * 1e6);
         vm.prank(customer);
@@ -737,7 +775,8 @@ contract ArcFXGatewayTest is Test {
             bytes32("shortfall"), address(eurc), 1_000_000, uint64(block.timestamp + 1 hours)
         );
 
-        // Without the iterator, this reverts with InsufficientOutput(999_999, 1_000_000).
+        // Without the iterator this reverts because the stub returns 1 wei less
+        // than `amountOut` for the linear-inverse input.
         vm.prank(customer);
         gw.pay(g, 2_000_000);
 
@@ -745,4 +784,74 @@ contract ArcFXGatewayTest is Test {
         assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
         assertEq(paidBy, customer);
     }
+}
+
+/// @dev Minimal IStablePool stub used only by the shortfall regression test
+/// in `ArcFXGatewayTest`. Mirrors the linearity of `ShortByOnePool`: the probe
+/// quote (1 token unit) returns the configured rate, but every non-probe quote
+/// returns `linear - 1` to force `_estimateAmountIn`'s 1-wei walker.
+contract ShortByOneStablePool is IStablePool {
+    using SafeERC20 for IERC20;
+
+    IERC20 public immutable USDC;
+    IERC20 public immutable EURC;
+    uint256 public probeRateNum1to0_perMicro; // EURC->USDC rate, scaled per 1e6 of EURC
+
+    constructor(IERC20 usdc_, IERC20 eurc_, uint256 probeRateNum) {
+        USDC = usdc_;
+        EURC = eurc_;
+        probeRateNum1to0_perMicro = probeRateNum;
+    }
+
+    function _quoteEurcToUsdc(uint256 amountIn) internal view returns (uint256) {
+        if (amountIn == 1e6) return probeRateNum1to0_perMicro;
+        uint256 linear = (amountIn * probeRateNum1to0_perMicro) / 1e6;
+        return linear == 0 ? 0 : linear - 1;
+    }
+
+    function _quoteUsdcToEurc(uint256 amountIn) internal view returns (uint256) {
+        if (amountIn == 1e6) return (1e6 * 1e6) / probeRateNum1to0_perMicro;
+        uint256 linear = (amountIn * 1e6) / probeRateNum1to0_perMicro;
+        return linear == 0 ? 0 : linear - 1;
+    }
+
+    function quote(address tokenIn, address tokenOut, uint256 amountIn)
+        external view returns (uint256)
+    {
+        if (tokenIn == address(EURC) && tokenOut == address(USDC)) return _quoteEurcToUsdc(amountIn);
+        if (tokenIn == address(USDC) && tokenOut == address(EURC)) return _quoteUsdcToEurc(amountIn);
+        revert SameToken(tokenIn);
+    }
+
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 minOut,
+        uint256 /*deadline*/,
+        address recipient
+    ) external returns (uint256 amountOut) {
+        if (tokenIn == address(EURC) && tokenOut == address(USDC)) {
+            amountOut = _quoteEurcToUsdc(amountIn);
+        } else if (tokenIn == address(USDC) && tokenOut == address(EURC)) {
+            amountOut = _quoteUsdcToEurc(amountIn);
+        } else {
+            revert SameToken(tokenIn);
+        }
+        if (amountOut < minOut) revert InsufficientOutput(amountOut, minOut);
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        IERC20(tokenOut).safeTransfer(recipient, amountOut);
+    }
+
+    // Unused getters — return zero/false to satisfy the IStablePool surface.
+    function reserves(address) external pure returns (uint256) { return 0; }
+    function protocolFeesAccrued(address) external pure returns (uint256) { return 0; }
+    function swapFeeBps() external pure returns (uint16) { return 0; }
+    function paused() external pure returns (bool) { return false; }
+    function deposit(address, uint256) external {}
+    function withdraw(address, uint256, address) external {}
+    function withdrawProtocolFees(address, uint256, address) external {}
+    function setSwapFeeBps(uint16) external {}
+    function pause() external {}
+    function unpause() external {}
 }

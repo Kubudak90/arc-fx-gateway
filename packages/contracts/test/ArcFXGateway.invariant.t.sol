@@ -2,22 +2,27 @@
 pragma solidity ^0.8.26;
 
 import { Test } from "forge-std/Test.sol";
-import { ArcFXGateway } from "../src/ArcFXGateway.sol";
-import { IStableSwapPool } from "../src/interfaces/IStableSwapPool.sol";
-import { IChainlinkAggregator } from "../src/interfaces/IChainlinkAggregator.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { MockERC20 } from "./helpers/MockERC20.sol";
-import { MockChainlink } from "./helpers/MockChainlink.sol";
-import { MockStableSwapPool } from "./helpers/MockStableSwapPool.sol";
-import { GatewayHandler } from "./handlers/GatewayHandler.sol";
+
+import { ArcFXGateway }         from "../src/ArcFXGateway.sol";
+import { StablecoinRegistry }   from "../src/registry/StablecoinRegistry.sol";
+import { StablePool }           from "../src/pool/StablePool.sol";
+import { IStablePool }          from "../src/pool/IStablePool.sol";
+import { IStablecoinRegistry }  from "../src/registry/IStablecoinRegistry.sol";
+import { IChainlinkAggregator } from "../src/interfaces/IChainlinkAggregator.sol";
+import { MockChainlinkFeed }    from "../src/testnet/MockChainlinkFeed.sol";
+import { MockERC20 }            from "./helpers/MockERC20.sol";
+import { GatewayHandler }       from "./handlers/GatewayHandler.sol";
 
 /// @notice Invariant suite — standalone setup, does not inherit unit tests.
 contract ArcFXGatewayInvariantTest is Test {
-    MockERC20          usdc;
-    MockERC20          eurc;
-    MockChainlink      oracle;
-    MockStableSwapPool pool;
-    ArcFXGateway       gw;
+    StablecoinRegistry  reg;
+    StablePool          pool;
+    MockERC20           usdc;
+    MockERC20           eurc;
+    MockChainlinkFeed   usdcFeed;
+    MockChainlinkFeed   eurcFeed;
+    ArcFXGateway        gw;
 
     address merchant = makeAddr("merchant");
     address customer = makeAddr("customer");
@@ -26,14 +31,29 @@ contract ArcFXGatewayInvariantTest is Test {
 
     function setUp() public {
         vm.warp(1_700_000_000);
-        usdc   = new MockERC20("USDC", "USDC", 6);
-        eurc   = new MockERC20("EURC", "EURC", 6);
-        oracle = new MockChainlink(8);
-        oracle.setAnswer(1.0863e8, block.timestamp);
-        pool   = new MockStableSwapPool(IERC20(address(usdc)), IERC20(address(eurc)), 1.0860e18);
-        gw     = new ArcFXGateway(
-            IStableSwapPool(address(pool)),
-            IChainlinkAggregator(address(oracle)),
+
+        usdc     = new MockERC20("USDC", "USDC", 6);
+        eurc     = new MockERC20("EURC", "EURC", 6);
+        usdcFeed = new MockChainlinkFeed(8, 1.0000e8);
+        eurcFeed = new MockChainlinkFeed(8, 1.0863e8);
+
+        reg  = new StablecoinRegistry(address(this));
+        pool = new StablePool(address(reg), 5, address(this));
+
+        reg.listToken(address(usdc), 6, IChainlinkAggregator(address(usdcFeed)), 50);
+        reg.listToken(address(eurc), 6, IChainlinkAggregator(address(eurcFeed)), 150);
+
+        // Seed pool with 1M of each.
+        usdc.mint(address(this), 1_000_000e6);
+        eurc.mint(address(this), 1_000_000e6);
+        IERC20(address(usdc)).approve(address(pool), 1_000_000e6);
+        IERC20(address(eurc)).approve(address(pool), 1_000_000e6);
+        pool.deposit(address(usdc), 1_000_000e6);
+        pool.deposit(address(eurc), 1_000_000e6);
+
+        gw = new ArcFXGateway(
+            IStablePool(address(pool)),
+            IStablecoinRegistry(address(reg)),
             10,
             address(this)
         );
@@ -42,9 +62,7 @@ contract ArcFXGatewayInvariantTest is Test {
         vm.prank(merchant);
         gw.registerMerchant(merchant, address(usdc));
 
-        // Fund pool and customer.
-        usdc.mint(address(pool), 1_000_000 * 1e6);
-        eurc.mint(address(pool), 1_000_000 * 1e6);
+        // Fund customer.
         eurc.mint(customer, 1_000 * 1e6);
         vm.prank(customer);
         eurc.approve(address(gw), type(uint256).max);

@@ -84,7 +84,7 @@ export default function CheckoutDemoPage() {
 
           <div className="mt-8 grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6 items-start">
             {/* Active step panel */}
-            <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_20px_40px_-24px_rgba(11,20,38,0.10)] p-8 min-h-[440px]">
+            <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_20px_40px_-24px_rgba(11,20,38,0.10)] p-8 min-h-[520px]">
               {step() === "Invoice"  && <StepInvoice merchant={merchant} invoice={invoice} onNext={() => setStepIdx(1)} />}
               {step() === "Wallet"   && <StepWallet  source={source} setSource={setSource} onNext={() => setStepIdx(2)} />}
               {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} merchantPayout={merchantPayout} quoteSecs={quoteSecs} onPay={() => { setPaying(true); setStepIdx(3); setTimeout(() => setStepIdx(4), 3200); }} />}
@@ -204,7 +204,8 @@ function StepWallet({ source, setSource, onNext }: {
         through the flow.
       </p>
 
-      <button onClick={onNext} className="mt-auto btn-arcora-pill self-start">
+      <div aria-hidden className="flex-1 min-h-12" />
+      <button onClick={onNext} className="btn-arcora-pill self-start">
         Connect &amp; continue →
       </button>
     </div>

@@ -85,7 +85,7 @@ export default function CheckoutDemoPage() {
 
           <div className="mt-8 grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6 items-start">
             {/* Active step panel */}
-            <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_20px_40px_-24px_rgba(11,20,38,0.10)] p-8 min-h-[520px]">
+            <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_20px_40px_-24px_rgba(11,20,38,0.10)] p-8 min-h-[520px] flex flex-col">
               {step() === "Invoice"  && <StepInvoice merchant={merchant} invoice={invoice} onNext={() => setStepIdx(1)} />}
               {step() === "Wallet"   && <StepWallet  source={source} setSource={setSource} onNext={() => setStepIdx(2)} />}
               {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} merchantPayout={merchantPayout} quoteSecs={quoteSecs} onPay={() => { setPaying(true); setStepIdx(3); setTimeout(() => setStepIdx(4), 3200); }} />}
@@ -144,7 +144,7 @@ function StepInvoice({ merchant, invoice, onNext }: {
   merchant: { name: string; desc: string }; invoice: { amount: number; currency: string; settle: string }; onNext: () => void;
 }) {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1">
       <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Step 1 · Invoice</p>
       <h2 className="mt-3 font-[family-name:var(--font-display)] text-[28px] tracking-tight text-arcora-slate">
         Pay {merchant.name}
@@ -175,7 +175,7 @@ function StepWallet({ source, setSource, onNext }: {
   source: Source; setSource: (s: Source) => void; onNext: () => void;
 }) {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1">
       <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Step 2 · Wallet</p>
       <h2 className="mt-3 font-[family-name:var(--font-display)] text-[28px] tracking-tight text-arcora-slate">
         Choose how you want to pay
@@ -221,7 +221,7 @@ function StepQuote({ source, sourceAmount, fee, merchantPayout, quoteSecs, onPay
   const expired = quoteSecs <= 0;
   const sameToken = source === "USDC";
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1">
       <div className="flex items-baseline justify-between">
         <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Step 3 · Quote</p>
         <span className={`font-[family-name:var(--font-mono)] text-xs tabular-nums ${expired ? "text-red-600" : "text-muted-foreground"}`}>
@@ -254,7 +254,7 @@ function StepQuote({ source, sourceAmount, fee, merchantPayout, quoteSecs, onPay
 /* ── Step 4: Paying ──────────────────────────────────────────────────── */
 function StepPaying({ source }: { source: Source }) {
   return (
-    <div className="flex flex-col h-full justify-center items-center gap-6">
+    <div className="flex flex-col flex-1 justify-center items-center gap-6">
       <div className="size-14 rounded-full border-4 border-arcora-border border-t-arcora-blue animate-spin" />
       <div className="text-center">
         <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Step 4 · Pay</p>
@@ -278,7 +278,7 @@ function StepSettled({ merchant, invoice, source, sourceAmount, merchantPayout, 
   onReset: () => void;
 }) {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1">
       <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-arcora-teal">Step 5 · Settled</p>
       <h2 className="mt-3 font-[family-name:var(--font-display)] text-[28px] tracking-tight text-arcora-slate">
         Payment confirmed.

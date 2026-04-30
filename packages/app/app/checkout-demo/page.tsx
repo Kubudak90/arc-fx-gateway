@@ -31,9 +31,18 @@ export default function CheckoutDemoPage() {
   const merchant = { name: "Lumen Apparel", desc: "Order #ord_8124 · 2 items" };
   const invoice  = { amount: 49.0, currency: "USD", settle: "USDC" };
 
-  const fxRate = source === "USDC" ? 1.0 : 1 / ORACLE;
-  const sourceAmount = invoice.amount / fxRate;
+  // 1 EUR = ORACLE USD. So to deliver $X USDC the EURC payer needs $X / ORACLE
+  // EUR before pool fees; same-token USDC payers pay the gross 1:1. Pool fee is
+  // baked in by lifting the EURC input slightly so the post-swap output still
+  // hits invoice.amount.
+  const sourceAmountBeforePoolFee =
+    source === "USDC" ? invoice.amount : invoice.amount / ORACLE;
+  const sourceAmount =
+    source === "USDC"
+      ? invoice.amount
+      : sourceAmountBeforePoolFee / (1 - POOL_FEE_BPS / 10_000);
   const fee = (invoice.amount * PROTOCOL_FEE_BPS) / 10_000;
+  const merchantPayout = invoice.amount - fee;
 
   // Quote countdown
   useEffect(() => {
@@ -78,9 +87,9 @@ export default function CheckoutDemoPage() {
             <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_20px_40px_-24px_rgba(11,20,38,0.10)] p-8 min-h-[440px]">
               {step() === "Invoice"  && <StepInvoice merchant={merchant} invoice={invoice} onNext={() => setStepIdx(1)} />}
               {step() === "Wallet"   && <StepWallet  source={source} setSource={setSource} onNext={() => setStepIdx(2)} />}
-              {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} quoteSecs={quoteSecs} onPay={() => { setPaying(true); setStepIdx(3); setTimeout(() => setStepIdx(4), 3200); }} />}
+              {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} merchantPayout={merchantPayout} quoteSecs={quoteSecs} onPay={() => { setPaying(true); setStepIdx(3); setTimeout(() => setStepIdx(4), 3200); }} />}
               {step() === "Pay"      && <StepPaying  source={source} />}
-              {step() === "Settled"  && <StepSettled merchant={merchant} invoice={invoice} source={source} sourceAmount={sourceAmount} onReset={reset} />}
+              {step() === "Settled"  && <StepSettled merchant={merchant} invoice={invoice} source={source} sourceAmount={sourceAmount} merchantPayout={merchantPayout} fee={fee} onReset={reset} />}
             </div>
 
             {/* Order summary rail */}
@@ -203,10 +212,11 @@ function StepWallet({ source, setSource, onNext }: {
 }
 
 /* ── Step 3: Quote ───────────────────────────────────────────────────── */
-function StepQuote({ source, sourceAmount, fee, quoteSecs, onPay }: {
-  source: Source; sourceAmount: number; fee: number; quoteSecs: number; onPay: () => void;
+function StepQuote({ source, sourceAmount, fee, merchantPayout, quoteSecs, onPay }: {
+  source: Source; sourceAmount: number; fee: number; merchantPayout: number; quoteSecs: number; onPay: () => void;
 }) {
   const expired = quoteSecs <= 0;
+  const sameToken = source === "USDC";
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-baseline justify-between">
@@ -220,10 +230,14 @@ function StepQuote({ source, sourceAmount, fee, quoteSecs, onPay }: {
       </h2>
 
       <div className="mt-6 rounded-2xl border border-arcora-border bg-arcora-gray/30 p-6 space-y-3 font-[family-name:var(--font-mono)] text-sm">
-        <Row label="You pay"  value={`${sourceAmount.toFixed(4)} ${source}`} />
-        <Row label="Merchant gets" value={`$49.00 USDC`} highlight />
-        <Row label="Oracle rate" value={`1 EUR = ${ORACLE.toFixed(4)} USD`} muted />
-        <Row label={`Pool fee · ${POOL_FEE_BPS} bps`} value={source === "USDC" ? "— same-token, no swap" : "applied at swap"} muted />
+        <Row label="You pay"          value={`${sourceAmount.toFixed(4)} ${source}`} />
+        <Row label="Merchant gets"    value={`$${merchantPayout.toFixed(2)} USDC`} highlight />
+        <Row label="Oracle rate"      value={sameToken ? "— same-token, no swap" : `1 EUR = ${ORACLE.toFixed(4)} USD`} muted />
+        <Row
+          label={`Pool fee · ${POOL_FEE_BPS} bps`}
+          value={sameToken ? "— same-token, no swap" : "embedded in quote"}
+          muted
+        />
         <Row label={`Protocol fee · ${PROTOCOL_FEE_BPS} bps`} value={`$${fee.toFixed(2)}`} muted />
       </div>
 
@@ -255,8 +269,10 @@ function StepPaying({ source }: { source: Source }) {
 }
 
 /* ── Step 5: Settled ─────────────────────────────────────────────────── */
-function StepSettled({ merchant, invoice, source, sourceAmount, onReset }: {
-  merchant: { name: string }; invoice: { amount: number; settle: string }; source: Source; sourceAmount: number; onReset: () => void;
+function StepSettled({ merchant, invoice, source, sourceAmount, merchantPayout, fee, onReset }: {
+  merchant: { name: string }; invoice: { amount: number; settle: string };
+  source: Source; sourceAmount: number; merchantPayout: number; fee: number;
+  onReset: () => void;
 }) {
   return (
     <div className="flex flex-col h-full">
@@ -265,14 +281,17 @@ function StepSettled({ merchant, invoice, source, sourceAmount, onReset }: {
         Payment confirmed.
       </h2>
       <p className="mt-2 text-muted-foreground">
-        {merchant.name} received <span className="text-arcora-slate font-semibold">${invoice.amount.toFixed(2)} {invoice.settle}</span> on
-        Arc — and the InvoicePaid webhook is on its way.
+        {merchant.name} received <span className="text-arcora-slate font-semibold">${merchantPayout.toFixed(2)} {invoice.settle}</span> on Arc —
+        the InvoicePaid webhook is on its way.
       </p>
 
       <div className="mt-6 rounded-2xl border border-arcora-border bg-arcora-gray/30 p-6 space-y-3 font-[family-name:var(--font-mono)] text-sm">
-        <Row label="You paid" value={`${sourceAmount.toFixed(4)} ${source}`} />
-        <Row label="Tx hash" value="0x…simulated"      muted />
-        <Row label="Webhook" value="invoice.paid · queued" muted />
+        <Row label="You paid"        value={`${sourceAmount.toFixed(4)} ${source}`} />
+        <Row label="Invoice gross"   value={`$${invoice.amount.toFixed(2)} ${invoice.settle}`} muted />
+        <Row label="Protocol fee"    value={`$${fee.toFixed(2)} ${invoice.settle}`} muted />
+        <Row label="Merchant payout" value={`$${merchantPayout.toFixed(2)} ${invoice.settle}`} highlight />
+        <Row label="Tx hash"         value="0x…simulated" muted />
+        <Row label="Webhook"         value="invoice.paid · queued" muted />
       </div>
 
       <div className="mt-auto flex gap-3 pt-6 flex-wrap">

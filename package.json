@@ -8,7 +8,11 @@
   },
   "scripts": {
     "build:contracts": "pnpm --filter @arcora/contracts build",
-    "test:contracts": "pnpm --filter @arcora/contracts test"
+    "test:contracts": "pnpm --filter @arcora/contracts test",
+    "deploy:app": "cd packages/app && vercel --prod --yes",
+    "deploy:demo": "cd packages/demo-merchant && vercel --prod --yes",
+    "pitch:pdf": "marp --allow-local-files docs/PITCH.md -o docs/arcora-pitch.pdf",
+    "pitch:html": "marp --allow-local-files docs/PITCH.md -o docs/arcora-pitch.html"
   },
   "devDependencies": {
     "@marp-team/marp-cli": "^4.3.1"

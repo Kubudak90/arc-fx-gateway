@@ -1,29 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { IERC20 }            from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 }         from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Ownable }           from "@openzeppelin/contracts/access/Ownable.sol";
+import { Ownable2Step }      from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { ReentrancyGuard }   from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import { IStableSwapPool } from "./interfaces/IStableSwapPool.sol";
-import { IChainlinkAggregator } from "./interfaces/IChainlinkAggregator.sol";
-import { PriceGuard } from "./libraries/PriceGuard.sol";
+import { IStablePool }           from "./pool/IStablePool.sol";
+import { IStablecoinRegistry }   from "./registry/IStablecoinRegistry.sol";
 
 /// @title ArcFXGateway
-/// @notice Merchant checkout + atomic FX settlement on Arc.
-contract ArcFXGateway is Ownable, ReentrancyGuard {
+/// @notice Merchant checkout + atomic FX settlement on Arc. v0.7 — token-agnostic,
+///         routes through StablePool for cross-stable swaps. Same-token path is direct.
+contract ArcFXGateway is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    // ── Immutable config ───────────────────────────────────────────────
-    IStableSwapPool       public immutable POOL;
-    IChainlinkAggregator  public immutable ORACLE;
-    IERC20                public immutable USDC;          // pool token index 0
-    IERC20                public immutable EURC;          // pool token index 1
-    uint8                 public immutable USDC_INDEX;
-    uint8                 public immutable EURC_INDEX;
-    uint256               public immutable PROTOCOL_FEE_BPS;
-    uint256               public constant  MAX_ORACLE_DEVIATION_BPS = 50;
+    // ── Immutable config (v0.7) ────────────────────────────────────────
+    IStablePool          public immutable POOL;
+    IStablecoinRegistry  public immutable REGISTRY;
+    uint256              public immutable PROTOCOL_FEE_BPS;
+
+    /// @dev Max iterations for _estimateAmountIn (carried from v0.5).
+    uint256 private constant ESTIMATE_MAX_STEPS = 8;
 
     // ── Merchant registry ──────────────────────────────────────────────
     struct Merchant {
@@ -113,18 +112,14 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
 
     // ── Constructor ────────────────────────────────────────────────────
     constructor(
-        IStableSwapPool pool,
-        IChainlinkAggregator oracle,
+        IStablePool pool,
+        IStablecoinRegistry registry,
         uint256 protocolFeeBps,
         address initialOwner
     ) Ownable(initialOwner) {
         POOL = pool;
-        ORACLE = oracle;
+        REGISTRY = registry;
         PROTOCOL_FEE_BPS = protocolFeeBps;
-        USDC = pool.getToken(0);
-        EURC = pool.getToken(1);
-        USDC_INDEX = 0;
-        EURC_INDEX = 1;
     }
 
     // ── Merchant management ────────────────────────────────────────────
@@ -132,7 +127,7 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     function registerMerchant(address payoutAddress, address payoutToken) external {
         if (merchants[msg.sender].active) revert MerchantAlreadyRegistered();
         if (payoutAddress == address(0)) revert InvalidPayoutAddress();
-        if (payoutToken != address(USDC) && payoutToken != address(EURC)) revert InvalidPayoutToken();
+        if (!REGISTRY.isActive(payoutToken)) revert InvalidPayoutToken();
         merchants[msg.sender] = Merchant({
             payoutAddress: payoutAddress,
             payoutToken:   payoutToken,
@@ -153,7 +148,7 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     function updatePayoutToken(address newPayoutToken) external {
         Merchant storage m = merchants[msg.sender];
         if (!m.active) revert NotMerchant();
-        if (newPayoutToken != address(USDC) && newPayoutToken != address(EURC)) revert InvalidPayoutToken();
+        if (!REGISTRY.isActive(newPayoutToken)) revert InvalidPayoutToken();
         address old = m.payoutToken;
         m.payoutToken = newPayoutToken;
         emit MerchantPayoutTokenUpdated(msg.sender, old, newPayoutToken);
@@ -198,7 +193,7 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     ) internal returns (bytes32 globalId) {
         Merchant memory m = merchants[merchant];
         if (!m.active) revert MerchantInactive();
-        if (payIn != address(USDC) && payIn != address(EURC)) revert UnsupportedPair();
+        if (!REGISTRY.isActive(payIn)) revert UnsupportedPair();
 
         globalId = keccak256(abi.encode(merchant, merchantInvoiceId));
         if (invoices[globalId].status != InvoiceStatus.None) revert InvoiceAlreadyExists(globalId);
@@ -226,7 +221,7 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         address payoutToken    = inv.payoutToken;
         address payoutAddress  = merchants[inv.merchant].payoutAddress;
 
-        // Same-token direct path: no swap, no oracle deviation check needed.
+        // Same-token direct path: no swap, no AMM fee.
         if (inv.payIn == payoutToken) {
             if (inv.amountOut > maxAmountIn) revert SlippageExceeded(inv.amountOut, maxAmountIn);
 
@@ -245,25 +240,20 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
             return;
         }
 
-        // Swap path
-        uint8 iIn  = inv.payIn   == address(USDC) ? USDC_INDEX : EURC_INDEX;
-        uint8 jOut = payoutToken == address(USDC) ? USDC_INDEX : EURC_INDEX;
-
-        uint256 amountIn = _estimateAmountIn(iIn, jOut, inv.amountOut);
+        // Cross-token path: route through StablePool.
+        uint256 amountIn = _estimateAmountIn(inv.payIn, payoutToken, inv.amountOut);
         if (amountIn > maxAmountIn) revert SlippageExceeded(amountIn, maxAmountIn);
 
         IERC20(inv.payIn).safeTransferFrom(msg.sender, address(this), amountIn);
         IERC20(inv.payIn).forceApprove(address(POOL), amountIn);
-        uint256 received = POOL.swap(iIn, jOut, amountIn, inv.amountOut, block.timestamp + 1);
-
-        // Pool-implied rate (quote per 1 base, 1e18-scaled), for oracle deviation guard.
-        uint256 rateForCheck;
-        if (iIn == EURC_INDEX) {
-            rateForCheck = (received * 1e18) / amountIn;
-        } else {
-            rateForCheck = (amountIn * 1e18) / received;
-        }
-        PriceGuard.check(rateForCheck, ORACLE, MAX_ORACLE_DEVIATION_BPS);
+        uint256 received = POOL.swap(
+            inv.payIn,
+            payoutToken,
+            amountIn,
+            inv.amountOut,
+            block.timestamp + 1,
+            address(this)
+        );
 
         uint256 swapFee    = (received * PROTOCOL_FEE_BPS) / 10_000;
         uint256 swapPayout = received - swapFee;
@@ -294,10 +284,7 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
         address refundTo    = inv.paidBy;
         address merchant    = inv.merchant;
 
-        // The merchant repays the customer the full payout amount and is made
-        // whole by clawing back the protocol fee from accrued. If the owner
-        // already withdrew the fees and the bucket is now short, surface a
-        // clean error instead of an opaque transfer failure.
+        // Surface a clean error if the owner already withdrew the fee bucket.
         if (protocolFeesAccrued[payoutToken] < p.fee) {
             revert InsufficientFeesForRefund(p.fee, protocolFeesAccrued[payoutToken]);
         }
@@ -308,7 +295,6 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
 
         // Pull payout from merchant → forward to payer.
         IERC20(payoutToken).safeTransferFrom(merchant, refundTo, p.merchantPayout);
-        // Return the protocol fee (held by this contract) to the merchant.
         if (p.fee > 0) {
             IERC20(payoutToken).safeTransfer(merchant, p.fee);
         }
@@ -317,24 +303,22 @@ contract ArcFXGateway is Ownable, ReentrancyGuard {
     }
 
     /// @dev Inverts the pool's forward swap quote to find the smallest input
-    /// that produces at least `amountOut`. The pool's `calculateSwap` is
-    /// monotone-non-decreasing but not strictly proportional under integer
-    /// rounding, so a pure linear inverse can fall a wei or two short. We seed
-    /// with the linear ceiling, then walk forward 1 wei at a time until the
-    /// quoted output meets the target. Bounded so a degenerate pool can never
-    /// freeze pay() — if the loop bails out, the swap call downstream reverts
-    /// cleanly with `InsufficientOutput`.
-    uint256 private constant ESTIMATE_MAX_STEPS = 8;
-
-    function _estimateAmountIn(uint8 iIn, uint8 jOut, uint256 amountOut) internal view returns (uint256 amountIn) {
-        uint256 probeIn  = 1e6;
-        uint256 probeOut = POOL.calculateSwap(iIn, jOut, probeIn);
+    /// that produces at least `amountOut`. Linear inverse can fall a wei or
+    /// two short under integer rounding; we walk forward 1 wei at a time
+    /// bounded by ESTIMATE_MAX_STEPS so a degenerate pool can never freeze
+    /// pay().
+    function _estimateAmountIn(address tokenIn, address tokenOut, uint256 amountOut)
+        internal
+        view
+        returns (uint256 amountIn)
+    {
+        uint8 decIn = REGISTRY.tokenInfo(tokenIn).decimals;
+        uint256 probeIn  = 10 ** decIn;
+        uint256 probeOut = POOL.quote(tokenIn, tokenOut, probeIn);
         if (probeOut == 0) return type(uint256).max;
-
         amountIn = (amountOut * probeIn + probeOut - 1) / probeOut;
-
         for (uint256 i = 0; i < ESTIMATE_MAX_STEPS; i++) {
-            if (POOL.calculateSwap(iIn, jOut, amountIn) >= amountOut) return amountIn;
+            if (POOL.quote(tokenIn, tokenOut, amountIn) >= amountOut) return amountIn;
             unchecked { amountIn++; }
         }
     }

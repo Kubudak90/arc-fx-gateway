@@ -1,8 +1,10 @@
 {
   "name": "@arcora/sdk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Stripe-style checkout SDK for Arcora — stablecoin payments on Arc Network",
   "keywords": ["arcora", "stablecoin", "checkout", "payments", "arc", "usdc", "eurc"],
+  "unpkg": "./dist/arcora.global.js",
+  "jsdelivr": "./dist/arcora.global.js",
   "homepage": "https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/packages/sdk#readme",
   "repository": {
     "type": "git",
@@ -18,7 +20,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
-    }
+    },
+    "./global": "./dist/arcora.global.js"
   },
   "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": false,

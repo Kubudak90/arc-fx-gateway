@@ -12,6 +12,28 @@ pnpm add @arcora/sdk
 
 For React: `npm install @arcora/sdk-react`
 
+### Drop-in `<script>` tag (no build step)
+
+For sites without a bundler — static HTML, simple WordPress themes, anything that can host a script tag — use the IIFE bundle from a CDN:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@arcora/sdk@1.1/dist/arcora.global.js"></script>
+<script>
+  Arcora.init({ apiKey: "ak_live_…", environment: "testnet" });
+  document.getElementById("pay").addEventListener("click", async () => {
+    const inv = await Arcora.createInvoice({
+      amountUsdc: 49.99,
+      payInToken: "EURC",
+      successUrl: window.location.origin + "/?paid=1",
+    });
+    Arcora.openCheckout(inv);
+  });
+</script>
+<button id="pay">Pay €49.99</button>
+```
+
+Same surface as the npm package, flattened onto a global `Arcora`. Works in any modern browser; ~1.8 KB minified.
+
 ## Usage
 
 ```ts

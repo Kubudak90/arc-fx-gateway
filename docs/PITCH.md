@@ -159,6 +159,27 @@ Gateway, AMM, oracle, indexer, webhook dispatcher, hosted app, SDK — all in on
 
 ---
 
+## Arcora sits *above* Arc primitives
+
+Arc itself ships first-party financial rails. Arcora is the **merchant abstraction layer** on top — same shape Stripe Checkout has on top of card-network rails.
+
+| Concern | Arc primitive | Arcora |
+|---|---|---|
+| Enterprise FX (RFQ + escrow) | StableFX | — |
+| Generic A→B swap | App Kit Swap | — |
+| Crosschain USDC bridge | App Kit Bridge | — |
+| Server wallet management | Circle Developer-Controlled Wallets | — |
+| Compliance (Elliptic / TRM Labs) | App Kit hooks | — |
+| Invoice → atomic settle in **exact** payout token | — | **ArcFXGateway** |
+| Hosted checkout link + customer wallet flow | — | `/i/[invoiceId]` |
+| Refund-in-payout-token + protocol-fee return | — | **`refundInvoice()`** |
+| Per-merchant treasury reconciliation | — | `/m/treasury` |
+| Three-line npm SDK | — | `@arcora/sdk` |
+
+We delegate to Arc primitives where they fit — v2.0 crosschain ships as an **App Kit Bridge** integration, not a re-implementation of CCTP. Stripe doesn't reinvent ACH; we don't reinvent rails.
+
+---
+
 ## Proof — testnet metrics
 
 <div style="font-size: 22px;">
@@ -169,7 +190,7 @@ Gateway, AMM, oracle, indexer, webhook dispatcher, hosted app, SDK — all in on
 | Vitest tests passing | **46** (auth, crypto, schema, API routes, components) |
 | Live txs end-to-end | **4 distinct flows** (same-token + swap, both with refund) |
 | Contract bytecode | **2.1M gas** to deploy (well under block limit) |
-| Deploy cost | < $0.10 of testnet ETH |
+| Deploy cost | < $0.10 USDC (Arc settles gas in USDC, not ETH) |
 
 **Sample on-chain proofs:**
 - Same-token pay: `0x3f2fc3ff…84ef08`

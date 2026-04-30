@@ -2,6 +2,36 @@
 
 All notable changes to Arcora are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project follows [Semantic Versioning](https://semver.org/) for the published `@arcora/*` npm packages.
 
+## [1.0.3] — 2026-04-30
+
+Marketing surface + docs alignment release. No contract changes; SDK npm artifacts unchanged. v0.6 gateway at `0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3` remains canonical.
+
+### Added
+- **`/checkout-demo`** — stand-alone simulated 5-step checkout walk-through (Invoice → Wallet → Quote → Pay → Settled). No wallet, no chain. Math derived from real Arcora constants (1.0863 oracle rate, 4 bps pool fee, 10 bps protocol fee). Linked from the landing's How-it-works section + footer.
+- **Live settlement simulator on the landing** — replays the real v1.0.2 pay-flow against the on-chain Chainlink oracle, cycling USDC→USDC, EURC→USDC, USDC→EURC. Every figure derived from the deployed contract.
+- **Dashboard preview** + **SDK code block** sections on the landing — Treasury chart and "Four lines, first settlement" snippet, with explicit "Illustrative" disclaimer where the chart numbers are placeholders.
+- **Crosschain route diagram** (v2.0 visualisation) inline on landing. Animated source-chain → Arc settlement.
+- **Roadmap rows** on the landing: v1.0 → v3.0 with phase pills.
+- **Rich site footer** with Product / Developers / Resources columns. Every link points at something that actually exists today (no placeholder /about, /security, /compliance pages).
+- **JetBrains Mono** added via `next/font` for tabular numbers.
+- **Plan 4 spec** (`docs/superpowers/specs/2026-04-30-plan-4-crosschain-checkout.md`) — v2.0 crosschain rewrites the previous CCTP plan around **App Kit Bridge** (Arc's recommended primitive) instead of raw `TokenMessenger` calls. Off-chain EIP-712 intent, single Arcora relayer, no new gateway contract.
+- **README "How Arcora relates to Arc primitives"** subsection — frames Arcora as the merchant abstraction layer above StableFX / App Kit / Circle DCW / Refund Protocol. Stripe ↔ Visa shape.
+- **Pitch deck refresh** — new "Arcora sits above Arc primitives" slide; gas-cost line corrected from "testnet ETH" to "USDC" (Arc settles gas in USDC).
+- **Arc docs alignment** verified through the `arc-network` MCP. USDC, EURC, chain config, decimals, native gas — all confirmed against `docs.arc.network`.
+
+### Fixed
+- **EURC checkout math** — the demo's quote panel rendered `53.2287 EURC` for a $49 invoice. The rate was inverted (`1/ORACLE` instead of `ORACLE`); correct value is `~45.13 EURC`.
+- **Crosschain diagram label overflow** — hub text was "CCTP+AMM" pushing past the 38-px circle; tightened to "AMM" with the CCTP semantic carried by the section heading. Settle box dropped its trailing ellipsis (`USDC · EURC · …` → `USDC · EURC`) and widened from 120 to 124.
+- **Crosschain diagram animation** — switched dash-pattern math to `pathLength=100` so the pulse rides cleanly past the path edges instead of stranding a blob at the start.
+- **Foundry deploy verification** — earlier in the v1.0.2 cycle, a foundry broadcast file reported `ONCHAIN EXECUTION COMPLETE & SUCCESSFUL` for a tx that never confirmed. Operational note now logged in memory: always verify with `cast receipt` AND non-empty `cast code` before trusting foundry.
+- Footer items rewritten as plain `<a>` because Next 15's typed routes don't accept dynamic `href` strings on `<Link>`.
+
+### Operational
+- `pnpm deploy:app` / `pnpm deploy:demo` / `pnpm pitch:pdf` / `pnpm pitch:html` scripts at repo root so deploys + pitch renders run from the right cwd. Multiple "wrong directory" Vercel errors had cluttered the dashboard before this.
+- `.gitignore` adds `.vercel`.
+
+[1.0.3]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.3
+
 ## [1.0.2] — 2026-04-29
 
 Refunds, treasury dashboard, and one nasty deploy lesson. SDK npm artifacts unchanged so no version bump there.

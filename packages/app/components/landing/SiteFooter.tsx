@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ArcoraLogo } from "@/components/brand/Logo";
 
 /**
@@ -64,23 +63,13 @@ export function SiteFooter() {
             <ul className="flex flex-col gap-2.5">
               {col.items.map(it => (
                 <li key={it.label}>
-                  {it.external ? (
-                    <a
-                      href={it.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-arcora-slate hover:text-arcora-link transition-colors"
-                    >
-                      {it.label}
-                    </a>
-                  ) : (
-                    <Link
-                      href={it.href}
-                      className="text-sm text-arcora-slate hover:text-arcora-link transition-colors"
-                    >
-                      {it.label}
-                    </Link>
-                  )}
+                  <a
+                    href={it.href}
+                    {...(it.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                    className="text-sm text-arcora-slate hover:text-arcora-link transition-colors"
+                  >
+                    {it.label}
+                  </a>
                 </li>
               ))}
             </ul>

@@ -23,6 +23,9 @@ contract StablePool is IStablePool, Ownable2Step, ReentrancyGuard {
     mapping(address token => uint256) public override reserves;
     mapping(address token => uint256) public override protocolFeesAccrued;
 
+    /// @notice Per-token last accepted oracle price (1e18 scaled). 0 means never observed.
+    mapping(address token => uint256) public lastAcceptedPrice;
+
     uint16 public override swapFeeBps;
     bool   public override paused;
 
@@ -110,6 +113,23 @@ contract StablePool is IStablePool, Ownable2Step, ReentrancyGuard {
         else                      price1e18 = uint256(answer) / (10 ** (oracleDec - 18));
     }
 
+    /// @dev Stateful: reads oracle, runs PriceGuard against last accepted, updates last accepted.
+    function _readAndGuardPrice(address token)
+        internal
+        returns (uint256 price1e18, uint8 tokenDecimals)
+    {
+        uint16 maxDevBps;
+        (price1e18, tokenDecimals, maxDevBps) = _readUsdPrice1e18(token);
+        uint256 prev = lastAcceptedPrice[token];
+        if (prev != 0) {
+            uint256 diff = price1e18 > prev ? price1e18 - prev : prev - price1e18;
+            if (diff * BPS > prev * maxDevBps) {
+                revert PriceDeviation(token, price1e18, prev, maxDevBps);
+            }
+        }
+        lastAcceptedPrice[token] = price1e18;
+    }
+
     /// @dev Pure conversion: amountIn * priceIn / priceOut, scaled across decimals.
     function _grossOut(
         uint256 amountIn,
@@ -153,8 +173,8 @@ contract StablePool is IStablePool, Ownable2Step, ReentrancyGuard {
         uint256 gross;
         uint256 fee;
         {
-            (uint256 pIn,  uint8 dIn,  ) = _readUsdPrice1e18(tokenIn);
-            (uint256 pOut, uint8 dOut, ) = _readUsdPrice1e18(tokenOut);
+            (uint256 pIn,  uint8 dIn) = _readAndGuardPrice(tokenIn);
+            (uint256 pOut, uint8 dOut) = _readAndGuardPrice(tokenOut);
             gross = _grossOut(amountIn, pIn, pOut, dIn, dOut);
             fee   = (gross * swapFeeBps) / BPS;
             amountOut = gross - fee;

@@ -303,4 +303,76 @@ contract StablePoolTest is Test {
         assertEq(eurc.balanceOf(merchant), expected);
         assertEq(eurc.balanceOf(customer), 0);
     }
+
+    // ── PriceGuard ────────────────────────────────────────────────────
+
+    function test_PriceGuard_FirstSwapPrimesAccepted_NoRevert() public {
+        _seed(address(usdc), 100_000e6);
+        _seed(address(eurc), 100_000e6);
+        usdc.mint(customer, 1_000e6);
+        vm.startPrank(customer);
+        usdc.approve(address(pool), 1_000e6);
+        // First-ever swap on this token primes lastAcceptedPrice; cannot revert on deviation.
+        pool.swap(address(usdc), address(eurc), 1_000e6, 0, block.timestamp, customer);
+        vm.stopPrank();
+
+        assertEq(pool.lastAcceptedPrice(address(usdc)), 1e18);     // 1.0000 USD scaled to 1e18
+        assertApproxEqRel(pool.lastAcceptedPrice(address(eurc)), 1.0863e18, 1e15);
+    }
+
+    function test_PriceGuard_RevertsOnLargeDeviation_USDC() public {
+        // First, prime: usdc=1.0000.
+        _seed(address(usdc), 100_000e6);
+        _seed(address(eurc), 100_000e6);
+        usdc.mint(customer, 2_000e6);
+        vm.startPrank(customer);
+        usdc.approve(address(pool), 2_000e6);
+        pool.swap(address(usdc), address(eurc), 1_000e6, 0, block.timestamp, customer);
+        vm.stopPrank();
+
+        // Now USDC oracle prints $0.95 — 5% off, way over 50bps.
+        usdcFeed.setAnswer(0.95e8);
+
+        vm.startPrank(customer);
+        vm.expectRevert(abi.encodeWithSelector(
+            IStablePool.PriceDeviation.selector, address(usdc), 0.95e18, 1e18, TIGHT_DEV_BPS
+        ));
+        pool.swap(address(usdc), address(eurc), 1_000e6, 0, block.timestamp, customer);
+        vm.stopPrank();
+    }
+
+    function test_PriceGuard_AllowsSmallMove_WithinBand() public {
+        _seed(address(usdc), 100_000e6);
+        _seed(address(eurc), 100_000e6);
+        usdc.mint(customer, 2_000e6);
+        vm.prank(customer);
+        usdc.approve(address(pool), 2_000e6);
+        vm.prank(customer);
+        pool.swap(address(usdc), address(eurc), 1_000e6, 0, block.timestamp, customer);
+
+        // Bump USDC by 30 bps — within 50bps cap. Owner-only setter; default test sender is owner of feed.
+        usdcFeed.setAnswer(1.0030e8);
+
+        vm.prank(customer);
+        pool.swap(address(usdc), address(eurc), 1_000e6, 0, block.timestamp, customer);
+
+        assertEq(pool.lastAcceptedPrice(address(usdc)), 1.003e18);
+    }
+
+    function test_PriceGuard_FXTokenUsesItsBand() public {
+        // EURC is configured with FX_DEV_BPS=150. A 1% move is allowed.
+        _seed(address(usdc), 100_000e6);
+        _seed(address(eurc), 100_000e6);
+        eurc.mint(customer, 2_000e6);
+        vm.prank(customer);
+        eurc.approve(address(pool), 2_000e6);
+        vm.prank(customer);
+        pool.swap(address(eurc), address(usdc), 1_000e6, 0, block.timestamp, customer);
+
+        // Move EURC by 1%: 1.0863 -> 1.0972.
+        eurcFeed.setAnswer(1.0972e8);
+
+        vm.prank(customer);
+        pool.swap(address(eurc), address(usdc), 1_000e6, 0, block.timestamp, customer);
+    }
 }

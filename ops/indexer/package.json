@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx run.ts"
+    "start":  "tsx run.ts",
+    "replay": "tsx replay.ts"
   },
   "dependencies": {
     "pg": "^8.13.0",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatRelativeTime, symbolForAddress, abbreviateAddress } from "@/lib/ui/format";
@@ -185,9 +185,36 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
     ? `${days[lastNonZero]!.day} · ${last >= 0 ? "+" : ""}${formatCurrency(BigInt(Math.round(last * 1_000_000)).toString(), token)}`
     : "no activity yet";
 
+  // Hover state: which day index the cursor is over (null = none).
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  function handleMove(e: React.MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    // Cursor x in viewBox space.
+    const xVB = ((e.clientX - rect.left) / rect.width) * W;
+    const span = (W - 2 * P) / (days.length - 1);
+    const idx = Math.round((xVB - P) / span);
+    if (idx >= 0 && idx < days.length) setHoverIdx(idx);
+    else setHoverIdx(null);
+  }
+
+  const hover = hoverIdx !== null
+    ? { idx: hoverIdx, day: days[hoverIdx]!, value: values[hoverIdx]! }
+    : null;
+
   return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[140px]">
+    <div className="relative">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="w-full h-[140px] cursor-crosshair"
+        onMouseMove={handleMove}
+        onMouseLeave={() => setHoverIdx(null)}
+      >
         <defs>
           <linearGradient id={`treasury-area-${series.token}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%"   stopColor="#00c2a8" stopOpacity="0.32" />
@@ -203,6 +230,14 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
             <path d={line} fill="none" stroke="#00c2a8" strokeWidth="1.5"
                   strokeLinecap="round" strokeLinejoin="round" />
             <circle cx={xFor(lastIdx)} cy={yFor(last)} r="3" fill="#00c2a8" />
+            {hover && (
+              <>
+                <line x1={xFor(hover.idx)} y1={P} x2={xFor(hover.idx)} y2={H - P}
+                      stroke="#00c2a8" strokeOpacity="0.4" strokeWidth="1" strokeDasharray="2 3" />
+                <circle cx={xFor(hover.idx)} cy={yFor(hover.value)} r="4"
+                        fill="#00c2a8" stroke="#fff" strokeWidth="1.5" />
+              </>
+            )}
           </>
         )}
         {max === 0 && (
@@ -212,6 +247,34 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
           </text>
         )}
       </svg>
+
+      {/* Tooltip — positioned in DOM space rather than SVG so the type rendering
+          stays sharp and we don't have to fight viewBox scaling. */}
+      {hover && max > 0 && (
+        <div
+          className="absolute pointer-events-none z-10 -translate-x-1/2 -translate-y-full"
+          style={{
+            left: `${(xFor(hover.idx) / W) * 100}%`,
+            top:  `${(yFor(hover.value) / H) * 100}%`,
+            marginTop: "-12px",
+          }}
+        >
+          <div className="bg-arcora-slate text-white rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+            <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-wider text-white/60 uppercase">
+              {hover.day.day}
+            </div>
+            <div className="font-[family-name:var(--font-mono)] text-sm tabular-nums mt-0.5">
+              {hover.value >= 0 ? "+" : ""}
+              {formatCurrency(BigInt(Math.round(hover.value * 1_000_000)).toString(), token)}
+            </div>
+            <div className="font-[family-name:var(--font-mono)] text-[10px] text-white/60 mt-0.5">
+              {hover.day.paidCount} paid
+              {hover.day.refundedCount > 0 && ` · ${hover.day.refundedCount} refunded`}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mt-2 font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground tabular-nums">
         <span>{days[0]!.day}</span>
         <span>{summary}</span>

@@ -85,6 +85,31 @@ The killer-feature bet: **customer pays from where they are with what they have,
 - **Hosted app**: Next.js 15 with Neon Postgres mirror.
 - **Ops layer**: VPS systemd daemons under `ops/indexer/` and `ops/webhooks/` mirror to `/root/arcora-ops/` on the production VPS. The daemons own state-machine progress, chain-event ingestion, and webhook retries with exponential backoff.
 
+### How Arcora relates to Arc primitives
+
+Arc itself ships several first-party financial primitives — **StableFX** (RFQ-style FX with on-chain escrow), **App Kit Swap / Bridge / Send** (general-purpose stable transfer + crosschain primitives), **Circle Developer-Controlled Wallets** (server-side wallet issuance), and **Refund Protocol** (programmable refund logic). All of these are documented at [docs.arc.network](https://docs.arc.network).
+
+Arcora is **not** a competitor to those primitives. Where Arc gives you the rails, Arcora is the **merchant abstraction layer** that sits above them:
+
+| Concern | Arc primitive | Arcora |
+|---|---|---|
+| Enterprise FX (RFQ + escrow) | StableFX | — |
+| Generic A→B swap | App Kit Swap | — |
+| Crosschain USDC bridge | App Kit Bridge (CCTP wrapper) | — |
+| Server-managed wallets | Circle Developer-Controlled Wallets | — |
+| Invoice → atomic settle in **exact** payout token | — | **ArcFXGateway** (`pay()`) |
+| Hosted checkout link + customer wallet flow | — | `/i/[invoiceId]` page + SIWE |
+| Refund-in-payout-token + protocol-fee return | — | `refundInvoice()` |
+| Per-merchant treasury reconciliation | — | `/m/treasury` + indexer |
+| Three-line npm SDK | — | `@arcora/sdk` |
+
+The shape is what payment processors (Stripe, Adyen, Checkout.com) provide on top of card-network rails. We provide the same shape on top of Arc's stablecoin rails. Future versions may delegate the *crosschain leg* of the flow to App Kit Bridge instead of calling CCTP TokenMessenger directly — see the v2.0 plan in `docs/superpowers/specs/`.
+
+**Native Arc resources we depend on**:
+- USDC (`0x3600…0000`) and EURC (`0x89B5…D72a`) contracts — official addresses from the Arc docs.
+- USDC as native gas token (18-decimal native balance, 6-decimal ERC-20 interface).
+- Sub-second deterministic finality (Malachite BFT consensus).
+
 ## Test status
 
 | Suite | Tests |

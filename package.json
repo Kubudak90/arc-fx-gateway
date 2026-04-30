@@ -3,9 +3,14 @@
   "private": true,
   "version": "0.0.1",
   "packageManager": "pnpm@9.0.0",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build:contracts": "pnpm --filter @arcora/contracts build",
     "test:contracts": "pnpm --filter @arcora/contracts test"
+  },
+  "devDependencies": {
+    "@marp-team/marp-cli": "^4.3.1"
   }
 }

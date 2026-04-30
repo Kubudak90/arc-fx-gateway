@@ -89,4 +89,80 @@ contract StablecoinRegistryTest is Test {
         assertEq(reg.owner(), newOwner);
         assertEq(reg.pendingOwner(), address(0));
     }
+
+    function test_Deactivate_Reactivate_Flow() public {
+        vm.prank(owner);
+        reg.listToken(address(usdc), 6, IChainlinkAggregator(address(usdcFeed)), 50);
+
+        vm.expectEmit(true, false, false, true, address(reg));
+        emit IStablecoinRegistry.TokenDeactivated(address(usdc));
+        vm.prank(owner);
+        reg.deactivateToken(address(usdc));
+        assertFalse(reg.isActive(address(usdc)));
+
+        vm.expectEmit(true, false, false, true, address(reg));
+        emit IStablecoinRegistry.TokenReactivated(address(usdc));
+        vm.prank(owner);
+        reg.reactivateToken(address(usdc));
+        assertTrue(reg.isActive(address(usdc)));
+    }
+
+    function test_Deactivate_RevertsOnUnknownToken() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(IStablecoinRegistry.TokenNotListed.selector, address(usdc)));
+        reg.deactivateToken(address(usdc));
+    }
+
+    function test_SetOracle_Success() public {
+        vm.prank(owner);
+        reg.listToken(address(usdc), 6, IChainlinkAggregator(address(usdcFeed)), 50);
+
+        MockChainlinkFeed newFeed = new MockChainlinkFeed(8, 1.0001e8);
+        vm.expectEmit(true, false, false, true, address(reg));
+        emit IStablecoinRegistry.OracleUpdated(address(usdc), address(usdcFeed), address(newFeed));
+        vm.prank(owner);
+        reg.setOracle(address(usdc), IChainlinkAggregator(address(newFeed)));
+
+        assertEq(address(reg.tokenInfo(address(usdc)).usdOracle), address(newFeed));
+    }
+
+    function test_SetOracle_RevertsOnZero() public {
+        vm.prank(owner);
+        reg.listToken(address(usdc), 6, IChainlinkAggregator(address(usdcFeed)), 50);
+        vm.prank(owner);
+        vm.expectRevert(IStablecoinRegistry.ZeroAddress.selector);
+        reg.setOracle(address(usdc), IChainlinkAggregator(address(0)));
+    }
+
+    function test_SetDeviation_Success() public {
+        vm.prank(owner);
+        reg.listToken(address(usdc), 6, IChainlinkAggregator(address(usdcFeed)), 50);
+        vm.expectEmit(true, false, false, true, address(reg));
+        emit IStablecoinRegistry.DeviationUpdated(address(usdc), 50, 150);
+        vm.prank(owner);
+        reg.setDeviation(address(usdc), 150);
+        assertEq(reg.tokenInfo(address(usdc)).maxOracleDeviationBps, 150);
+    }
+
+    function test_SetDeviation_RevertsOnInvalid() public {
+        vm.prank(owner);
+        reg.listToken(address(usdc), 6, IChainlinkAggregator(address(usdcFeed)), 50);
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(IStablecoinRegistry.InvalidDeviation.selector, 0));
+        reg.setDeviation(address(usdc), 0);
+    }
+
+    function test_TokensArray_OrderPreserved() public {
+        MockERC20 eurc = new MockERC20("EURC", "EURC", 6);
+        MockChainlinkFeed eurFeed = new MockChainlinkFeed(8, 1.0863e8);
+
+        vm.prank(owner);
+        reg.listToken(address(usdc), 6, IChainlinkAggregator(address(usdcFeed)), 50);
+        vm.prank(owner);
+        reg.listToken(address(eurc), 6, IChainlinkAggregator(address(eurFeed)), 150);
+
+        assertEq(reg.tokensLength(), 2);
+        assertEq(reg.tokens(0), address(usdc));
+        assertEq(reg.tokens(1), address(eurc));
+    }
 }

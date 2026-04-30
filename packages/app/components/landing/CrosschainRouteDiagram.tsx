@@ -58,12 +58,15 @@ export function CrosschainRouteDiagram() {
           ))}
         </g>
 
-        {/* Source → Arc lines */}
+        {/* Source → Arc curves: end at the hub edge (ARC_X − 38) so the line
+            doesn't disappear under the hub fill. Use pathLength=100 so the dash
+            math is independent of the curve's actual arc length. */}
         {SOURCES.map((s, i) => {
           const isActive = i === activeStep;
           const yMid = 165;
-          const dx = ARC_X - 110;
-          const path = `M 110 ${s.y} C ${110 + dx * 0.5} ${s.y}, ${ARC_X - dx * 0.5} ${yMid}, ${ARC_X} ${yMid}`;
+          const arcEdge = ARC_X - 40;
+          const dx = arcEdge - 110;
+          const path = `M 110 ${s.y} C ${110 + dx * 0.5} ${s.y}, ${arcEdge - dx * 0.5} ${yMid}, ${arcEdge} ${yMid}`;
           return (
             <g key={s.code}>
               <path d={path} stroke="rgba(11,20,38,0.16)" strokeWidth="1" fill="none" />
@@ -71,10 +74,12 @@ export function CrosschainRouteDiagram() {
                 <path
                   key={tick + "-" + i}
                   d={path}
+                  pathLength={100}
                   stroke="url(#ax-line-grad)"
                   strokeWidth="2.5"
                   fill="none"
-                  strokeDasharray="60 600"
+                  strokeLinecap="round"
+                  strokeDasharray="20 100"
                   style={{ animation: "ax-flow 1.6s ease-out forwards" }}
                 />
               )}
@@ -82,16 +87,20 @@ export function CrosschainRouteDiagram() {
           );
         })}
 
-        {/* Arc → Settlement line */}
-        <path d={`M ${ARC_X} 165 L ${SETTLE_X} 165`} stroke="rgba(11,20,38,0.16)" strokeWidth="1" fill="none" />
-        <path
+        {/* Arc → Settlement: solid teal connector that always reads end-to-end,
+            with a short pulse traveling on top for the "in flight" feel. The
+            line ends at the LEFT EDGE of the settle rect (x = SETTLE_X − 30),
+            not the box center, so nothing is hidden under the rect fill. */}
+        <line x1={ARC_X + 40} y1="165" x2={SETTLE_X - 30} y2="165"
+          stroke="#00c2a8" strokeOpacity="0.55" strokeWidth="2" strokeLinecap="round" />
+        <line
           key={"out-" + tick}
-          d={`M ${ARC_X} 165 L ${SETTLE_X} 165`}
+          x1={ARC_X + 40} y1="165" x2={SETTLE_X - 30} y2="165"
+          pathLength={100}
           stroke="#00c2a8"
           strokeWidth="2.5"
-          fill="none"
-          strokeDasharray="40 200"
-          strokeDashoffset="240"
+          strokeLinecap="round"
+          strokeDasharray="18 100"
           style={{ animation: "ax-flow 1.6s 0.4s ease-out forwards" }}
         />
 
@@ -150,9 +159,12 @@ export function CrosschainRouteDiagram() {
       </svg>
 
       <style>{`
+        /* With pathLength=100 + dasharray="20 100", a 20-unit pulse rides the
+           full path. Animate offset from 120 (entirely before start) to -20
+           (entirely past end) so the segment cleanly enters and exits. */
         @keyframes ax-flow {
-          0%   { stroke-dashoffset: 200; }
-          100% { stroke-dashoffset: 0; }
+          0%   { stroke-dashoffset: 120; }
+          100% { stroke-dashoffset: -20; }
         }
         @keyframes ax-pulse-ring {
           0%   { r: 38; opacity: 0.6; }

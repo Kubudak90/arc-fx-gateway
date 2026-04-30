@@ -210,4 +210,97 @@ contract StablePoolTest is Test {
         vm.expectRevert(IStablePool.ZeroAmount.selector);
         pool.quote(address(usdc), address(eurc), 0);
     }
+
+    // ── swap ──────────────────────────────────────────────────────────
+
+    function test_Swap_USDCtoEURC_TransfersAndAccountsCorrectly() public {
+        _seed(address(usdc), 100_000e6);
+        _seed(address(eurc), 100_000e6);
+
+        usdc.mint(customer, 1_000e6);
+        uint256 expected = pool.quote(address(usdc), address(eurc), 1_000e6);
+
+        vm.startPrank(customer);
+        usdc.approve(address(pool), 1_000e6);
+        uint256 received = pool.swap(address(usdc), address(eurc), 1_000e6, expected, block.timestamp, customer);
+        vm.stopPrank();
+
+        assertEq(received, expected);
+        assertEq(eurc.balanceOf(customer), expected);
+        assertEq(pool.reserves(address(usdc)), 100_000e6 + 1_000e6);
+        // Reserve out is reduced by GROSS (fee retained as protocolFeesAccrued)
+        assertEq(eurc.balanceOf(address(pool)), 100_000e6 - expected);
+
+        // Fee accrued in tokenOut units
+        assertGt(pool.protocolFeesAccrued(address(eurc)), 0);
+    }
+
+    function test_Swap_RevertsOnInsufficientLiquidity() public {
+        _seed(address(usdc), 100_000e6);
+        // No EURC reserve — swap should revert
+        usdc.mint(customer, 1_000e6);
+        vm.startPrank(customer);
+        usdc.approve(address(pool), 1_000e6);
+        vm.expectRevert(); // bound by available reserves[eurc] = 0
+        pool.swap(address(usdc), address(eurc), 1_000e6, 0, block.timestamp, customer);
+        vm.stopPrank();
+    }
+
+    function test_Swap_RevertsOnSlippage() public {
+        _seed(address(usdc), 100_000e6);
+        _seed(address(eurc), 100_000e6);
+
+        usdc.mint(customer, 1_000e6);
+        uint256 quote_ = pool.quote(address(usdc), address(eurc), 1_000e6);
+
+        vm.startPrank(customer);
+        usdc.approve(address(pool), 1_000e6);
+        vm.expectRevert(abi.encodeWithSelector(IStablePool.InsufficientOutput.selector, quote_, quote_ + 1));
+        pool.swap(address(usdc), address(eurc), 1_000e6, quote_ + 1, block.timestamp, customer);
+        vm.stopPrank();
+    }
+
+    function test_Swap_RevertsOnExpiredDeadline() public {
+        _seed(address(usdc), 100e6);
+        _seed(address(eurc), 100e6);
+
+        usdc.mint(customer, 10e6);
+        vm.startPrank(customer);
+        usdc.approve(address(pool), 10e6);
+        vm.expectRevert(IStablePool.DeadlinePassed.selector);
+        pool.swap(address(usdc), address(eurc), 10e6, 0, block.timestamp - 1, customer);
+        vm.stopPrank();
+    }
+
+    function test_Swap_RevertsWhenPaused() public {
+        _seed(address(usdc), 100e6);
+        _seed(address(eurc), 100e6);
+        vm.prank(owner);
+        pool.pause();
+
+        usdc.mint(customer, 10e6);
+        vm.startPrank(customer);
+        usdc.approve(address(pool), 10e6);
+        vm.expectRevert(IStablePool.PoolPaused.selector);
+        pool.swap(address(usdc), address(eurc), 10e6, 0, block.timestamp, customer);
+        vm.stopPrank();
+    }
+
+    function test_Swap_TransfersToCustomRecipient() public {
+        _seed(address(usdc), 100_000e6);
+        _seed(address(eurc), 100_000e6);
+
+        address merchant = makeAddr("merchant");
+        usdc.mint(customer, 1_000e6);
+        uint256 expected = pool.quote(address(usdc), address(eurc), 1_000e6);
+
+        vm.startPrank(customer);
+        usdc.approve(address(pool), 1_000e6);
+        uint256 received = pool.swap(address(usdc), address(eurc), 1_000e6, expected, block.timestamp, merchant);
+        vm.stopPrank();
+
+        assertEq(received, expected);
+        assertEq(eurc.balanceOf(merchant), expected);
+        assertEq(eurc.balanceOf(customer), 0);
+    }
 }

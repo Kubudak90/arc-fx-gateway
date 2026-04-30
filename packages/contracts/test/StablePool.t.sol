@@ -161,4 +161,53 @@ contract StablePoolTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IStablePool.InvalidFeeBps.selector, 51));
         pool.setSwapFeeBps(51);
     }
+
+    // ── quote ─────────────────────────────────────────────────────────
+
+    function test_Quote_USDCtoEURC_AppliesFee() public view {
+        // 1.0 USDC -> ? EURC. usdcUsd=1.0000, eurcUsd=1.0863, fee=5bps.
+        uint256 q = pool.quote(address(usdc), address(eurc), 1_000_000);
+        // gross = 1e6 * 1.0000 / 1.0863 = 920_555 (truncated), then * 9995/10000 = 920_094
+        assertApproxEqAbs(q, 920_094, 2);
+    }
+
+    function test_Quote_EURCtoUSDC_AppliesFee() public view {
+        // 1.0 EURC -> ? USDC. gross = 1e6 * 1.0863 / 1.0000 = 1_086_300
+        // net = 1_086_300 * 9_995 / 10_000 = 1_085_756
+        uint256 q = pool.quote(address(eurc), address(usdc), 1_000_000);
+        assertApproxEqAbs(q, 1_085_756, 2);
+    }
+
+    function test_Quote_USDCtoDAI_CrossDecimal_6to18() public view {
+        // 1.0 USDC (6dec) -> ? DAI (18dec). Both peg=1.
+        // amountOutGross = 1e6 * 1.0e8 / 1.0e8 * 10^(18-6) = 1e18
+        // net = 1e18 * 9_995/10_000 = 9.995e17
+        uint256 q = pool.quote(address(usdc), address(dai), 1_000_000);
+        assertEq(q, 999_500_000_000_000_000); // 0.9995 DAI
+    }
+
+    function test_Quote_DAItoUSDC_CrossDecimal_18to6() public view {
+        // 1.0 DAI (18dec) -> ? USDC (6dec). Both peg=1.
+        // gross = 1e18 * 1e8 / 1e8 / 10^12 = 1e6
+        // net   = 1e6 * 9_995/10_000 = 999_500
+        uint256 q = pool.quote(address(dai), address(usdc), 1e18);
+        assertEq(q, 999_500);
+    }
+
+    function test_Quote_RevertsOnInactiveToken() public {
+        vm.prank(owner);
+        reg.deactivateToken(address(eurc));
+        vm.expectRevert(abi.encodeWithSelector(IStablePool.TokenNotActive.selector, address(eurc)));
+        pool.quote(address(usdc), address(eurc), 1e6);
+    }
+
+    function test_Quote_RevertsOnSameToken() public {
+        vm.expectRevert(abi.encodeWithSelector(IStablePool.SameToken.selector, address(usdc)));
+        pool.quote(address(usdc), address(usdc), 1e6);
+    }
+
+    function test_Quote_RevertsOnZeroAmount() public {
+        vm.expectRevert(IStablePool.ZeroAmount.selector);
+        pool.quote(address(usdc), address(eurc), 0);
+    }
 }

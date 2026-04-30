@@ -84,10 +84,57 @@ contract StablePool is IStablePool, Ownable2Step, ReentrancyGuard {
         emit Unpaused(msg.sender);
     }
 
-    // ── swap / quote — STUBS (filled in next tasks) ──────────────────
+    // ── pricing helpers ──────────────────────────────────────────────
 
-    function quote(address, address, uint256) external pure override returns (uint256) {
-        revert("not implemented");
+    uint256 internal constant BPS = 10_000;
+    uint256 internal constant MAX_STALE_SECONDS = 1 hours;
+
+    /// @dev Reads `tokenInfo` and the oracle, returns 1e18-scaled USD price.
+    function _readUsdPrice1e18(address token)
+        internal
+        view
+        returns (uint256 price1e18, IStablecoinRegistry.TokenInfo memory info)
+    {
+        info = REGISTRY.tokenInfo(token);
+        if (!info.isActive) revert TokenNotActive(token);
+        (, int256 answer, , uint256 updatedAt, ) = info.usdOracle.latestRoundData();
+        if (answer <= 0) revert PriceDeviation(token, 0, 0, info.maxOracleDeviationBps);
+        if (block.timestamp - updatedAt > MAX_STALE_SECONDS) {
+            revert PriceDeviation(token, uint256(answer), updatedAt, info.maxOracleDeviationBps);
+        }
+        uint8 dec = info.usdOracle.decimals();
+        if (dec == 18)      price1e18 = uint256(answer);
+        else if (dec < 18)  price1e18 = uint256(answer) * (10 ** (18 - dec));
+        else                price1e18 = uint256(answer) / (10 ** (dec - 18));
+    }
+
+    /// @dev Pure conversion: amountIn * priceIn / priceOut, scaled across decimals.
+    function _grossOut(
+        uint256 amountIn,
+        uint256 priceIn1e18,
+        uint256 priceOut1e18,
+        uint8   decimalsIn,
+        uint8   decimalsOut
+    ) internal pure returns (uint256) {
+        uint256 usdValue1e18 = (amountIn * priceIn1e18) / (10 ** decimalsIn);
+        return (usdValue1e18 * (10 ** decimalsOut)) / priceOut1e18;
+    }
+
+    function quote(address tokenIn, address tokenOut, uint256 amountIn)
+        external
+        view
+        override
+        returns (uint256 amountOut)
+    {
+        if (tokenIn == tokenOut) revert SameToken(tokenIn);
+        if (amountIn == 0)       revert ZeroAmount();
+
+        (uint256 pIn,  IStablecoinRegistry.TokenInfo memory iIn)  = _readUsdPrice1e18(tokenIn);
+        (uint256 pOut, IStablecoinRegistry.TokenInfo memory iOut) = _readUsdPrice1e18(tokenOut);
+
+        uint256 gross = _grossOut(amountIn, pIn, pOut, iIn.decimals, iOut.decimals);
+        uint256 fee   = (gross * swapFeeBps) / BPS;
+        amountOut     = gross - fee;
     }
 
     function swap(address, address, uint256, uint256, uint256, address) external override returns (uint256) {

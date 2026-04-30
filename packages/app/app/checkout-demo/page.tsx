@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArcoraLogo } from "@/components/brand/Logo";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 
 /**
  * Stand-alone, fully simulated checkout walkthrough — no wallet, no chain
@@ -98,10 +99,11 @@ export default function CheckoutDemoPage() {
         </div>
       </section>
 
-      <footer className="border-t border-arcora-border px-6 py-5 text-[11px] text-muted-foreground flex items-center justify-between font-[family-name:var(--font-mono)]">
+      <div className="border-t border-arcora-border px-6 py-5 text-[11px] text-muted-foreground flex items-center justify-between font-[family-name:var(--font-mono)]">
         <span>Numbers above use the live Chainlink oracle rate ({ORACLE}) and the deployed contract&apos;s fee config.</span>
         <Link href="/" className="text-arcora-link hover:underline">← Back to landing</Link>
-      </footer>
+      </div>
+      <SiteFooter />
     </main>
   );
 }

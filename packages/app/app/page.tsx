@@ -4,6 +4,7 @@ import { LiveSettlement } from "@/components/landing/LiveSettlement";
 import { DashboardPreview } from "@/components/landing/DashboardPreview";
 import { SDKBlock } from "@/components/landing/SDKBlock";
 import { CrosschainRouteDiagram } from "@/components/landing/CrosschainRouteDiagram";
+import { SiteFooter } from "@/components/landing/SiteFooter";
 
 const PILLARS = [
   { label: "SECURE", body: "Funds settle on-chain in a single transaction; no custody, no off-chain credit." },
@@ -361,10 +362,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="border-t border-arcora-border px-6 py-6 text-xs text-muted-foreground flex items-center justify-between">
-        <ArcoraLogo size={20} />
-        <span>Arcora · Arc testnet</span>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

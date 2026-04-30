@@ -134,7 +134,7 @@ export function CrosschainRouteDiagram() {
           fill="#5b6478" letterSpacing="2">ARC</text>
         <text x={ARC_X} y="178" textAnchor="middle"
           fontFamily="var(--font-display)" fontSize="14" fontWeight="600"
-          fill="#0b1426">CCTP+AMM</text>
+          fill="#0b1426">AMM</text>
 
         {/* Pulsing ring */}
         <circle cx={ARC_X} cy="165" r="50"
@@ -143,12 +143,12 @@ export function CrosschainRouteDiagram() {
 
         {/* Settlement node */}
         <g transform={`translate(${SETTLE_X}, 165)`}>
-          <rect x="-30" y="-30" width="120" height="60" rx="10"
+          <rect x="-32" y="-30" width="124" height="60" rx="10"
             fill="#ffffff" stroke="rgba(11,20,38,0.16)" strokeWidth="1" />
           <text x="30" y="-8" textAnchor="middle"
             fontFamily="var(--font-mono)" fontSize="9" fill="#5b6478" letterSpacing="1.5">SETTLE</text>
           <text x="30" y="14" textAnchor="middle"
-            fontFamily="var(--font-display)" fontSize="14" fontWeight="600" fill="#0b1426">USDC · EURC · …</text>
+            fontFamily="var(--font-display)" fontSize="14" fontWeight="600" fill="#0b1426">USDC · EURC</text>
         </g>
 
         {/* Labels */}

@@ -26,10 +26,23 @@ interface ActivityRow {
   txHash: string | null;
 }
 
+interface DailyPoint {
+  day: string;
+  netPayout: string;
+  paidCount: number;
+  refundedCount: number;
+}
+
+interface TimeSeriesEntry {
+  token: string;
+  days: DailyPoint[];
+}
+
 interface TreasuryData {
   merchant: { address: string; payoutToken: string } | null;
   totals: TokenTotals[];
   activity: ActivityRow[];
+  timeSeries?: TimeSeriesEntry[];
 }
 
 export default function TreasuryPage() {
@@ -86,7 +99,13 @@ export default function TreasuryPage() {
         </Card>
       ) : (
         <div className="space-y-10">
-          {data.totals.map(t => <TokenSection key={t.token} t={t} />)}
+          {data.totals.map(t => (
+            <TokenSection
+              key={t.token}
+              t={t}
+              series={data.timeSeries?.find(s => s.token === t.token)}
+            />
+          ))}
         </div>
       )}
 
@@ -108,7 +127,7 @@ export default function TreasuryPage() {
   );
 }
 
-function TokenSection({ t }: { t: TokenTotals }) {
+function TokenSection({ t, series }: { t: TokenTotals; series?: TimeSeriesEntry }) {
   const sym = symbolForAddress(t.token);
   const isPositive = BigInt(t.received) >= 0n;
   return (
@@ -123,7 +142,82 @@ function TokenSection({ t }: { t: TokenTotals }) {
         <Kpi label="Refunded" value={formatCurrency(t.refunded, t.token)} />
         <Kpi label="Fees paid to Arcora" value={formatCurrency(t.feesPaid, t.token)} />
       </div>
+      {series && series.days.length > 0 && (
+        <Card className="rounded-2xl">
+          <CardContent className="p-5">
+            <div className="flex items-baseline justify-between mb-3">
+              <span className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
+                Daily net payout · last 30 days
+              </span>
+              <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground tabular-nums">
+                {sym}
+              </span>
+            </div>
+            <DailyChart series={series} token={t.token} />
+          </CardContent>
+        </Card>
+      )}
     </section>
+  );
+}
+
+function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string }) {
+  const days = series.days;
+  // Convert micro-units to display units; sign retained for refund-heavy days.
+  const values = days.map(d => Number(BigInt(d.netPayout)) / 1_000_000);
+  const max = Math.max(0, ...values);
+  const min = Math.min(0, ...values);
+  const range = max - min || 1;
+
+  const W = 600, H = 140, P = 6;
+  const xFor = (i: number) => P + (i / (days.length - 1)) * (W - 2 * P);
+  const yFor = (v: number) => H - P - ((v - min) / range) * (H - 2 * P);
+  const zeroY = yFor(0);
+
+  const points = values.map((v, i) => `${xFor(i)},${yFor(v)}`);
+  const line   = "M " + points.join(" L ");
+  const area   = `${line} L ${xFor(values.length - 1)},${zeroY} L ${xFor(0)},${zeroY} Z`;
+
+  const last = values[values.length - 1] ?? 0;
+  const lastIdx = values.length - 1;
+  const lastNonZero = values.findLastIndex(v => v !== 0);
+  const summary = lastNonZero >= 0
+    ? `${days[lastNonZero]!.day} · ${last >= 0 ? "+" : ""}${formatCurrency(BigInt(Math.round(last * 1_000_000)).toString(), token)}`
+    : "no activity yet";
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[140px]">
+        <defs>
+          <linearGradient id={`treasury-area-${series.token}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor="#00c2a8" stopOpacity="0.32" />
+            <stop offset="100%" stopColor="#00c2a8" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* zero baseline */}
+        <line x1={P} y1={zeroY} x2={W - P} y2={zeroY}
+              stroke="rgba(11,20,38,0.06)" strokeWidth="0.5" strokeDasharray="2 4" />
+        {max > 0 && (
+          <>
+            <path d={area} fill={`url(#treasury-area-${series.token})`} />
+            <path d={line} fill="none" stroke="#00c2a8" strokeWidth="1.5"
+                  strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx={xFor(lastIdx)} cy={yFor(last)} r="3" fill="#00c2a8" />
+          </>
+        )}
+        {max === 0 && (
+          <text x={W / 2} y={H / 2 + 4} textAnchor="middle"
+                fontFamily="var(--font-mono)" fontSize="10" fill="#5b6478">
+            no payouts in the last 30 days
+          </text>
+        )}
+      </svg>
+      <div className="flex items-center justify-between mt-2 font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground tabular-nums">
+        <span>{days[0]!.day}</span>
+        <span>{summary}</span>
+        <span>{days[days.length - 1]!.day}</span>
+      </div>
+    </div>
   );
 }
 

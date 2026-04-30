@@ -6,6 +6,7 @@ vi.mock("@/lib/auth/session", () => ({
 
 const ORDER_BY_RES: any[] = [];
 const aggregateRows: any[] = [];
+const timeSeriesRows: any[] = [];
 
 vi.mock("@/lib/db/client", () => {
   const builder = {
@@ -16,9 +17,11 @@ vi.mock("@/lib/db/client", () => {
     limit: vi.fn(),
     orderBy: vi.fn(),
   };
-  // First .select().from(merchants) ... returns a merchant row.
-  // Second .select().from(invoices).groupBy → aggregateRows.
-  // Third .select().from(invoices).orderBy.limit → ORDER_BY_RES.
+  // Sequence the route walks (current as of v1.x #2.1):
+  //   1. select().from(merchants).where().limit(1)            → merchant row
+  //   2. select().from(invoices).where().groupBy()             → aggregateRows
+  //   3. select().from(invoices).where().groupBy()             → timeSeriesRows
+  //   4. select().from(invoices).where().orderBy().limit(20)   → ORDER_BY_RES
   let call = 0;
   const reset = () => { call = 0; };
   (globalThis as any).__resetTreasuryMock = reset;
@@ -31,12 +34,13 @@ vi.mock("@/lib/db/client", () => {
     if (call === 1) {
       return Promise.resolve([{ id: "merch-1", address: "0xMerchant", payoutToken: "0xUSDC" }]);
     }
-    if (call === 3) return Promise.resolve(ORDER_BY_RES);
-    return Promise.resolve([]);
+    // limit(20) call lands here as the 4th call after merchant→aggregate→timeseries.
+    return Promise.resolve(ORDER_BY_RES);
   });
   builder.groupBy.mockImplementation(() => {
     call += 1;
-    return Promise.resolve(aggregateRows);
+    // Second invocation is aggregates; third is the 30-day time series.
+    return Promise.resolve(call === 2 ? aggregateRows : timeSeriesRows);
   });
   builder.orderBy.mockImplementation(() => builder);
 
@@ -57,6 +61,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   ORDER_BY_RES.length = 0;
   aggregateRows.length = 0;
+  timeSeriesRows.length = 0;
   (globalThis as any).__resetTreasuryMock?.();
 });
 

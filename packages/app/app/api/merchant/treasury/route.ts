@@ -79,6 +79,70 @@ export async function GET() {
     }
   }
 
+  // 30-day daily volume time series, per payout token. Refunds count negative
+  // toward the day's net payout. Days with no activity get a zero bucket so
+  // the chart x-axis is continuous, not jagged.
+  const timeSeriesRaw = await db
+    .select({
+      day:         sql<string>`date_trunc('day', coalesce(${invoices.refundedAt}, ${invoices.paidAt}))::date::text`,
+      payoutToken: invoices.payoutToken,
+      status:      invoices.status,
+      payoutSum:   sql<string>`coalesce(sum(${invoices.merchantPayout}::numeric), 0)::text`,
+      count:       sql<number>`count(*)::int`,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.merchantId, merchantRow.id),
+        inArray(invoices.status, ["paid", "refunded"]),
+        sql`coalesce(${invoices.refundedAt}, ${invoices.paidAt}) >= now() - interval '30 days'`,
+      ),
+    )
+    .groupBy(sql`1`, invoices.payoutToken, invoices.status);
+
+  // Reshape: per-token daily map { day → { paidIn, refundedOut, paidCount, refundedCount } }
+  type DailyEntry = { day: string; paidIn: bigint; refundedOut: bigint; paidCount: number; refundedCount: number };
+  const seriesByToken = new Map<string, Map<string, DailyEntry>>();
+  for (const row of timeSeriesRaw) {
+    if (!seriesByToken.has(row.payoutToken)) seriesByToken.set(row.payoutToken, new Map());
+    const dayMap = seriesByToken.get(row.payoutToken)!;
+    if (!dayMap.has(row.day)) dayMap.set(row.day, {
+      day: row.day, paidIn: 0n, refundedOut: 0n, paidCount: 0, refundedCount: 0,
+    });
+    const entry = dayMap.get(row.day)!;
+    if (row.status === "paid") {
+      entry.paidIn   += BigInt(row.payoutSum);
+      entry.paidCount = row.count;
+    } else {
+      entry.refundedOut += BigInt(row.payoutSum);
+      entry.refundedCount = row.count;
+    }
+  }
+
+  // Fill missing days with zeros across the 30-day window so the chart x-axis
+  // is continuous regardless of activity gaps.
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const fullDays: string[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() - i);
+    fullDays.push(d.toISOString().slice(0, 10));
+  }
+  const timeSeries = Array.from(seriesByToken.entries()).map(([token, dayMap]) => ({
+    token,
+    days: fullDays.map(day => {
+      const entry = dayMap.get(day);
+      const net = entry ? entry.paidIn - entry.refundedOut : 0n;
+      return {
+        day,
+        netPayout:    net.toString(),
+        paidCount:    entry?.paidCount ?? 0,
+        refundedCount: entry?.refundedCount ?? 0,
+      };
+    }),
+  }));
+
   // Recent activity: last 20 paid or refunded invoices, newest first.
   const activity = await db
     .select({
@@ -104,6 +168,7 @@ export async function GET() {
     .limit(20);
 
   return NextResponse.json({
+    timeSeries,
     merchant: {
       address: merchantRow.address,
       payoutToken: merchantRow.payoutToken,

@@ -17,7 +17,6 @@
     "e2e:headed": "playwright test --headed"
   },
   "dependencies": {
-    "@arcora/sdk": "workspace:^",
     "@base-ui/react": "^1.4.1",
     "@circle-fin/adapter-viem-v2": "^1.8.3",
     "@circle-fin/app-kit": "^1.4.1",

@@ -14,9 +14,6 @@ importers:
 
   packages/app:
     dependencies:
-      '@arcora/sdk':
-        specifier: workspace:^
-        version: link:../sdk
       '@base-ui/react':
         specifier: ^1.4.1
         version: 1.4.1(@types/react@18.3.28)(date-fns@2.30.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

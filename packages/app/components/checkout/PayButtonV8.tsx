@@ -8,7 +8,7 @@ import { keccak256, parseAbi, toBytes, type Address, type Hex } from "viem";
 import { toast } from "sonner";
 import { Check, Info, Loader2 } from "lucide-react";
 import { mapChainError } from "@/lib/chain/error-mapper";
-import { buildArcoraSwapIntent, randomNonce, PERMIT2_ADDRESS } from "@arcora/sdk";
+import { buildArcoraSwapIntent, randomNonce, PERMIT2_ADDRESS } from "@/lib/checkout/permit2";
 
 const ERC20_ABI = parseAbi([
   "function approve(address spender, uint256 amount) external returns (bool)",

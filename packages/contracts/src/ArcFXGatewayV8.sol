@@ -283,9 +283,16 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
 
         IERC20(payoutToken).safeTransferFrom(msg.sender, address(this), grossPayout);
 
-        uint256 fee        = (grossPayout * PROTOCOL_FEE_BPS) / 10_000;
-        uint256 toMerchant = grossPayout - fee;
-        protocolFeesAccrued[payoutToken] += fee;
+        // Stripe-shaped economics: merchant always receives exactly amountOut
+        // net of the protocol fee, regardless of how favourably the swap rate
+        // moved. Any excess (grossPayout > amountOut) lands in the protocol
+        // fee bucket — it offsets the unfavourable rate cases that revert
+        // and trigger refunds (the relayer eats those losses today; this
+        // bucket is what makes the math even out over time).
+        uint256 fee        = (inv.amountOut * PROTOCOL_FEE_BPS) / 10_000;
+        uint256 toMerchant = inv.amountOut - fee;
+        uint256 excess     = grossPayout - inv.amountOut;
+        protocolFeesAccrued[payoutToken] += fee + excess;
 
         inv.status = InvoiceStatus.Paid;
         inv.paidBy = payer;

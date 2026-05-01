@@ -75,16 +75,19 @@ contract ArcFXGatewayV8Test is Test {
     // ── settleInvoice happy path ───────────────────────────────────────
 
     function test_SettleInvoice_HappyPath() public {
-        bytes32 globalId = _createInvoice(bytes32("inv-1"), 100e6, 1 hours);
-        uint256 gross = 100e6; // matches amountOut exactly
+        // Exact-match case: gross equals amountOut, so the excess term is 0
+        // and the fee bucket holds only the fee.
+        uint256 amountOut = 100e6;
+        bytes32 globalId  = _createInvoice(bytes32("inv-1"), amountOut, 1 hours);
+        uint256 gross     = amountOut;
 
         _fundRelayer(eurc, gross);
 
         vm.prank(relayer);
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, gross, bytes32("swap-tx-1"));
 
-        uint256 expectedFee = (gross * FEE_BPS) / 10_000;
-        uint256 expectedPayout = gross - expectedFee;
+        uint256 expectedFee    = (amountOut * FEE_BPS) / 10_000;
+        uint256 expectedPayout = amountOut - expectedFee;
         assertEq(eurc.balanceOf(payee), expectedPayout, "merchant payout");
         assertEq(gw.protocolFeesAccrued(address(eurc)), expectedFee, "fee accrued");
         assertEq(eurc.balanceOf(address(gw)), expectedFee, "gateway holds fee");
@@ -94,29 +97,37 @@ contract ArcFXGatewayV8Test is Test {
         assertEq(paidBy, customer);
     }
 
-    function test_SettleInvoice_PayoutExceedsAmountOut() public {
-        // App Kit can return more than the invoice's amountOut (favourable rate).
-        // The gateway accepts the full gross and computes the fee on it.
-        bytes32 globalId = _createInvoice(bytes32("inv-2"), 100e6, 1 hours);
-        uint256 gross = 105e6;
+    function test_SettleInvoice_PayoutExceedsAmountOut_ExcessToProtocol() public {
+        // App Kit can return more than the invoice's amountOut on a favourable
+        // rate. v0.8.1 economics: merchant always receives exactly amountOut
+        // net of the fee (predictable, Stripe-shaped); the excess accrues to
+        // the protocol fee bucket — that surplus is what offsets the bad-rate
+        // cases that revert with PayoutShortfall.
+        uint256 amountOut = 100e6;
+        bytes32 globalId  = _createInvoice(bytes32("inv-2"), amountOut, 1 hours);
+        uint256 gross     = 105e6;
 
         _fundRelayer(eurc, gross);
 
         vm.prank(relayer);
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, gross, bytes32("swap-tx-2"));
 
-        uint256 expectedFee    = (gross * FEE_BPS) / 10_000;
-        uint256 expectedPayout = gross - expectedFee;
-        assertEq(eurc.balanceOf(payee), expectedPayout, "payee gets all of gross minus fee");
+        uint256 expectedFee    = (amountOut * FEE_BPS) / 10_000;
+        uint256 expectedPayout = amountOut - expectedFee;
+        uint256 excess         = gross - amountOut;
+        assertEq(eurc.balanceOf(payee), expectedPayout, "merchant receives exactly amountOut - fee");
+        assertEq(gw.protocolFeesAccrued(address(eurc)), expectedFee + excess, "fee bucket holds fee + excess");
+        assertEq(eurc.balanceOf(address(gw)), expectedFee + excess, "gateway holds fee + excess balance");
     }
 
     function test_SettleInvoice_EmitsEvents() public {
-        bytes32 globalId = _createInvoice(bytes32("inv-3"), 100e6, 1 hours);
-        uint256 gross = 100e6;
+        uint256 amountOut = 100e6;
+        bytes32 globalId  = _createInvoice(bytes32("inv-3"), amountOut, 1 hours);
+        uint256 gross     = amountOut;
         _fundRelayer(eurc, gross);
 
-        uint256 expectedFee    = (gross * FEE_BPS) / 10_000;
-        uint256 expectedPayout = gross - expectedFee;
+        uint256 expectedFee    = (amountOut * FEE_BPS) / 10_000;
+        uint256 expectedPayout = amountOut - expectedFee;
 
         vm.recordLogs();
         vm.prank(relayer);

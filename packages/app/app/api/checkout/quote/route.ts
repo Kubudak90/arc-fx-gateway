@@ -28,8 +28,10 @@ const Q = z.object({
   amountIn:     z.string().regex(/^\d+(\.\d+)?$/).optional(),
   targetOutput: z.string().regex(/^\d+(\.\d+)?$/).optional(),
   /** Slippage buffer added to the recommended payIn in targetOutput mode.
-   *  Default 500 bps (5%) — wide enough that mid-quote rate drift won't
-   *  push the actual swap below the merchant's amountOut floor. */
+   *  Default 100 bps (1%) — stable→stable rates rarely move >1% within a
+   *  signature TTL on Arc. Customer commits exactly the cushioned amount;
+   *  any rate-favourable surplus accrues to the protocol fee bucket
+   *  (covers the rate-unfavourable shortfalls that revert the swap). */
   slippageBps:  z.number().int().min(0).max(2000).optional(),
 }).refine(d => d.amountIn || d.targetOutput, {
   message: "either amountIn or targetOutput is required",
@@ -72,19 +74,33 @@ export async function POST(req: NextRequest) {
     // slippage cushion. This is the path the hosted checkout takes when
     // the customer hasn't been asked to pick a payIn manually.
     if (!resolvedAmountIn && targetOutput) {
+      // Include customFee in the probe so the returned rate already reflects
+      // the 1% fee App Kit takes off the input at execution time. Without
+      // this, the probe is 1% optimistic and the real swap delivers below
+      // the merchant's floor. Recipient is the relayer's configured fee
+      // address (same one the actual swap uses) to keep the math identical.
+      const customFeeBps   = Number(process.env.CUSTOM_FEE_BPS ?? "100");
+      const feeRecipient   = process.env.CUSTOM_FEE_RECIPIENT;
       const probe = await kit.estimateSwap({
         from:     { adapter: getAdapter(), chain: "Arc_Testnet" as const },
         tokenIn:  payInToken,
         tokenOut: payoutToken,
         amountIn: "1.0",
-        config:   { kitKey, slippageBps: Number(process.env.SLIPPAGE_BPS ?? "100") },
+        config:   {
+          kitKey,
+          slippageBps: Number(process.env.SLIPPAGE_BPS ?? "100"),
+          ...(feeRecipient ? { customFee: { percentageBps: customFeeBps, recipientAddress: feeRecipient } } : {}),
+        },
       });
       const probeOut = (probe as { estimatedOutput?: { amount: string } }).estimatedOutput?.amount;
       if (!probeOut) throw new Error("probe quote returned no estimatedOutput");
       // amountIn = targetOutput / rate, where rate = probeOut/1.0
       const target  = parseFloat(targetOutput);
       const rate    = parseFloat(probeOut);
-      const buffer  = 1 + (slippageBps ?? 500) / 10_000;
+      // Default cushion 250 bps — covers RFQ rate drift between probe and
+      // actual execution. (Was 100 bps; bumped after settle reverts under
+      // adverse rate movement on testnet.)
+      const buffer  = 1 + (slippageBps ?? 250) / 10_000;
       // Round up to 6 decimals so we never quote below what's needed.
       const recommended = Math.ceil((target / rate * buffer) * 1_000_000) / 1_000_000;
       resolvedAmountIn = recommended.toFixed(6);

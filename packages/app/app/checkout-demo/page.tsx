@@ -100,7 +100,7 @@ export default function CheckoutDemoPage() {
       </section>
 
       <div className="border-t border-arcora-border px-6 py-5 text-[11px] text-muted-foreground flex items-center justify-between font-[family-name:var(--font-mono)]">
-        <span>Numbers above use the live Chainlink oracle rate ({ORACLE}) and the deployed contract&apos;s fee config.</span>
+        <span>Illustrative quote at {ORACLE} EUR/USD; production rates come live from Arc&apos;s App Kit Swap. Fee numbers match the deployed v0.8 gateway config.</span>
         <Link href="/" className="text-arcora-link hover:underline">← Back to landing</Link>
       </div>
       <SiteFooter />
@@ -229,23 +229,23 @@ function StepQuote({ source, sourceAmount, fee, merchantPayout, quoteSecs, onPay
         </span>
       </div>
       <h2 className="mt-3 font-[family-name:var(--font-display)] text-[26px] tracking-tight text-arcora-slate">
-        Live FX, signed by Chainlink
+        Live FX, quoted by App Kit
       </h2>
 
       <div className="mt-6 rounded-2xl border border-arcora-border bg-arcora-gray/30 p-6 space-y-3 font-[family-name:var(--font-mono)] text-sm">
         <Row label="You pay"          value={`${sourceAmount.toFixed(4)} ${source}`} />
         <Row label="Merchant gets"    value={`$${merchantPayout.toFixed(2)} USDC`} highlight />
-        <Row label="Oracle rate"      value={sameToken ? "— same-token, no swap" : `1 EUR = ${ORACLE.toFixed(4)} USD`} muted />
+        <Row label="App Kit rate"     value={sameToken ? "— same-token, no swap" : `1 EUR = ${ORACLE.toFixed(4)} USD`} muted />
         <Row
-          label={`Pool fee · ${POOL_FEE_BPS} bps`}
-          value={sameToken ? "— same-token, no swap" : "embedded in quote"}
+          label={`Provider fee · ${POOL_FEE_BPS} bps`}
+          value={sameToken ? "— same-token, no swap" : "App Kit RFQ"}
           muted
         />
-        <Row label={`Protocol fee · ${PROTOCOL_FEE_BPS} bps`} value={`$${fee.toFixed(2)}`} muted />
+        <Row label={`Protocol fee · ${PROTOCOL_FEE_BPS} bps`} value={`$${fee.toFixed(2)} (from merchant)`} muted />
       </div>
 
       <button onClick={onPay} disabled={expired} className="mt-auto btn-arcora-pill self-start disabled:opacity-50 disabled:cursor-not-allowed">
-        {expired ? "Quote expired — refresh" : `Approve & pay ${sourceAmount.toFixed(4)} ${source}`}
+        {expired ? "Quote expired — refresh" : `Sign and pay ${sourceAmount.toFixed(4)} ${source}`}
       </button>
     </div>
   );
@@ -259,12 +259,12 @@ function StepPaying({ source }: { source: Source }) {
       <div className="text-center">
         <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">Step 4 · Pay</p>
         <h2 className="mt-3 font-[family-name:var(--font-display)] text-[26px] tracking-tight text-arcora-slate">
-          Submitting one transaction
+          Settling on Arc
         </h2>
         <p className="mt-2 text-sm text-muted-foreground max-w-md">
           {source === "USDC"
-            ? "Same-token branch: gateway transfers USDC straight to the merchant — no swap, no slippage."
-            : "Atomic flow: Gateway pulls EURC, OracleAMM swaps to USDC, payout fires to the merchant."}
+            ? "Same-token branch: relayer pulls your USDC via Permit2 and forwards it straight to the merchant — no swap, no slippage."
+            : "Cross-stable: relayer pulls your EURC via Permit2, runs App Kit Swap on Arc, and pays the merchant in USDC. Sub-30s end-to-end."}
         </p>
       </div>
     </div>

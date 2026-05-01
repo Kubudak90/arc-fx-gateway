@@ -7,9 +7,9 @@ import { CrosschainRouteDiagram } from "@/components/landing/CrosschainRouteDiag
 import { SiteFooter } from "@/components/landing/SiteFooter";
 
 const PILLARS = [
-  { label: "SECURE", body: "Funds settle on-chain in a single transaction; no custody, no off-chain credit." },
-  { label: "FAST",   body: "Sub-minute checkout from invoice to payout, with live FX from a Chainlink-priced AMM." },
-  { label: "GLOBAL", body: "Stablecoin-native rails — accept USDC or EURC anywhere, settle in your chosen currency." },
+  { label: "SECURE", body: "Settlement runs through audited Arc primitives. No custody, no off-chain credit; funds either land in the merchant's wallet or refund to the payer." },
+  { label: "FAST",   body: "One signature, no transaction for the customer. Live FX from Arc's App Kit Swap — Circle's RFQ-backed maker network — settles sub-30s." },
+  { label: "GLOBAL", body: "Stablecoin-native rails. Accept USDC or EURC anywhere, settle in the stablecoin you choose. Crosschain reach via App Kit Bridge on the roadmap." },
 ] as const;
 
 const STEPS = [
@@ -21,15 +21,15 @@ const STEPS = [
   },
   {
     n: "02",
-    title: "Customer pays at the checkout",
-    body: "The customer opens the link, connects their wallet, sees a live FX quote, and approves + pays. Same-token payments skip the swap entirely.",
-    code: `pay(invoiceId, maxAmountIn);`,
+    title: "Customer signs once",
+    body: "The customer opens the link, connects their wallet, sees a live FX quote, and signs a single Permit2 EIP-712 message. No gas, no on-chain transaction on their side.",
+    code: `wallet.signTypedData(permit2Msg);`,
   },
   {
     n: "03",
-    title: "Settles on Arc, atomically",
-    body: "One transaction does the FX swap (if needed), takes the protocol fee, sends the merchant their preferred stable, and emits InvoicePaid. Webhook fires once the indexer sees the event.",
-    code: `→ merchantPayout USDC\n→ webhook invoice.paid`,
+    title: "Arcora settles in seconds",
+    body: "Arcora's relayer pulls the funds via Permit2, runs the FX swap on Arc's App Kit, and delivers the merchant's preferred stablecoin — minus the protocol fee. Webhook fires once the indexer sees InvoicePaid.",
+    code: `→ kit.swap(USDC → EURC)\n→ gateway.settleInvoice\n→ webhook invoice.paid`,
   },
 ] as const;
 
@@ -37,34 +37,40 @@ type Phase = "shipped" | "next" | "later";
 
 const ROADMAP_ITEMS: Array<{ tag: string; phase: Phase; title: string; body: string }> = [
   {
+    tag: "v0.8",
+    phase: "shipped",
+    title: "Permit2 + App Kit Swap",
+    body: "Customer-side gas-less Permit2 signature; Arcora relayer drives Circle's App Kit Swap on Arc; deterministic merchant payout. Live on Arc testnet.",
+  },
+  {
     tag: "v1.0",
     phase: "shipped",
-    title: "Arc-only USDC ⇄ EURC checkout",
-    body: "Hosted checkout, merchant dashboard, SIWE auth, refunds, treasury view, npm SDK. Live now on Arc testnet.",
+    title: "Hosted checkout & merchant dashboard",
+    body: "Invoice creation, hosted checkout page, SIWE auth, refunds, treasury view with 30-day charts, npm SDK, WooCommerce plugin.",
   },
   {
     tag: "v1.x",
     phase: "next",
-    title: "Any stablecoin on Arc",
-    body: "USDT, PYUSD, DAI and regional fiat-pegged tokens behind a generic single-pool AMM and token registry. Architecture spec drafted.",
+    title: "Compliance hooks (Elliptic / TRM)",
+    body: "Native screening adapters for sanctioned-wallet detection — pre-mainnet bar. Adapter pattern spec'd; rollout staged behind a config flip.",
   },
   {
     tag: "v2.0",
     phase: "next",
-    title: "Crosschain checkout via CCTP",
-    body: "Customer pays USDC from any CCTP-supported EVM chain — Ethereum, Arbitrum, Base, Optimism, Polygon, Avalanche, Linea, Codex.",
+    title: "Crosschain checkout via App Kit Bridge",
+    body: "Customer pays USDC from any chain App Kit supports — Ethereum, Arbitrum, Base, Optimism, Polygon, Avalanche, Linea — bridged through CCTPv2 to Arc settlement.",
   },
   {
     tag: "v2.1",
     phase: "later",
     title: "Pay with any token",
-    body: "Source-side DEX aggregator (Odos / 1inch) so the customer can pay in native ETH or any ERC-20 — Arcora handles the swap before bridging.",
+    body: "Source-side DEX aggregation so customers pay in native ETH or any ERC-20 — Arcora handles the conversion before bridging.",
   },
   {
     tag: "v2.2",
     phase: "later",
-    title: "Solana, Sui, beyond EVM",
-    body: "Same checkout shape, non-EVM wallet stack — Phantom, Jupiter, native bridges.",
+    title: "Solana, beyond EVM",
+    body: "Same checkout shape, non-EVM wallet stack — App Kit's Solana adapter, Phantom, native CCTP routes.",
   },
   {
     tag: "v3.0",
@@ -115,7 +121,7 @@ export default function Home() {
         <div className="max-w-5xl mx-auto">
           <LiveSettlement />
           <p className="mt-4 text-center text-xs text-muted-foreground font-[family-name:var(--font-mono)] tracking-wider">
-            Replay of the live v1.0.2 pay-flow against the on-chain Chainlink oracle. Every figure derived from the deployed contract — no fictional volumes.
+            Replay of the v0.8 pay-flow on Arc Testnet — quote from Circle's App Kit Swap, deterministic merchant payout from the deployed gateway. No fictional volumes.
           </p>
         </div>
       </section>
@@ -275,17 +281,17 @@ export default function Home() {
               <PhaseBadge phase="next" />
             </div>
             <h3 className="font-[family-name:var(--font-display)] text-[28px] leading-tight tracking-tight text-arcora-slate">
-              Any stablecoin on Arc.
+              Any stablecoin App Kit supports.
             </h3>
             <p className="mt-3 text-muted-foreground">
-              USDC and EURC ship today. v1.x is the architectural step that opens the gateway to
-              USDT, PYUSD, DAI, and regional fiat-pegged tokens — a single registry-driven AMM,
-              one entry per stablecoin, no per-pair contract redeploy.
+              USDC and EURC ship today. App Kit Swap on Arc already supports USDT, USDe, DAI,
+              and PYUSD; turning each one on inside Arcora is a token-whitelist call on the
+              gateway. No per-pair contract redeploy, no AMM to seed — the FX layer is Arc-native.
             </p>
           </div>
           <div className="rounded-2xl border border-arcora-border bg-white p-6">
             <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground mb-3">
-              Token registry shape
+              Tokens on Arc
             </div>
             <ul className="space-y-2 font-[family-name:var(--font-mono)] text-[13px]">
               {[
@@ -331,9 +337,9 @@ export default function Home() {
             One signature. Full route.
           </h3>
           <p className="mt-4 text-white/70 max-w-2xl">
-            The customer signs once. An Arcora solver executes the swap on the source chain, the
-            CCTP burn, the Arc mint, the destination swap, and the merchant settlement —
-            atomically, off the user&apos;s critical path. The Stripe-like UX, on stablecoin rails.
+            The customer signs once. An Arcora solver executes the source-chain swap, the
+            App Kit Bridge route to Arc, the destination swap, and the merchant settlement —
+            off the user&apos;s critical path. The Stripe-like UX, on stablecoin rails.
           </p>
           <div className="mt-8 rounded-2xl bg-white/5 border border-white/10 p-6 max-w-2xl font-[family-name:var(--font-mono)] text-sm space-y-1">
             <div className="text-white/50">User signs:</div>

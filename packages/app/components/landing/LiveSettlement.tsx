@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 
 /**
- * Loops a simulated, label-honest replay of the v1.0.2 pay flow against the
- * real OracleAMM rate (1.0863 EUR/USD). No fictional volumes — every number on
- * screen is either a real Arc testnet constant or a deterministic computation
- * from one. Three scenarios cycle: same-token USDC→USDC, swap EURC→USDC, swap
- * USDC→EURC. Each scenario walks Quote → Pay → Settled.
+ * Loops a simulated, label-honest replay of the v0.8 pay flow on Arc Testnet.
+ * Quote rate is illustrative (real testnet RFQ rates from App Kit Swap drift
+ * 0.80–0.92 USD/EUR; the live demo /checkout-demo uses the actual quote
+ * endpoint). Three scenarios cycle: same-token USDC→USDC, swap EURC→USDC,
+ * swap USDC→EURC. Each walks Quote → Sign → Settled.
  */
 
 type Phase = "quote" | "pay" | "settled";
@@ -25,10 +25,10 @@ const SCENARIOS: Scenario[] = [
   { id: "INV-1026", payIn: "USDC", payout: "EURC", amountOutMicro: 1_000_000 },
 ];
 
-const ORACLE = 1.0863;        // mock Chainlink EUR/USD feed value, hardcoded on-chain
-const POOL_FEE_BPS = 4;       // OracleAMM swap fee
-const PROTOCOL_FEE_BPS = 10;  // gateway protocol fee
-const GATEWAY_ADDR = "0x7c113740…F25F208Fb7a3";
+const ORACLE = 1.0863;        // illustrative EUR/USD rate; real swap quotes come from App Kit RFQ
+const POOL_FEE_BPS = 2;       // App Kit provider fee on every swap (0.02%)
+const PROTOCOL_FEE_BPS = 30;  // Arcora gateway fee (deducted from merchant payout)
+const GATEWAY_ADDR = "0x6fAaD9…ec5d507a8"; // ArcFXGateway v0.8 on Arc Testnet
 
 function calcAmountIn(s: Scenario): number {
   // Same-token: customer pays exactly amountOut (no swap).
@@ -118,7 +118,7 @@ export function LiveSettlement() {
         <div className="flex flex-col items-center justify-between border-x border-arcora-border bg-arcora-gray/20 py-7 px-5 gap-3 min-w-[260px]">
           <div className="text-center">
             <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
-              {sameToken ? "Same-token · No swap" : "Atomic swap via OracleAMM"}
+              {sameToken ? "Same-token · No swap" : "Swap via App Kit · Permit2 settle"}
             </div>
             <div className="mt-1 font-[family-name:var(--font-display)] font-semibold text-arcora-slate text-lg">
               ArcFXGateway

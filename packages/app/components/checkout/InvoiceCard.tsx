@@ -5,7 +5,7 @@ interface InvoiceCardProps {
   amountOut: string;
   payoutTokenAddress: string;
   payInTokenAddress: string;
-  status: "created" | "paid" | "expired";
+  status: "created" | "paid" | "expired" | "failed";
 }
 
 export function InvoiceCard({ amountOut, payoutTokenAddress, payInTokenAddress, status }: InvoiceCardProps) {
@@ -25,14 +25,17 @@ export function InvoiceCard({ amountOut, payoutTokenAddress, payInTokenAddress, 
         </div>
         {status === "paid" && <StatusBadge variant="paid" />}
         {status === "expired" && <StatusBadge variant="expired" />}
+        {status === "failed" && <StatusBadge variant="failed" />}
       </CardContent>
     </Card>
   );
 }
 
-function StatusBadge({ variant }: { variant: "paid" | "expired" }) {
+function StatusBadge({ variant }: { variant: "paid" | "expired" | "failed" }) {
   const styles = variant === "paid"
     ? "bg-emerald-50 text-emerald-700"
+    : variant === "failed"
+    ? "bg-red-50 text-red-700"
     : "bg-neutral-100 text-neutral-600";
   return (
     <div className={`mt-4 inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${styles}`}>

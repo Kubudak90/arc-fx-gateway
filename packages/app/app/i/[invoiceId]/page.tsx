@@ -19,6 +19,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
       paidBy: invoices.paidBy,
       paidTx: invoices.paidTx,
       payoutToken: invoices.payoutToken,
+      metadata: invoices.metadata,
       merchantAddress: merchants.address,
     })
     .from(invoices)
@@ -30,6 +31,10 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
   const inv = rows[0]!;
   const expired = inv.expiresAt.getTime() < Date.now();
   const initialStatus = expired && inv.status === "created" ? "expired" : inv.status;
+  // The /api/invoices ?engine=v8 path stamps `metadata.engine` so the client
+  // knows which PayButton to render. v0.6 invoices (default) have no engine
+  // field; treat absence as v6.
+  const engine = (inv.metadata as { engine?: string } | null)?.engine === "v8" ? "v8" : "v6";
 
   return (
     <main className="min-h-screen grid place-items-center px-6 py-10">
@@ -38,16 +43,17 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
           amountOut={inv.amountOut}
           payoutTokenAddress={inv.payoutToken}
           payInTokenAddress={inv.payInToken}
-          status={initialStatus as "created" | "paid" | "expired"}
+          status={initialStatus as "created" | "paid" | "expired" | "failed"}
         />
         <CheckoutClient
           invoiceId={inv.id}
-          initialStatus={initialStatus as "created" | "paid" | "expired"}
+          initialStatus={initialStatus as "created" | "paid" | "expired" | "failed"}
           payInTokenAddress={inv.payInToken}
           payoutTokenAddress={inv.payoutToken}
           amountOut={inv.amountOut}
           successUrl={inv.successUrl}
           cancelUrl={inv.cancelUrl ?? undefined}
+          engine={engine}
         />
       </div>
     </main>

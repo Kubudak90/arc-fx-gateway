@@ -10,10 +10,13 @@ importers:
     devDependencies:
       '@marp-team/marp-cli':
         specifier: ^4.3.1
-        version: 4.3.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
+        version: 4.3.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
 
   packages/app:
     dependencies:
+      '@arcora/sdk':
+        specifier: workspace:^
+        version: link:../sdk
       '@base-ui/react':
         specifier: ^1.4.1
         version: 1.4.1(@types/react@18.3.28)(date-fns@2.30.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -8185,16 +8188,16 @@ snapshots:
     dependencies:
       '@lit-labs/ssr-dom-shim': 1.5.1
 
-  '@marp-team/marp-cli@4.3.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)':
+  '@marp-team/marp-cli@4.3.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)':
     dependencies:
       '@marp-team/marp-core': 4.3.0
       '@marp-team/marpit': 3.2.1
       chokidar: 4.0.3
       cosmiconfig: 9.0.1(typescript@5.9.3)
-      puppeteer-core: 24.42.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      puppeteer-core: 24.42.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       serve-index: 1.9.2
       tmp: 0.2.5
-      ws: 8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      ws: 8.20.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yargs: 17.7.2
     transitivePeerDependencies:
       - bare-abort-controller
@@ -13515,7 +13518,7 @@ snapshots:
 
   punycode.js@2.3.1: {}
 
-  puppeteer-core@24.42.0(bufferutil@4.1.0)(utf-8-validate@5.0.10):
+  puppeteer-core@24.42.0(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       '@puppeteer/browsers': 2.13.0
       chromium-bidi: 14.0.0(devtools-protocol@0.0.1595872)
@@ -13523,7 +13526,7 @@ snapshots:
       devtools-protocol: 0.0.1595872
       typed-query-selector: 2.12.2
       webdriver-bidi-protocol: 0.4.1
-      ws: 8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      ws: 8.20.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -14830,11 +14833,6 @@ snapshots:
     optionalDependencies:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6
-
-  ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@5.0.10):
-    optionalDependencies:
-      bufferutil: 4.1.0
-      utf-8-validate: 5.0.10
 
   ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     optionalDependencies:

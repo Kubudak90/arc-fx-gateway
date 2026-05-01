@@ -1,0 +1,17 @@
+[Unit]
+Description=Arcora relayer (App Kit Swap orchestrator + gateway settle)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/arcora-ops/relayer
+EnvironmentFile=/root/arcora-ops/relayer/.env
+ExecStart=/usr/bin/node --import tsx/esm run.ts
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

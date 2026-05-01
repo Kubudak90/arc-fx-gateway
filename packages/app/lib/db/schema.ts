@@ -6,7 +6,15 @@ const bytea = customType<{ data: Buffer; default: false }>({
   dataType() { return "bytea"; },
 });
 
-export const invoiceStatus = pgEnum("invoice_status", ["created", "paid", "expired", "refunded"]);
+// `failed` is new with the v0.8 (relayer-driven) gateway: marks an invoice the
+// relayer could not settle (kit.swap fail, slippage breach) after the pay-in
+// was returned to the customer off-chain. Indexer + webhook flow surface it
+// as a terminal "this won't pay" state so the row doesn't sit in `created`.
+export const invoiceStatus = pgEnum("invoice_status", ["created", "paid", "expired", "refunded", "failed"]);
+
+export const relayerQueueStatus = pgEnum("relayer_queue_status",
+  ["pending", "processing", "settled", "refunded", "failed"],
+);
 
 export const merchants = pgTable("merchants", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -73,4 +81,28 @@ export const siweNonces = pgTable("siwe_nonces", {
   nonce: text("nonce").primaryKey(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   used: boolean("used").notNull().default(false),
+});
+
+// Queue of customer-signed Permit2 messages waiting for the Arcora relayer to
+// pull funds, run kit.swap, and settle the invoice. Producer: /api/checkout/submit.
+// Consumer: ops/relayer/run.ts.
+export const relayerQueue = pgTable("relayer_queue", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: text("invoice_id").notNull().references(() => invoices.id),
+  payer: text("payer").notNull(),
+  payInToken: text("pay_in_token").notNull(),
+  amountIn: numeric("amount_in").notNull(),         // base units
+  payoutToken: text("payout_token").notNull(),      // copied from invoice for queue-scan locality
+  amountOutMin: numeric("amount_out_min").notNull(), // invoice.amountOut, gateway-enforced floor
+  permit2Data: jsonb("permit2_data").notNull(),     // { permit, witness, deadline }
+  permit2Signature: text("permit2_signature").notNull(),
+  status: relayerQueueStatus("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  swapTxHash: text("swap_tx_hash"),
+  settleTxHash: text("settle_tx_hash"),
+  refundTxHash: text("refund_tx_hash"),
+  nextAttempt: timestamp("next_attempt", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

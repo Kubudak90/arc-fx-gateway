@@ -74,12 +74,12 @@ export function SDKBlock() {
   const lines = CODE.split("\n");
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.3fr] gap-12 items-center">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.3fr] gap-8 lg:gap-12 items-center">
       <div>
         <p className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
           Developers
         </p>
-        <h2 className="mt-3 font-[family-name:var(--font-display)] text-[44px] leading-[1.05] tracking-tight text-arcora-slate">
+        <h2 className="mt-3 font-[family-name:var(--font-display)] text-[30px] sm:text-[36px] md:text-[44px] leading-[1.05] tracking-tight text-arcora-slate text-balance">
           Four lines.<br />First settlement.
         </h2>
         <p className="mt-5 text-muted-foreground leading-relaxed">

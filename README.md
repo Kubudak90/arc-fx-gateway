@@ -158,4 +158,4 @@ See [`RELEASING.md`](RELEASING.md) for SDK npm publish + Vercel deploy + tag ste
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE). Vendored Saddle StableSwap (in `packages/contracts/src/pool/`) is also MIT (preserved from upstream).
+MIT — see [`LICENSE`](LICENSE). v0.8.1 delegates the FX leg to Circle's App Kit Swap and does not run an in-house pool; the legacy pool work under `packages/contracts/src/pool/` is unused, kept only as a reference implementation for the v1.x shared-vault track.

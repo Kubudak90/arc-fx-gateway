@@ -34,14 +34,14 @@ export function DashboardPreview() {
     <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_20px_40px_-24px_rgba(11,20,38,0.12)] overflow-hidden">
       <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-0">
         {/* Chart */}
-        <div className="p-7 border-b lg:border-b-0 lg:border-r border-arcora-border">
-          <div className="flex items-baseline justify-between gap-4">
+        <div className="p-5 sm:p-7 border-b lg:border-b-0 lg:border-r border-arcora-border">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
             <div>
               <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
                 Volume · last 30d
               </div>
-              <div className="mt-2 font-[family-name:var(--font-display)] text-4xl font-semibold tabular-nums text-arcora-slate">
-                $1,284,309<span className="text-muted-foreground text-xl ml-0.5">.42</span>
+              <div className="mt-2 font-[family-name:var(--font-display)] text-3xl sm:text-4xl font-semibold tabular-nums text-arcora-slate">
+                $1,284,309<span className="text-muted-foreground text-lg sm:text-xl ml-0.5">.42</span>
               </div>
               <div className="mt-1 font-[family-name:var(--font-mono)] text-xs text-arcora-teal">
                 +24.1% vs prev period
@@ -82,7 +82,7 @@ export function DashboardPreview() {
         </div>
 
         {/* Mini ledger */}
-        <div className="p-7 flex flex-col">
+        <div className="p-5 sm:p-7 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <span className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
               Recent settlements

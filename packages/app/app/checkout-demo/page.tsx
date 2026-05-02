@@ -7,16 +7,17 @@ import { SiteFooter } from "@/components/landing/SiteFooter";
 
 /**
  * Stand-alone, fully simulated checkout walkthrough — no wallet, no chain
- * call. The math behind every step uses real Arcora constants (1.0863 oracle
- * rate, 4 bps pool fee, 10 bps protocol fee) so the numbers a viewer sees
- * match what they'd see in a real /i/[invoiceId] flow on Arc testnet. The
- * interactive stepper lets a marketing visitor walk Invoice → Wallet →
- * Quote → Pay → Settled at their own pace.
+ * call. The math behind every step uses real Arcora constants (1.0863
+ * illustrative oracle rate, 2 bps App Kit provider fee, 30 bps Arcora
+ * protocol fee) so the numbers a viewer sees match what the deployed
+ * v0.8.1 gateway charges on Arc testnet. The interactive stepper lets a
+ * marketing visitor walk Invoice → Wallet → Quote → Pay → Settled at
+ * their own pace.
  */
 
 const ORACLE = 1.0863;
-const POOL_FEE_BPS = 4;
-const PROTOCOL_FEE_BPS = 10;
+const POOL_FEE_BPS = 2;       // App Kit provider fee
+const PROTOCOL_FEE_BPS = 30;  // Arcora gateway fee (deducted from merchant payout)
 
 type Source = "USDC" | "EURC";
 
@@ -69,23 +70,23 @@ export default function CheckoutDemoPage() {
 
   return (
     <main className="min-h-screen flex flex-col bg-white">
-      <header className="px-6 py-4 flex items-center justify-between border-b border-arcora-border">
-        <Link href="/" className="flex items-center"><ArcoraLogo size={26} /></Link>
-        <span className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+      <header className="px-4 sm:px-6 py-4 flex items-center justify-between gap-3 border-b border-arcora-border">
+        <Link href="/" className="flex items-center shrink-0"><ArcoraLogo size={26} /></Link>
+        <span className="hidden md:inline font-[family-name:var(--font-mono)] text-[10px] tracking-[0.2em] uppercase text-muted-foreground truncate">
           Checkout demo · simulated · no wallet required
         </span>
-        <button onClick={reset} className="text-xs text-arcora-link hover:underline">
+        <button onClick={reset} className="text-xs text-arcora-link hover:underline shrink-0">
           Reset
         </button>
       </header>
 
-      <section className="flex-1 px-6 py-10">
+      <section className="flex-1 px-4 sm:px-6 py-8 sm:py-10">
         <div className="max-w-4xl mx-auto">
           <Stepper current={stepIdx} />
 
           <div className="mt-8 grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6 items-start">
             {/* Active step panel */}
-            <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_20px_40px_-24px_rgba(11,20,38,0.10)] p-8 min-h-[520px] flex flex-col">
+            <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_20px_40px_-24px_rgba(11,20,38,0.10)] p-5 sm:p-8 min-h-[520px] flex flex-col">
               {step() === "Invoice"  && <StepInvoice merchant={merchant} invoice={invoice} onNext={() => setStepIdx(1)} />}
               {step() === "Wallet"   && <StepWallet  source={source} setSource={setSource} onNext={() => setStepIdx(2)} />}
               {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} merchantPayout={merchantPayout} quoteSecs={quoteSecs} onPay={() => { setPaying(true); setStepIdx(3); setTimeout(() => setStepIdx(4), 3200); }} />}
@@ -99,9 +100,9 @@ export default function CheckoutDemoPage() {
         </div>
       </section>
 
-      <div className="border-t border-arcora-border px-6 py-5 text-[11px] text-muted-foreground flex items-center justify-between font-[family-name:var(--font-mono)]">
-        <span>Illustrative quote at {ORACLE} EUR/USD; production rates come live from Arc&apos;s App Kit Swap. Fee numbers match the deployed v0.8 gateway config.</span>
-        <Link href="/" className="text-arcora-link hover:underline">← Back to landing</Link>
+      <div className="border-t border-arcora-border px-4 sm:px-6 py-5 text-[10px] sm:text-[11px] text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 font-[family-name:var(--font-mono)]">
+        <span>Illustrative quote at {ORACLE} EUR/USD; production rates come live from Arc&apos;s App Kit Swap. Fee numbers match the deployed v0.8.1 gateway config.</span>
+        <Link href="/" className="text-arcora-link hover:underline whitespace-nowrap">← Back to landing</Link>
       </div>
       <SiteFooter />
     </main>
@@ -116,8 +117,8 @@ function Stepper({ current }: { current: number }) {
         const done   = i <  current;
         const active = i === current;
         return (
-          <div key={s} className="flex items-center gap-2 flex-1">
-            <div className="flex items-center gap-2">
+          <div key={s} className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <span className={`size-6 rounded-full flex items-center justify-center font-[family-name:var(--font-mono)] text-[11px] font-semibold ${
                 done   ? "bg-arcora-teal text-white" :
                 active ? "bg-arcora-blue text-white" :
@@ -125,12 +126,15 @@ function Stepper({ current }: { current: number }) {
               }`}>
                 {done ? "✓" : i + 1}
               </span>
-              <span className={`text-sm ${active ? "text-arcora-slate font-semibold" : "text-muted-foreground"}`}>
+              <span className={`hidden sm:inline text-sm ${active ? "text-arcora-slate font-semibold" : "text-muted-foreground"}`}>
                 {s}
               </span>
+              {active && (
+                <span className="sm:hidden text-xs text-arcora-slate font-semibold">{s}</span>
+              )}
             </div>
             {i < STEPS.length - 1 && (
-              <span className={`flex-1 h-px ${done ? "bg-arcora-teal" : "bg-arcora-border"}`} />
+              <span className={`flex-1 h-px min-w-3 ${done ? "bg-arcora-teal" : "bg-arcora-border"}`} />
             )}
           </div>
         );
@@ -312,7 +316,7 @@ function OrderSummary({ merchant, invoice, source, sourceAmount, fee, step, quot
   step: Step; quoteSecs: number;
 }) {
   return (
-    <aside className="rounded-[20px] border border-arcora-border bg-white p-6 sticky top-6">
+    <aside className="rounded-[20px] border border-arcora-border bg-white p-5 sm:p-6 md:sticky md:top-6">
       <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground mb-4">
         Order summary
       </div>

@@ -83,33 +83,33 @@ const ROADMAP_ITEMS: Array<{ tag: string; phase: Phase; title: string; body: str
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-white/80 px-6 py-4 flex items-center justify-between border-b border-arcora-border">
+      <header className="sticky top-0 z-50 backdrop-blur-md bg-white/80 px-4 sm:px-6 py-4 flex items-center justify-between gap-3 border-b border-arcora-border">
         <ArcoraLogo size={28} />
-        <nav className="flex items-center gap-4 text-sm">
-          <a href="#how-it-works" className="text-muted-foreground hover:text-foreground">How it works</a>
-          <a href="#dashboard"    className="text-muted-foreground hover:text-foreground">Dashboard</a>
-          <a href="#developers"   className="text-muted-foreground hover:text-foreground">Developers</a>
-          <a href="#roadmap"      className="text-muted-foreground hover:text-foreground">Roadmap</a>
-          <a href="/m/login" className="text-arcora-link hover:underline">Merchants</a>
+        <nav className="flex items-center gap-3 sm:gap-4 text-sm">
+          <a href="#how-it-works" className="hidden md:inline text-muted-foreground hover:text-foreground">How it works</a>
+          <a href="#dashboard"    className="hidden lg:inline text-muted-foreground hover:text-foreground">Dashboard</a>
+          <a href="#developers"   className="hidden lg:inline text-muted-foreground hover:text-foreground">Developers</a>
+          <a href="#roadmap"      className="hidden md:inline text-muted-foreground hover:text-foreground">Roadmap</a>
+          <a href="/m/login" className="text-arcora-link hover:underline whitespace-nowrap">Merchants</a>
           <a href="https://github.com/Kubudak90/arc-fx-gateway" className="text-muted-foreground hover:text-foreground">GitHub</a>
         </nav>
       </header>
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="px-6 pt-20 pb-12">
+      <section className="px-4 sm:px-6 pt-12 sm:pt-20 pb-12">
         <div className="max-w-3xl mx-auto text-center">
           <ArcoraLogo size={72} className="justify-center mb-8" />
-          <p className="text-sm tracking-[0.2em] uppercase text-muted-foreground">
+          <p className="text-xs sm:text-sm tracking-[0.2em] uppercase text-muted-foreground">
             Stablecoin Checkout &amp; Settlement
           </p>
-          <h1 className="mt-6 font-[family-name:var(--font-display)] text-[56px] leading-[1.05] tracking-tight text-arcora-slate">
+          <h1 className="mt-6 font-[family-name:var(--font-display)] text-[34px] sm:text-[44px] md:text-[56px] leading-[1.08] tracking-tight text-arcora-slate text-balance">
             Accept, move, and settle stablecoin payments with confidence.
           </h1>
-          <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
+          <p className="mt-6 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
             Arcora gives global businesses a checkout that quotes live FX, settles on-chain in seconds,
             and pays out in the stablecoin you choose. Secure. Compliant. Built for scale.
           </p>
-          <div className="mt-10 flex justify-center gap-3">
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
             <a href="/m/login" className="btn-arcora-pill">Sign in as merchant</a>
             <a href="https://github.com/Kubudak90/arc-fx-gateway" className="btn-arcora-pill-light">View on GitHub</a>
           </div>
@@ -117,17 +117,17 @@ export default function Home() {
       </section>
 
       {/* ── Live settlement simulator ────────────────────────────────────── */}
-      <section className="px-6 pb-20">
+      <section className="px-4 sm:px-6 pb-20">
         <div className="max-w-5xl mx-auto">
           <LiveSettlement />
-          <p className="mt-4 text-center text-xs text-muted-foreground font-[family-name:var(--font-mono)] tracking-wider">
-            Replay of the v0.8 pay-flow on Arc Testnet — quote from Circle's App Kit Swap, deterministic merchant payout from the deployed gateway. No fictional volumes.
+          <p className="mt-4 text-center text-[11px] sm:text-xs text-muted-foreground font-[family-name:var(--font-mono)] tracking-wider px-2">
+            Replay of the v0.8 pay-flow on Arc Testnet — quote from Circle&apos;s App Kit Swap, deterministic merchant payout from the deployed gateway. No fictional volumes.
           </p>
         </div>
       </section>
 
       {/* ── Pillars ──────────────────────────────────────────────────────── */}
-      <section className="px-6 pb-24">
+      <section className="px-4 sm:px-6 pb-24">
         <div className="max-w-5xl mx-auto grid gap-8 md:grid-cols-3">
           {PILLARS.map(p => (
             <div key={p.label} className="rounded-2xl border border-arcora-border p-6">
@@ -139,11 +139,11 @@ export default function Home() {
       </section>
 
       {/* ── How it works ─────────────────────────────────────────────────── */}
-      <section id="how-it-works" className="px-6 pb-24">
+      <section id="how-it-works" className="px-4 sm:px-6 pb-24 scroll-mt-20">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <p className="text-sm tracking-[0.2em] uppercase text-arcora-teal font-semibold">How it works</p>
-            <h2 className="mt-3 font-[family-name:var(--font-display)] text-[36px] leading-tight tracking-tight text-arcora-slate">
+            <p className="text-xs sm:text-sm tracking-[0.2em] uppercase text-arcora-teal font-semibold">How it works</p>
+            <h2 className="mt-3 font-[family-name:var(--font-display)] text-[26px] sm:text-[32px] md:text-[36px] leading-tight tracking-tight text-arcora-slate text-balance">
               Three steps from invoice to settlement.
             </h2>
           </div>
@@ -161,7 +161,7 @@ export default function Home() {
               </li>
             ))}
           </ol>
-          <div className="mt-10 flex justify-center gap-3 text-sm">
+          <div className="mt-10 flex flex-wrap justify-center gap-3 text-sm">
             <Link href="/checkout-demo" className="btn-arcora-pill">
               Try the checkout demo →
             </Link>
@@ -176,12 +176,12 @@ export default function Home() {
       </section>
 
       {/* ── Dashboard preview ────────────────────────────────────────────── */}
-      <section id="dashboard" className="px-6 pb-24">
+      <section id="dashboard" className="px-4 sm:px-6 pb-24 scroll-mt-20">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-end justify-between gap-6 flex-wrap mb-8">
             <div className="max-w-xl">
               <p className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.18em] uppercase text-muted-foreground">Merchant dashboard</p>
-              <h2 className="mt-3 font-[family-name:var(--font-display)] text-[40px] leading-[1.05] tracking-tight text-arcora-slate">
+              <h2 className="mt-3 font-[family-name:var(--font-display)] text-[28px] sm:text-[34px] md:text-[40px] leading-[1.05] tracking-tight text-arcora-slate text-balance">
                 Treasury that reads like a P&amp;L.
               </h2>
               <p className="mt-4 text-muted-foreground leading-relaxed">
@@ -199,17 +199,17 @@ export default function Home() {
       </section>
 
       {/* ── Developer SDK ────────────────────────────────────────────────── */}
-      <section id="developers" className="px-6 pb-24">
+      <section id="developers" className="px-4 sm:px-6 pb-24 scroll-mt-20">
         <div className="max-w-5xl mx-auto">
           <SDKBlock />
         </div>
       </section>
 
       {/* ── Roadmap ──────────────────────────────────────────────────────── */}
-      <section id="roadmap" className="px-6 pb-12 pt-16 bg-arcora-gray/30 border-y border-arcora-border">
+      <section id="roadmap" className="px-4 sm:px-6 pb-12 pt-16 bg-arcora-gray/30 border-y border-arcora-border scroll-mt-20">
         <div className="max-w-5xl mx-auto">
-          <p className="text-sm tracking-[0.2em] uppercase text-arcora-teal font-semibold">Roadmap</p>
-          <h2 className="mt-3 font-[family-name:var(--font-display)] text-[44px] leading-[1.05] tracking-tight text-arcora-slate max-w-3xl">
+          <p className="text-xs sm:text-sm tracking-[0.2em] uppercase text-arcora-teal font-semibold">Roadmap</p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-[30px] sm:text-[36px] md:text-[44px] leading-[1.05] tracking-tight text-arcora-slate max-w-3xl text-balance">
             Outward, signature by signature.
           </h2>
           <p className="mt-4 text-muted-foreground max-w-2xl">
@@ -221,16 +221,18 @@ export default function Home() {
           <div className="mt-10 border-t border-arcora-border">
             {ROADMAP_ITEMS.map(item => (
               <div key={item.tag}
-                className="grid grid-cols-1 md:grid-cols-[120px_120px_1fr] gap-4 md:gap-8 py-7 border-b border-arcora-border items-baseline">
-                <span className="font-[family-name:var(--font-mono)] text-arcora-slate text-lg tabular-nums">
-                  {item.tag}
-                </span>
-                <span><PhaseBadge phase={item.phase} /></span>
+                className="grid grid-cols-1 md:grid-cols-[120px_120px_1fr] gap-3 md:gap-8 py-6 md:py-7 border-b border-arcora-border md:items-baseline">
+                <div className="flex items-center gap-3 md:contents">
+                  <span className="font-[family-name:var(--font-mono)] text-arcora-slate text-base md:text-lg tabular-nums">
+                    {item.tag}
+                  </span>
+                  <span><PhaseBadge phase={item.phase} /></span>
+                </div>
                 <div>
-                  <h3 className="font-[family-name:var(--font-display)] text-xl font-semibold text-arcora-slate tracking-tight">
+                  <h3 className="font-[family-name:var(--font-display)] text-lg md:text-xl font-semibold text-arcora-slate tracking-tight">
                     {item.title}
                   </h3>
-                  <p className="mt-1.5 text-muted-foreground max-w-2xl leading-relaxed">{item.body}</p>
+                  <p className="mt-1.5 text-sm md:text-base text-muted-foreground max-w-2xl leading-relaxed">{item.body}</p>
                 </div>
               </div>
             ))}
@@ -239,7 +241,7 @@ export default function Home() {
       </section>
 
       {/* ── v2.0 deep-dive: crosschain diagram ───────────────────────────── */}
-      <section className="px-6 py-16 bg-arcora-gray/30 border-b border-arcora-border">
+      <section className="px-4 sm:px-6 py-16 bg-arcora-gray/30 border-b border-arcora-border">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-baseline gap-3 mb-6 flex-wrap">
             <span className="font-[family-name:var(--font-mono)] text-arcora-slate text-base tabular-nums">v2.0</span>
@@ -248,7 +250,7 @@ export default function Home() {
               In design · No code yet
             </span>
           </div>
-          <h3 className="font-[family-name:var(--font-display)] text-[32px] leading-tight tracking-tight text-arcora-slate max-w-2xl">
+          <h3 className="font-[family-name:var(--font-display)] text-[24px] sm:text-[28px] md:text-[32px] leading-tight tracking-tight text-arcora-slate max-w-2xl text-balance">
             Customer pays from anywhere. Merchant settles on Arc.
           </h3>
           <p className="mt-4 text-muted-foreground max-w-2xl">
@@ -273,14 +275,14 @@ export default function Home() {
       </section>
 
       {/* ── v1.x token registry ──────────────────────────────────────────── */}
-      <section className="px-6 py-16 border-b border-arcora-border">
-        <div className="max-w-5xl mx-auto grid md:grid-cols-[1fr_1.2fr] gap-12 items-start">
+      <section className="px-4 sm:px-6 py-16 border-b border-arcora-border">
+        <div className="max-w-5xl mx-auto grid md:grid-cols-[1fr_1.2fr] gap-8 md:gap-12 items-start">
           <div>
             <div className="flex items-baseline gap-3 mb-4">
               <span className="font-[family-name:var(--font-mono)] text-arcora-slate text-base tabular-nums">v1.x</span>
               <PhaseBadge phase="next" />
             </div>
-            <h3 className="font-[family-name:var(--font-display)] text-[28px] leading-tight tracking-tight text-arcora-slate">
+            <h3 className="font-[family-name:var(--font-display)] text-[22px] sm:text-[26px] md:text-[28px] leading-tight tracking-tight text-arcora-slate text-balance">
               Any stablecoin App Kit supports.
             </h3>
             <p className="mt-3 text-muted-foreground">
@@ -325,7 +327,7 @@ export default function Home() {
       </section>
 
       {/* ── v3.0 endgame ─────────────────────────────────────────────────── */}
-      <section className="px-6 py-16 bg-arcora-slate text-white">
+      <section className="px-4 sm:px-6 py-16 bg-arcora-slate text-white">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-baseline gap-3 mb-4">
             <span className="font-[family-name:var(--font-mono)] text-white/70 text-base tabular-nums">v3.0</span>
@@ -333,7 +335,7 @@ export default function Home() {
               Endgame
             </span>
           </div>
-          <h3 className="font-[family-name:var(--font-display)] text-[32px] leading-tight tracking-tight text-white max-w-2xl">
+          <h3 className="font-[family-name:var(--font-display)] text-[24px] sm:text-[28px] md:text-[32px] leading-tight tracking-tight text-white max-w-2xl text-balance">
             One signature. Full route.
           </h3>
           <p className="mt-4 text-white/70 max-w-2xl">
@@ -353,10 +355,10 @@ export default function Home() {
       </section>
 
       {/* ── CTA ──────────────────────────────────────────────────────────── */}
-      <section className="px-6 py-16">
-        <div className="max-w-5xl mx-auto rounded-[24px] border border-arcora-border p-10 md:p-14 bg-gradient-to-br from-arcora-blue/[0.06] via-white to-arcora-teal/[0.05] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <section className="px-4 sm:px-6 py-16">
+        <div className="max-w-5xl mx-auto rounded-[24px] border border-arcora-border p-6 sm:p-10 md:p-14 bg-gradient-to-br from-arcora-blue/[0.06] via-white to-arcora-teal/[0.05] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
-            <h3 className="font-[family-name:var(--font-display)] text-[28px] leading-tight tracking-tight text-arcora-slate max-w-xl">
+            <h3 className="font-[family-name:var(--font-display)] text-[22px] sm:text-[26px] md:text-[28px] leading-tight tracking-tight text-arcora-slate max-w-xl text-balance">
               Ship a checkout this afternoon. Settle by morning.
             </h3>
             <p className="mt-2 text-muted-foreground">Arc testnet is open. v1 is live; v2 is in design.</p>

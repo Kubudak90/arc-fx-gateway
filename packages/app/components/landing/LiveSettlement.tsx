@@ -87,17 +87,18 @@ export function LiveSettlement() {
   return (
     <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_20px_40px_-24px_rgba(11,20,38,0.12)] overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-4 flex items-center justify-between border-b border-arcora-border bg-arcora-gray/30">
-        <div className="flex items-center gap-3">
-          <span className="relative flex size-2">
+      <div className="px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-3 border-b border-arcora-border bg-arcora-gray/30">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="relative flex size-2 shrink-0">
             <span className="absolute inline-flex h-full w-full rounded-full bg-arcora-teal opacity-75 animate-ping" />
             <span className="relative inline-flex rounded-full size-2 bg-arcora-teal" />
           </span>
-          <span className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
-            Live · Arc testnet · Gateway {GATEWAY_ADDR}
+          <span className="font-[family-name:var(--font-mono)] text-[10px] sm:text-[11px] tracking-[0.18em] uppercase text-muted-foreground truncate">
+            <span className="sm:hidden">Live · Arc testnet</span>
+            <span className="hidden sm:inline">Live · Arc testnet · Gateway {GATEWAY_ADDR}</span>
           </span>
         </div>
-        <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground tabular-nums">
+        <span className="font-[family-name:var(--font-mono)] text-[10px] sm:text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
           oracle 1 EUR = {ORACLE.toFixed(4)} USD
         </span>
       </div>
@@ -115,7 +116,7 @@ export function LiveSettlement() {
         />
 
         {/* Middle column — gateway + flow */}
-        <div className="flex flex-col items-center justify-between border-x border-arcora-border bg-arcora-gray/20 py-7 px-5 gap-3 min-w-[260px]">
+        <div className="flex flex-col items-center justify-between border-y md:border-y-0 md:border-x border-arcora-border bg-arcora-gray/20 py-6 md:py-7 px-5 gap-3 md:min-w-[260px]">
           <div className="text-center">
             <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
               {sameToken ? "Same-token · No swap" : "Swap via App Kit · Permit2 settle"}
@@ -169,17 +170,17 @@ export function LiveSettlement() {
       </div>
 
       {/* Footer scenario strip */}
-      <div className="px-6 py-3 border-t border-arcora-border flex items-center justify-between bg-arcora-gray/20">
-        <div className="flex items-center gap-3">
-          <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground tracking-wider">
+      <div className="px-4 sm:px-6 py-3 border-t border-arcora-border flex items-center justify-between gap-3 bg-arcora-gray/20">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <span className="font-[family-name:var(--font-mono)] text-[10px] sm:text-[11px] text-muted-foreground tracking-wider truncate">
             invoice <span className="text-arcora-slate">{s.id}</span>
           </span>
           <span className="text-arcora-border">·</span>
-          <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground">
+          <span className="font-[family-name:var(--font-mono)] text-[10px] sm:text-[11px] text-muted-foreground whitespace-nowrap">
             <span className="uppercase tracking-wider">{s.payIn} → {s.payout}</span>
           </span>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 shrink-0">
           {SCENARIOS.map((_, i) => (
             <span
               key={i}
@@ -216,15 +217,15 @@ function Side({
 }) {
   return (
     <div
-      className={`px-7 py-7 flex flex-col gap-2 transition-opacity duration-500 ${
+      className={`px-5 sm:px-7 py-6 sm:py-7 flex flex-col gap-2 transition-opacity duration-500 ${
         dim ? "opacity-55" : "opacity-100"
-      } ${align === "right" ? "items-end text-right" : ""}`}
+      } ${align === "right" ? "md:items-end md:text-right" : ""}`}
     >
       <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
         {role}
       </div>
-      <div className="flex items-baseline gap-2">
-        <span className="font-[family-name:var(--font-display)] text-3xl font-semibold tabular-nums text-arcora-slate">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-semibold tabular-nums text-arcora-slate">
           {(amountMicro / 1_000_000).toFixed(6).replace(/\.?0+$/, "")}
         </span>
         <span

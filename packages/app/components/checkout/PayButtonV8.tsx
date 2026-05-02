@@ -6,9 +6,10 @@ import {
 } from "wagmi";
 import { keccak256, parseAbi, toBytes, type Address, type Hex } from "viem";
 import { toast } from "sonner";
-import { Check, Info, Loader2 } from "lucide-react";
+import { Check, Info, Loader2, ShieldAlert } from "lucide-react";
 import { mapChainError } from "@/lib/chain/error-mapper";
 import { buildArcoraSwapIntent, randomNonce, PERMIT2_ADDRESS } from "@/lib/checkout/permit2";
+import { useComplianceGate } from "@/lib/compliance/use-compliance-gate";
 
 const ERC20_ABI = parseAbi([
   "function approve(address spender, uint256 amount) external returns (bool)",
@@ -47,6 +48,10 @@ export function PayButtonV8(props: PayButtonV8Props) {
   const [statusUrl, setStatusUrl] = useState<string | null>(null);
   const [settleTx, setSettleTx]   = useState<Hex | null>(null);
   const [needsPermit2Setup, setNeedsPermit2Setup] = useState<boolean | null>(null);
+
+  const compliance = useComplianceGate(props.invoiceId, address);
+  const complianceBlocked = compliance.status === "reject" || compliance.status === "review";
+  const complianceLoading = compliance.status === "checking";
 
   const arcId = 5042002;
   const relayerAddress = process.env.NEXT_PUBLIC_RELAYER_ADDRESS as Address | undefined;
@@ -169,6 +174,10 @@ export function PayButtonV8(props: PayButtonV8Props) {
       toast.error("Quote expired — refresh and try again");
       return;
     }
+    if (compliance.status !== "allow") {
+      toast.error("Compliance check pending. Please wait or refresh the page.");
+      return;
+    }
 
     try {
       await ensurePermit2Allowance();
@@ -213,7 +222,26 @@ export function PayButtonV8(props: PayButtonV8Props) {
 
   return (
     <div className="space-y-3">
-      {needsPermit2Setup && state === "idle" && (
+      {compliance.status === "review" && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
+          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+          <div>
+            <div className="font-semibold mb-0.5">Compliance review required</div>
+            We&apos;re confirming a few details before this wallet can pay. The merchant has been notified and will follow up within 24h.
+            {compliance.ticketId && <div className="font-mono text-[10px] mt-1 opacity-70">Ref: {compliance.ticketId}</div>}
+          </div>
+        </div>
+      )}
+      {compliance.status === "reject" && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-3 flex items-start gap-2 text-xs text-red-900">
+          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+          <div>
+            <div className="font-semibold mb-0.5">This wallet can&apos;t be used for this payment</div>
+            Try a different wallet or contact the merchant if you believe this is an error.
+          </div>
+        </div>
+      )}
+      {needsPermit2Setup && state === "idle" && !complianceBlocked && (
         <div className="rounded-lg border border-arcora-border bg-arcora-gray/30 p-3 flex items-start gap-2 text-xs">
           <Info className="size-4 mt-0.5 flex-none text-arcora-blue" />
           <div>
@@ -225,10 +253,13 @@ export function PayButtonV8(props: PayButtonV8Props) {
 
       <button
         onClick={handleClick}
-        disabled={!address || !props.payInAmount || inFlight || state === "success" || props.quoteStale}
+        disabled={
+          !address || !props.payInAmount || inFlight || state === "success" || props.quoteStale ||
+          complianceBlocked || complianceLoading
+        }
         className="btn-arcora-pill w-full"
       >
-        {label[state]}
+        {complianceLoading ? "Verifying wallet…" : complianceBlocked ? "Unavailable" : label[state]}
       </button>
 
       {showProgress && <ProgressList state={state} />}

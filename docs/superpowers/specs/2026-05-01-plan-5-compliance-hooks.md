@@ -252,12 +252,13 @@ Phase 1+ deploys are config flips, not effort.
 
 ---
 
-## Open questions to resolve before implementing
+## Resolved questions (2026-05-02 session)
 
-1. **Provider contract terms.** Which of Elliptic / TRM Labs (or both, or neither) will Arcora actually have a contract with? Pricing / per-call cost / SLA varies. This drives whether we ship one adapter or two on day one.
-2. **Region-specific lists.** Beyond OFAC, do we screen against UN, EU, UK consolidated lists? Both providers offer this as an option; we need to decide which we enable.
-3. **Merchant dispute path.** When a customer's `reject` is wrong, who can override? Probably no one in v1 — the merchant escalates to Arcora ops, ops escalates to provider. No self-service. Document this clearly in the merchant dashboard error copy.
-4. **Logging retention.** GDPR-friendly retention windows for `compliance_screenings.provider_snapshot`. 7 years for sanctions hits; 13 months for non-flagged history feels like a starting point. Confirm with counsel pre-mainnet.
+1. **Providers — both day-one.** Ship both Elliptic and TRM Labs adapters wired behind the same interface. Production phase-flip can switch between them or run them in parallel for calibration without a code change.
+2. **Region lists — OFAC + EU.** Default sanction-list match set on both providers includes OFAC SDN and the EU consolidated list. UN/UK can be added later without API changes (provider-side flag).
+3. **Phase 0 ship target.** Today: Noop as default, full adapter scaffolding for Elliptic + TRM behind their interfaces, real API calls gated on env-supplied API keys (mock-mode for tests). Mainnet Phase 1+ is then a config flip.
+4. **Logging retention — 7y sanctions / 13mo non-flagged.** Implement as an `expires_at` column populated at write time; a future cleanup job can prune. Pre-mainnet, confirm with counsel.
+5. **Dispute path — ops escalation only.** No self-service override in v1. Merchant dashboard surfaces the reject reason with a "contact support" copy. Document in `/m/compliance` UI.
 
 ---
 

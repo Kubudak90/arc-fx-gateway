@@ -1,5 +1,5 @@
 import {
-  pgTable, text, uuid, timestamp, integer, numeric, jsonb, customType, boolean, pgEnum,
+  pgTable, text, uuid, timestamp, integer, numeric, jsonb, customType, boolean, pgEnum, index,
 } from "drizzle-orm/pg-core";
 
 const bytea = customType<{ data: Buffer; default: false }>({
@@ -82,6 +82,34 @@ export const siweNonces = pgTable("siwe_nonces", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   used: boolean("used").notNull().default(false),
 });
+
+// Compliance screening audit log. One row per provider call (or cache hit
+// recorded for replay). `expires_at` drives retention pruning — sanctions
+// hits live 7 years, everything else 13 months. See plan-5 spec.
+export const complianceFlow = pgEnum("compliance_flow", ["merchant_payout", "customer_pay"]);
+export const complianceRisk = pgEnum("compliance_risk", ["low", "medium", "high", "sanctions"]);
+export const complianceDecision = pgEnum("compliance_decision", ["allow", "review", "reject"]);
+
+export const complianceScreenings = pgTable("compliance_screenings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  address: text("address").notNull(),
+  flow: complianceFlow("flow").notNull(),
+  invoiceId: text("invoice_id").references(() => invoices.id),
+  merchantId: uuid("merchant_id").references(() => merchants.id),
+  provider: text("provider").notNull(), // 'elliptic' | 'trmlabs' | 'noop'
+  risk: complianceRisk("risk").notNull(),
+  reasons: jsonb("reasons").notNull(),
+  providerScore: numeric("provider_score"),
+  providerSnapshot: jsonb("provider_snapshot").notNull(),
+  decision: complianceDecision("decision").notNull(),
+  ticketId: text("ticket_id"),                           // set when decision='review' so the dashboard can join queue rows
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_compliance_screenings_address_flow").on(t.address, t.flow),
+  index("idx_compliance_screenings_invoice").on(t.invoiceId),
+  index("idx_compliance_screenings_merchant").on(t.merchantId),
+]);
 
 // Queue of customer-signed Permit2 messages waiting for the Arcora relayer to
 // pull funds, run kit.swap, and settle the invoice. Producer: /api/checkout/submit.

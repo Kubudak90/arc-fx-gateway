@@ -1,319 +1,140 @@
-# Plan 3 — Multi-stablecoin pool & gateway v0.7
+# Plan 3 — Multi-stablecoin expansion (v0.8.1 era)
 
-**Status:** spec; ready to implement in a separate session
+**Status:** rewritten 2026-05-02 to match shipped v0.8.1 reality. Original 2026-04-29 spec (StablePool + StablecoinRegistry singleton) is preserved in git history at commit before this rewrite — it was implemented as v0.7 then sidelined when v0.8 pivoted to App Kit Swap.
 **Author:** Hüseyin + Claude Opus 4.7 (1M context)
-**Date:** 2026-04-29
-**Depends on:** v1.0.2 (gateway v0.6 with refunds + treasury)
+**Original Date:** 2026-04-29
+**Rewrite Date:** 2026-05-02
+**Depends on:** v0.8.1 (`ArcFXGatewayV8` + `ops/relayer` + Circle App Kit Swap)
 
 ---
 
-## Why
+## What changed since the original spec
 
-Today's gateway is hardcoded to two stables (USDC/EURC). The killer-feature
-positioning ("merchant settles in their preferred stablecoin on Arc") is
-fictional until we can actually accept and settle in **any of the major
-stables**: USDT (highest demand), PYUSD (PayPal-blessed), DAI/USDS
-(decentralized), and regional fiat-pegged tokens (TRYC/BRLC/MXNC) where
-issued.
+The original Plan 3 designed an in-house `StablePool` (Saddle/Curve-style stableswap) plus `StablecoinRegistry` so the gateway could route any-pair swaps internally. That work shipped as **v0.7** (commits `6a688a2` token-agnostic gateway, `e66cbf4` test migration, `c54c5ca` per-token PriceGuard). It worked, but was an in-house liquidity surface we'd have to seed and oracle ourselves for every new stable.
 
-This is the v1.x #5 roadmap item, but its true scope is a contract
-refactor not a listing exercise — the v0.6 gateway's pay-flow has
-hardcoded `USDC_INDEX/EURC_INDEX` and a single immutable pool address.
+Plan 6 (StableFX integration, 2026-05-01) replaced that path with **Circle's App Kit Swap** — Arc-native RFQ maker network already running on Arc with deep liquidity for USDC/EURC/USDT/USDe/DAI/PYUSD. v0.8 (`ArcFXGatewayV8`) dropped the registry dependency; the relayer now drives `kit.swap` off-chain and calls `settleInvoice` to deliver the merchant payout. The pool/registry contracts still exist in the tree but are no longer wired into the canonical flow.
 
-We are also at a good architectural moment: refactoring once, generically,
-costs ~2 days; doing it wrong (e.g. per-pair gateway deployments) creates
-permanent operational debt.
+**Result:** "Add a new stable" is no longer a contract-deploy + AMM-seed task. It's a whitelist call + a few config edits.
 
 ---
 
-## Inspiration
+## Why we still need this plan
 
-**Ekubo** (Starknet DEX) is the reference for one decision specifically:
-the **singleton pool contract**. Instead of N contract deployments for N
-pairs, one contract holds all liquidity for all pairs and exposes a
-generic `swap(tokenIn, tokenOut, amountIn, ...)`.
+Today's canonical gateway (`ArcFXGatewayV8` at `0x6fAaD9…507a8`) only whitelists USDC and EURC (`supportedTokens` mapping). The relayer's `tokenSymbol(addr)` helper hardcodes those two as well. The killer-feature positioning ("merchant settles in their preferred stablecoin on Arc") still needs the supported set to actually be plural.
 
-We do **not** copy Ekubo's other innovations:
-
-| Ekubo feature | Arcora v0.7? | Reason |
-|---|---|---|
-| Singleton AMM | ✅ adopt | Replaces "deploy per pair" model — main reason for the borrow |
-| Token registry | ✅ adopt | Add new stable → governance call, no contract redeploy |
-| Concentrated liquidity / tick math | ❌ skip | We use oracle-priced flat-rate swaps, no curve, no ranges |
-| Extension hooks | ❌ skip | YAGNI for stablecoin checkout; v0.x has no fee-strategy variation |
-| Flash accounting | ❌ skip | Single-tx pay flow doesn't benefit |
-| Packed storage slots | ⚠️ partial | Reserves + feeBps in one slot is fine; further packing is over-engineering |
-
-The discipline is "borrow the architectural shape, don't import
-mechanisms we don't need."
+This is the v1.x #5 roadmap item. With v0.8.1 it's a 1-day job, not a 2-day refactor.
 
 ---
 
-## Architecture
-
-### Three contracts (replacing today's two)
+## Architecture — what's actually involved
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  StablecoinRegistry (singleton, owner-gated mutations)            │
-│  ─ tokens: address[]                                              │
-│  ─ tokenInfo[token] → { decimals, usdOracle, isActive }           │
-│  ─ pairAllowed(tokenA, tokenB) → bool   (both active + a pool)    │
-│  ─ events: TokenListed, TokenDeactivated, OracleUpdated           │
+│  ArcFXGatewayV8 (already deployed)                                │
+│  ─ supportedTokens[token] → bool         (owner-managed)          │
+│  ─ setTokenSupport(token, active) onlyRole(DEFAULT_ADMIN_ROLE)    │
+│  ─ Used as a 2-sided whitelist:                                   │
+│      • registerMerchant(payoutAddress, payoutToken)               │
+│        → require supportedTokens[payoutToken]                     │
+│      • createInvoice(...) for the advisory payIn token            │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
-│  UnifiedAMM (singleton, oracle-priced, no curve)                  │
-│  ─ pools[bytes32 pairKey] → {                                     │
-│       tokenA, tokenB, reserveA, reserveB, feeBps,                 │
-│       maxOracleDeviationBps, active                               │
-│     }                                                             │
-│  ─ pairKey(a, b) = keccak256(min(a,b), max(a,b))                  │
-│  ─ deposit(tokenA, tokenB, amountA, amountB) external             │
-│  ─ withdraw(tokenA, tokenB, amountA, amountB) external (owner)    │
-│  ─ swap(tokenIn, tokenOut, amountIn, minOut, deadline)            │
-│  ─ calculateSwap(tokenIn, tokenOut, amountIn) view → amountOut    │
-│  ─ rate derived from registry's per-token USD oracles             │
-│  ─ events: PoolOpened, Swapped, LiquidityAdded                    │
+│  ops/relayer/run.ts                                               │
+│  ─ Permit2.permitTransferFrom (payer → relayer wallet)            │
+│  ─ kit.swap (payIn → payoutToken) via @circle-fin/app-kit         │
+│  ─ ERC20.approve(gateway, gross)                                  │
+│  ─ gateway.settleInvoice (delivers amountOut − fee to merchant)   │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
-│  ArcFXGateway v0.7 (refactored — token-agnostic)                  │
-│  ─ Removes: USDC, EURC, USDC_INDEX, EURC_INDEX immutables         │
-│  ─ POOL → address of UnifiedAMM (still immutable)                 │
-│  ─ REGISTRY → address of StablecoinRegistry (immutable)           │
-│  ─ registerMerchant(payoutAddress, payoutToken)                   │
-│       requires registry.tokenInfo[payoutToken].isActive           │
-│  ─ createInvoice(...) takes any payIn token; require pairAllowed  │
-│  ─ pay(globalId, maxAmountIn) — same shape as v0.6, but routes    │
-│       through UnifiedAMM.swap(inv.payIn, payoutToken, ...)        │
-│  ─ refundInvoice(globalId) — unchanged from v0.6                  │
-│  ─ payments[] mapping — unchanged                                  │
+│  App Kit Swap (Arc-native, run by Circle)                         │
+│  ─ RFQ maker network                                              │
+│  ─ Pre-supports USDC, EURC, USDT, USDe, DAI, PYUSD on Arc         │
+│  ─ Liquidity & oracle: Circle's problem, not ours                 │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### Per-token USD oracles (not per-pair)
+**Per added stable**, we touch four surfaces — none of them contract refactors:
 
-```
-USDC/USD  = 1.0000  (hardcoded peg-1, or Chainlink USDC/USD)
-EURC/USD  = 1.0863  (Chainlink EUR/USD; today's mock value)
-USDT/USD  = 1.0001  (Chainlink USDT/USD)
-PYUSD/USD = 1.0000  (Chainlink PYUSD/USD)
-TRYC/USD  = 0.0291  (TRY/USD via aggregator)
+| Surface | Change |
+|---|---|
+| Gateway | One owner tx: `setTokenSupport(token, true)` |
+| Relayer | Extend `tokenSymbol(addr)` map + symbol type union |
+| App config | Add address + decimals to `lib/chain/tokens.ts` |
+| SDK | Re-export the supported-token enum so merchants see it |
 
-rate(tokenA, tokenB) = (USD-of-A) / (USD-of-B)
-```
-
-**Rationale:** N stables → N oracles, not N(N-1)/2. New listing = one new
-oracle wired, no other contract changes. Matches how price feeds are
-actually published in the wild (Chainlink, Pyth, RedStone all publish
-TOKEN/USD, not arbitrary cross-pairs).
-
-For testnet, USDC/USD and PYUSD/USD pegs can be hardcoded as `1e8`
-constants in the registry to avoid mock oracle fatigue. Real-stable
-deviation (USDT) gets its own mock feed like EUR/USD does today.
-
-### Routing: direct pair only (no multi-hop in v0.7)
-
-For each (payIn, payout) the gateway expects a *direct* pool. If a
-merchant lists USDT-payout and a customer pays in PYUSD, the AMM checks
-`pools[pairKey(USDT, PYUSD)]` and reverts with `PairNotSupported` if it
-doesn't exist.
-
-Multi-hop routing (USDT → USDC → PYUSD) is intentionally **out of scope**:
-- Each hop costs gas + slippage; with stable-near-stable rates the win is
-  small.
-- Choosing the route adds complexity (path-finding, intermediary slippage
-  guards).
-- Operationally: we're the LP in v0.7 — we just open the pools we need and
-  list the pairs we want to support.
-
-Add as v0.8 if real demand surfaces (e.g. a merchant lists TRYC and only
-PYUSD is in the customer's wallet).
-
-### Liquidity model: per-pool internal balances
-
-Each pool tracks its own `reserveA / reserveB` balance. There is **no LP
-ERC20** in v0.7. Reasons:
-
-1. The protocol is the only LP for the foreseeable future (we bootstrap
-   each pool from the deployer wallet).
-2. ERC20 LP tokens add complexity (transferable LP positions, fee
-   accounting per LP, etc.) we don't need yet.
-3. Treasury accounting stays simple — `protocolFeesAccrued[token]` per
-   token still works as today.
-
-Add LP tokenization in v1.x or v2 when external LPs are a real ask.
+App Kit Swap pair-availability is the real precondition, not anything we deploy.
 
 ---
 
-## Storage layout
+## Out of scope (deferred or dropped)
 
-```solidity
-// StablecoinRegistry
-struct TokenInfo {
-    uint8   decimals;        // 6 for USDC/EURC/USDT, 18 for DAI
-    bool    isActive;
-    address usdOracle;       // Chainlink USD-quoted aggregator (8 decimals)
-}
-mapping(address token => TokenInfo) public tokenInfo;
-address[] public tokens;     // for off-chain enumeration
-
-// UnifiedAMM
-struct Pool {
-    address tokenA;          // 20 bytes
-    address tokenB;          // 20 bytes (slot 1+2 packed loosely)
-    uint128 reserveA;        // 16 bytes
-    uint128 reserveB;        // 16 bytes
-    uint16  feeBps;          // 2 bytes
-    uint16  maxOracleDeviationBps;
-    bool    active;          // 1 byte
-}
-mapping(bytes32 pairKey => Pool) public pools;
-```
-
-Pool storage is dominated by reserves. Packing reserves into `uint128`
-gives us ~340 trillion units (in 6-decimal terms, that's 340 trillion
-USDC) — far above any conceivable single-pool size.
+| Item | Why |
+|---|---|
+| `StablePool` + `StablecoinRegistry` re-activation | App Kit Swap replaced the need; in-house pools become a liquidity-bootstrapping liability for every new stable. |
+| Per-token Chainlink feed wiring | The v0.7 oracle path is unused in v0.8.1 — App Kit is the price source. Keepalive timer becomes mainnet cleanup work (separate ticket). |
+| Multi-hop routing | App Kit handles routing internally on its own maker network. |
+| LP token / external LP onboarding | Not our liquidity to underwrite. |
+| Migration script v0.7 → v0.8 | Already done; merchants re-registered against `ArcFXGatewayV8`. |
 
 ---
 
-## Gateway v0.7 changes
+## Rollout sequence
 
-### Removed
+### v1.x #5a — USDT first (highest demand)
 
-```solidity
-// All of these go away:
-IERC20  public immutable USDC;
-IERC20  public immutable EURC;
-uint8   public immutable USDC_INDEX;
-uint8   public immutable EURC_INDEX;
+1. **Verify App Kit pair coverage**: confirm `kit.swap(USDC, USDT)` and `kit.swap(USDT, USDC)` both quote on Arc. If a maker isn't quoting one direction, hold off on listing.
+2. **Find / mint testnet USDT on Arc**: prefer Circle's testnet USDT if they publish one; else mint a `MintableERC20` we control for app testing.
+3. **Whitelist on gateway**: owner calls `setTokenSupport(usdtAddress, true)`.
+4. **Relayer**: extend `tokenSymbol(addr)` and the symbol union (`"USDC" | "EURC" | "USDT"`). Audit any other USDC/EURC-only branches.
+5. **App config**: add USDT to `lib/chain/tokens.ts` (address, decimals — likely 6, App Kit pair flags).
+6. **Dashboard**: `CreateInvoiceDialog` payout-token picker re-reads the `supportedTokens` set instead of hardcoding USDC/EURC.
+7. **Checkout**: payIn picker likewise. Hosted checkout's Permit2 helper is token-agnostic; sanity-check decimal handling.
+8. **SDK**: export an updated `SupportedToken` enum + a runtime helper that fetches the on-chain whitelist (so SDK consumers don't go stale every time we list a new stable).
+9. **Live smoke**: USDC → USDT pay (regression: USDC → USDC, USDC → EURC still work).
 
-// And the per-token branching in pay():
-uint8 iIn  = inv.payIn == address(USDC) ? USDC_INDEX : EURC_INDEX;
-uint8 jOut = ...;
-```
+### v1.x #5b — PYUSD
 
-### Added
+PayPal-blessed, low political risk. Same playbook as USDT. Verify App Kit coverage first.
 
-```solidity
-IUnifiedAMM           public immutable POOL;
-IStablecoinRegistry   public immutable REGISTRY;
+### v1.x #5c — DAI / USDS
 
-// pay() now just:
-uint256 amountIn = _estimateAmountIn(inv.payIn, payoutToken, inv.amountOut);
-if (amountIn > maxAmountIn) revert SlippageExceeded(amountIn, maxAmountIn);
-IERC20(inv.payIn).safeTransferFrom(msg.sender, address(this), amountIn);
-IERC20(inv.payIn).forceApprove(address(POOL), amountIn);
-uint256 received = POOL.swap(inv.payIn, payoutToken, amountIn, inv.amountOut, deadline);
-```
+Decentralized stable rails. DAI has 18 decimals — verify the app's `Number(formatUnits())` paths handle that cleanly (USDC/EURC are both 6, so this is the first non-6 we ship). Treasury aggregations, Permit2 amount conversion, checkout TTL display all need a regression sweep.
 
-### Estimator (carried over from v0.5)
+### v1.x #5d — Regional fiat-pegged (TRYC, BRLC, MXNC)
 
-The 1-wei iteration logic from v0.5's `_estimateAmountIn` is preserved
-and made generic:
-
-```solidity
-function _estimateAmountIn(address tokenIn, address tokenOut, uint256 amountOut)
-    internal view returns (uint256 amountIn)
-{
-    uint256 probeIn  = 10 ** REGISTRY.tokenInfo(tokenIn).decimals;
-    uint256 probeOut = POOL.calculateSwap(tokenIn, tokenOut, probeIn);
-    if (probeOut == 0) return type(uint256).max;
-    amountIn = (amountOut * probeIn + probeOut - 1) / probeOut;
-    for (uint256 i = 0; i < ESTIMATE_MAX_STEPS; i++) {
-        if (POOL.calculateSwap(tokenIn, tokenOut, amountIn) >= amountOut) return amountIn;
-        unchecked { amountIn++; }
-    }
-}
-```
-
-### Same-token branch unchanged
-
-`if (inv.payIn == payoutToken)` — direct transfer, no swap, no oracle
-check. Gas-optimal for stable-of-the-house payments.
-
----
-
-## Migration
-
-### Testnet — re-register everyone
-
-v0.6 gateway stays on chain (existing paid invoices remain queryable, the
-indexer no longer listens to it). Merchants run `registerMerchant` again
-on v0.7 from the dashboard. New invoice numbers.
-
-### Production-ish path (when there's one)
-
-A scripted migration:
-1. Snapshot v0.6 `merchants` mapping for the active set.
-2. v0.7 deployer calls `registerMerchant` *for* each merchant via a
-   delegated path (or a one-shot owner-only `bulkRegister` helper).
-3. Switch DNS / app envs to v0.7.
-4. Leave v0.6 read-only for legacy invoice lookup.
-
-Out of scope for this spec — flag as work for the mainnet release.
+Big unlock for emerging-market merchants. Gating factor: App Kit support. If Circle hasn't onboarded a regional stable's makers, this is a Circle conversation, not an Arcora one. Document the dependency and revisit per-token.
 
 ---
 
 ## Database / indexer impact
 
-`invoices.payInToken` and `payoutToken` are already `text` (any address)
-— no schema change needed. The indexer's `InvoicePaid` handler stays
-identical. Webhook payload shape unchanged.
+`invoices.payInToken` and `payoutToken` are `text` (any address) — already token-agnostic. The dual-gateway indexer (`ops/indexer/run.ts`) handles `InvoicePaid`/`PayerRefunded` from `ArcFXGatewayV8` regardless of which stables are involved. **No schema change.**
 
-What does change:
-- The dashboard's "Create invoice" dialog needs a payout-token selector
-  populated from `registry.tokens`, not a hardcoded `["USDC","EURC"]`.
-- The checkout page needs a pay-in token selector (or auto-detect from the
-  customer's wallet balance) drawn from the supported pair list for the
-  invoice's payout token.
+What does change in the app:
 
-A new `/api/tokens` endpoint reads the registry and returns the active
-list with metadata for UI use.
+- `/api/tokens` route: returns the on-chain `supportedTokens` set with metadata for UI use. Implement once; subsequent listings are zero-app-deploy.
+- `CreateInvoiceDialog` payout picker: reads `/api/tokens`.
+- `CheckoutClient` payIn picker: reads `/api/tokens` filtered by App Kit pair availability for the invoice's payout token.
 
 ---
 
 ## Testing plan
 
 ### Foundry
-
-- `StablecoinRegistry`: list/deactivate flows, oracle update events,
-  reverts on duplicate listing, owner-only auth.
-- `UnifiedAMM`:
-  - basic two-token swap matches today's `OracleAMM` behavior
-    (regression — must not change USDC/EURC math).
-  - 3+ tokens: USDC/EURC, USDC/USDT, USDT/EURC pools coexist.
-  - Reverts on inactive token, missing pool, oracle deviation breach.
-  - 1-wei estimator regression from v0.5 still passes (inherited from
-    `_estimateAmountIn` shape).
-- `ArcFXGateway v0.7`:
-  - Migrate the existing 110+ tests by removing the immutable USDC/EURC
-    setup and substituting a deployed registry + AMM with two tokens
-    seeded.
-  - All existing happy paths should pass without behavioral change.
-  - Refund flow inherited from v0.6 — same tests, different gateway
-    constructor args.
-  - New tests: pay with a third stable (USDT-mock) end-to-end.
-
-Target: ≥ 130 tests, all passing, before deploy.
+The v0.7 tests covering pool/registry math are no longer relevant to the canonical path. v0.8 contract tests already exercise `setTokenSupport`, the supported-token guard in `registerMerchant`, and the `settleInvoice` flow. No new Solidity tests needed for v1.x #5 — the contract is already token-agnostic.
 
 ### App
+- `/api/tokens` route test (vitest): returns the on-chain whitelist, caches sensibly, refreshes on whitelist mutation.
+- Picker components: snapshot test that they render whatever the API returns (no hardcoded enum).
+- Decimals regression: a vitest spec that runs the Permit2/amount math against a 6-decimal and 18-decimal token side by side.
 
-- Update `lib/chain/gateway-abi.ts` for v0.7 ABI (mostly subtractive —
-  immutable USDC/EURC fields disappear; everything else stable).
-- Update `CreateInvoiceDialog` to use registry-driven token list.
-- Update `CheckoutClient` to ditto.
-- Vitest unit tests for the new `/api/tokens` route + dialog logic.
-
-### Live smoke
-
-The same smoke we do for any deploy:
-1. USDC → USDC same-token (regression, must still work)
-2. USDC → EURC swap (regression)
-3. EURC → USDC swap (regression — v0.5's iteration must still kick in)
-4. USDC → USDT swap (new path)
-5. USDT → EURC swap (new path; uses derived rate from two USD oracles)
+### Live smoke per added stable
+1. Same-token pay (regression).
+2. New-stable → USDC swap pay.
+3. USDC → New-stable swap pay.
+4. Refund on a new-stable invoice (uses `recordPayerRefund` path, decimal-sensitive).
 
 ---
 
@@ -321,60 +142,41 @@ The same smoke we do for any deploy:
 
 | Phase | Time |
 |---|---|
-| Spec review + revisions | 30 min |
-| `StablecoinRegistry` contract + tests | 2 h |
-| `UnifiedAMM` contract + tests + foundry regression port | 4 h |
-| `ArcFXGateway v0.7` refactor + tests | 3 h |
-| Deploy script + bootstrap (USDC/EURC carry-over + USDT mock + USDT pools) | 2 h |
-| App: token registry hooks, picker components, indexer ABI | 3 h |
-| Live deploy + smoke | 1 h |
-| **Total** | **~2 days** |
+| `/api/tokens` + UI picker rewire | 2 h |
+| Relayer `tokenSymbol` extension + symbol-union audit | 1 h |
+| SDK `SupportedToken` enum + runtime fetch helper | 2 h |
+| USDT smoke (testnet whitelist + first end-to-end) | 1 h |
+| Decimals regression sweep (for the eventual 18-decimal stable) | 2 h |
+| **Per added stable after USDT** (whitelist tx + UI verify + smoke) | **~30 min** |
+| **Total to ship USDT (v1.x #5a)** | **~1 day** |
 
-Realistically split across 2–3 sessions: one for the contracts, one for
-deploy + integration, one for app + polish.
+The first stable does the legwork (token-list API, picker rewire, relayer audit). Each subsequent addition is a config + smoke pass.
 
 ---
 
-## Open questions to revisit before implementing
+## Open questions
 
-1. **Where does USDT-mock come from on Arc testnet?** Either deploy our
-   own MockERC20 (consistent with EURC mock pattern) or look for a
-   community-deployed USDT testnet token. Prefer our own for control.
-2. **What stables ship with v0.7 day-one?** Suggest USDC, EURC, and one
-   new addition (USDT) so the pool mechanic is exercised but the rollout
-   is small.
-3. **`PriceGuard` per-pool or global?** Today's contract uses
-   `MAX_ORACLE_DEVIATION_BPS = 50` constant. v0.7 stores it per-pool so a
-   thinly-traded pair can run a tighter or looser guard. Default 50.
-4. **Owner privileges on the registry**: who can list a token?
-   `Ownable.owner()` for v0.7. Add governance later if relevant.
+1. **App Kit USDT availability on Arc testnet**: confirm with Circle / Arc team before starting v1.x #5a. If only mainnet has USDT makers, this becomes a mainnet-only unlock and we focus pre-mainnet effort elsewhere.
+2. **Should the SDK fetch the whitelist at runtime or codegen it at publish time?** Runtime fetch = no SDK release needed per listing, but adds a network round-trip on first SDK use. Codegen = friction per listing, but offline-compatible. Lean **runtime** with a typed hard-coded fallback for the same-day-as-listing case.
+3. **Decimals beyond 6**: DAI (18) is the first; do we add `mxnt`/regional stables that may use 2 or 4? Pin a regression matrix once the first 18-dec stable lands.
+4. **Token symbol collisions**: what if Circle issues a "USDT" on Arc that has a different address than we whitelisted? Our `tokenSymbol()` helper is address→symbol — collision-safe as long as we stay address-keyed everywhere.
 
 ---
 
-## Decision log (settled in 2026-04-29 session)
+## Decision log (settled 2026-05-02 rewrite)
 
-- ✅ Singleton AMM + token registry (Ekubo-shape, not Ekubo-mechanics).
-- ✅ Per-token USD oracles, derive cross-pair rates inside the AMM.
-- ❌ Multi-hop routing (deferred to v0.8 if asked for).
-- ❌ ERC20 LP tokens (internal accounting only; protocol is the LP).
-- ✅ Re-register migration on testnet; mainnet gets a scripted bulk
-  helper later.
-- ✅ Same-token direct path preserved verbatim from v0.6.
-- ✅ v0.5's iterating `_estimateAmountIn` carried into v0.7 verbatim,
-  generalized over decimals via `tokenInfo`.
+- ✅ Drop in-house pool/registry from the canonical path. Use `ArcFXGatewayV8.supportedTokens` + App Kit Swap.
+- ✅ One token-list API serves dashboard + checkout + SDK.
+- ✅ Per-stable rollout = whitelist tx + relayer map + UI verify + smoke. No contract changes per stable.
+- ✅ Order: USDT → PYUSD → DAI/USDS → regional. Regional gated on App Kit maker availability.
+- ❌ Multi-hop / DEX-aggregator on Arc — App Kit handles internally; not our problem at this layer.
+- ❌ External LP onboarding — not our liquidity to underwrite at v1.
 
 ---
 
 ## When picking this up
 
-1. Re-read this file end-to-end; check whether any of the four open
-   questions above changed since 2026-04-29.
-2. Verify v0.6 gateway is still the canonical contract (memory's
-   `roadmap_open_items.md` is authoritative).
-3. Check `npm view @arcora/sdk version` and whatever the current minor
-   tag is — v0.7 will likely ship as `1.1.0` (minor: new payInToken
-   surface in the SDK is additive but the supported set changes).
-4. Start in `packages/contracts/src/registry/StablecoinRegistry.sol`.
-   Keep `OracleAMM.sol` and `ArcFXGateway.sol` intact while building the
-   new contracts so the old gateway stays deployable from a clean tree
-   if rollback is needed.
+1. Re-read `roadmap_open_items.md` and the v0.8.1 brief — confirm the gateway address, supported set, and that no new architectural shift has happened since 2026-05-02.
+2. Sanity-check App Kit Swap coverage for the next stable in line (`kit.quote` both directions on the testnet RPC).
+3. Land the `/api/tokens` route + picker rewire before the first new whitelist tx — that's the high-leverage piece.
+4. Then whitelist USDT, extend the relayer, ship the smoke, and the rest of the list becomes ~30 min per stable.

@@ -6,6 +6,8 @@ import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { GATEWAY, getServerWalletClient, publicClient } from "@/lib/chain/client";
 import { db } from "@/lib/db/client";
 import { invoices } from "@/lib/db/schema";
+import { resolveComplianceProvider } from "@/lib/compliance/factory";
+import { screenWithAudit } from "@/lib/compliance/screen";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
 // Opt-in v0.8 path. Set via env on Vercel; merchants pass ?engine=v8 when
@@ -54,6 +56,39 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return corsResponse({ error: "bad_body", detail: parsed.error.format() }, { status: 400 });
   const { amountUsdc, payInToken, successUrl, cancelUrl, metadata } = parsed.data;
+
+  // Compliance gate on the merchant payout address. Cached per-address for
+  // the provider's TTL so this is a DB hit on the hot path, not a provider
+  // call. In Phase 0 (testnet / Noop) this is unconditionally `allow`.
+  let payoutScreen: Awaited<ReturnType<typeof screenWithAudit>> | null = null;
+  try {
+    const provider = resolveComplianceProvider();
+    payoutScreen = await screenWithAudit({
+      db, provider,
+      address: merchant.address,
+      context: { flow: "merchant_payout", merchantId: merchant.id },
+    });
+  } catch (e: any) {
+    // Default fail-open for invoice creation: a provider outage shouldn't
+    // block legitimate merchants. Override via COMPLIANCE_FAIL_OPEN_FOR_INVOICE=false.
+    const failOpen = (process.env.COMPLIANCE_FAIL_OPEN_FOR_INVOICE ?? "true") !== "false";
+    if (!failOpen) {
+      return corsResponse({ error: "compliance_unavailable" }, { status: 503 });
+    }
+  }
+  if (payoutScreen?.decision === "reject") {
+    return corsResponse({
+      error: "merchant_payout_blocked",
+      code: "MERCHANT_PAYOUT_BLOCKED",
+    }, { status: 403 });
+  }
+  if (payoutScreen?.decision === "review") {
+    return corsResponse({
+      status: "queued",
+      ticketId: payoutScreen.ticketId,
+      reason: "Merchant payout address is under compliance review. Invoice creation will resume once review completes.",
+    }, { status: 202 });
+  }
 
   const merchantInvoiceId = ("0x" + randomBytes(32).toString("hex")) as Hex;
   const globalId = keccak256(

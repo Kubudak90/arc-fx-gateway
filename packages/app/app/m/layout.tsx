@@ -23,6 +23,7 @@ export default async function MerchantLayout({ children }: { children: React.Rea
             <div className="flex gap-6">
               <Link href={"/m/dashboard" as Route} className="font-semibold">Dashboard</Link>
               <Link href={"/m/treasury" as Route} className="text-muted-foreground hover:text-foreground">Treasury</Link>
+              <Link href={"/m/compliance" as Route} className="text-muted-foreground hover:text-foreground">Compliance</Link>
               <Link href={"/m/settings" as Route} className="text-muted-foreground hover:text-foreground">Settings</Link>
             </div>
           </div>

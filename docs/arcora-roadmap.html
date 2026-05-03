@@ -576,16 +576,18 @@
       <div class="card-head">
         <span class="ver">v1.x</span>
         <span class="pill next">NEXT</span>
-        <h3>KYB merchant onboarding · Sumsub</h3>
+        <h3>KYB merchant onboarding · iki-track strateji</h3>
       </div>
       <p class="body">
-        Mainnet&apos;te merchant&apos;ın legal entity ve UBO doğrulaması yapılmış olmalı. Plan-8 spec&apos;leniyor: Sumsub vendor (sandbox bedava, prod $200–500/mo + $2–8/verification), light KYB (entity + UBO temel), OFAC+EU sanctions, hibrit akış (yeşil → otomatik aktif, sarı/kırmızı → ops review). ToS hash-versionlı, her güncellemede merchant tekrar imzalar. Plan-5 ile entegre — onboarding finalize&apos;da payout adresi otomatik taranıyor.
+        Plan-8 iki-track yazıldı (2026-05-03 revize). <b>Track A — <code>ManualKybProvider</code></b> ($0 today): ücretsiz OFAC SDN + EU Consolidated listeleri günlük cron ile Postgres&apos;e yükleniyor; doc upload Vercel Blob&apos;a; ops manuel review <code>/m/admin/kyb</code> queue&apos;sunda. <b>Track B — <code>PersonaProvider</code></b> (revenue gelince): self-serve signup + sınırsız bedava sandbox; Cases API; prod &asymp; $2–6/business + $0.50–2/UBO. Adapter pattern, env-flip ile geçiş. Sumsub düştü — self-serve signup yok.
       </p>
-      <h4 style="margin-top:10px">Önemli karar</h4>
+      <h4 style="margin-top:10px">Sabit kararlar</h4>
       <ul>
+        <li>Light KYB (entity + UBO temel; adverse media / PEP v2&apos;ye)</li>
+        <li>OFAC + EU sanctions; UN/UK opsiyonel</li>
         <li>TR-incorporated merchant&apos;lar policy-level reddedildi (yerel kripto ödeme yasağı)</li>
-        <li>Adverse media + PEP v2&apos;ye ertelendi (light KYB)</li>
-        <li>Vendor adaptör pattern — Sumsub değişmek istenirse maliyet düşük</li>
+        <li>ToS hash-versionlı, her güncellemede yeniden imza</li>
+        <li><code>compliance@arcorapay.xyz</code> Zoho EU&apos;da yayında (2026-05-03)</li>
       </ul>
     </div>
 
@@ -773,7 +775,7 @@ Merchant gets: preferred-stable on Arc · single InvoicePaid event</pre>
         <tr>
           <td><b>KYB / merchant onboarding</b></td>
           <td><span class="pill next">NEXT</span></td>
-          <td>Plan-8 spec yazıldı (2026-05-03). Sumsub vendor, light KYB, OFAC+EU sanctions, hibrit akış. TR-incorporated merchant&apos;lar reddedildi (yerel düzenleme). Sandbox $0; prod $200–500/mo + $2–8/verification.</td>
+          <td>Plan-8 iki-track refactor (2026-05-03): <b>Track A</b> <code>ManualKybProvider</code> ($0, OFAC+EU lists + ops review) → <b>Track B</b> <code>PersonaProvider</code> (revenue gelince, sandbox-bedava). Sumsub düştü (self-serve signup yok). TR-incorporated reddedildi (yerel düzenleme).</td>
         </tr>
         <tr>
           <td><b>Audit-trigger metriği</b></td>

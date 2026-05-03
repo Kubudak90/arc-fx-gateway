@@ -1,8 +1,8 @@
 # Plan 8 — KYB merchant onboarding
 
-**Status:** spec; mainnet-bar. Cheap to spec now while decisions are fresh, expensive (and slow) to design under regulator pressure later.
+**Status:** spec; mainnet-bar. Two-track strategy: `ManualKybProvider` for zero-cash testnet bridge (free OFAC + EU lists, manual ops review), `PersonaProvider` for post-revenue automated KYB. Adapter pattern lets us flip via env, no code change.
 **Author:** Hüseyin + Claude Opus 4.7 (1M context)
-**Date:** 2026-05-03
+**Date:** 2026-05-03 (revised same day — Sumsub dropped after self-serve signup paywall)
 **Depends on:** v0.8.1 + Plan 5 Phase 0 (compliance hooks live)
 **Blocks:** mainnet deployment
 
@@ -22,16 +22,16 @@ This is the second mainnet bar after Plan 5 (compliance hooks for end users). Pl
 |---|---|---|
 | 1 | **Jurisdictions day-one: OFAC + EU sanction lists.** | TR is dropped from the merchant set entirely — Turkey banned crypto payments, so onboarding TR-resident merchants would put them on the wrong side of their domestic regulator. We screen TR UBOs against OFAC+EU like everyone else, but a TR-incorporated merchant gets rejected at the policy layer before vendor verification. |
 | 2 | **Depth: light KYB.** | Legal entity name + jurisdiction + tax id + UBO names + UBO ID document + UBO sanctions screen. No adverse-media or PEP at v1. |
-| 3 | **Workflow: hybrid self-service + ops queue.** | Sumsub green → merchant auto-activated on the gateway. Sumsub red / yellow → ticket lands in a new `/m/onboarding` review queue for Arcora ops. |
+| 3 | **Workflow: hybrid self-service + ops queue.** | Vendor green → merchant auto-activated on the gateway. Vendor red / yellow (or Manual provider always) → ticket lands in `/m/admin/kyb` review queue for Arcora ops. |
 | 4 | **ToS: re-sign on update.** | Each ToS version has a hash; merchants are inactive on the contract until they sign the current version. Bumping the ToS pauses settlement for merchants on prior versions until they re-sign. |
-| 5 | **Compliance hand-off: auto.** | Sumsub green triggers a `flow=merchant_payout` screen via Plan-5 `screenWithAudit` against the merchant's payout address. Two screens fire at onboarding finish — one upfront via Sumsub (legal entity / UBO names against sanctions), one Plan-5 (payout wallet). Both must clear before the on-chain `setTokenSupport` + `registerMerchant` permissioning runs. |
-| 6 | **Vendor: Sumsub.** | Startup pricing exists; their KYB SDK + API surface fits our hybrid flow. Migration to a different vendor stays possible — adapter pattern (same shape as Plan 5's compliance providers). |
+| 5 | **Compliance hand-off: auto.** | Vendor green triggers a `flow=merchant_payout` screen via Plan-5 `screenWithAudit` against the merchant's payout address. Two screens fire at onboarding finish — one upfront via the KYB provider (legal entity / UBO names against OFAC + EU), one Plan-5 (payout wallet). Both must clear before the on-chain `registerMerchant` (or its delegate-driven sibling) runs. |
+| 6 | **Two-track vendor strategy.** | **Track A — `ManualKybProvider`** (today, $0): free OFAC SDN + EU Consolidated lists, ops manual review on `/m/admin/kyb` queue. **Track B — `PersonaProvider`** (mainnet T-0 or earlier if revenue lands): self-serve signup, free unlimited sandbox, automated KYB + sanctions + UBO. Switch is a config flip, no code change. **Sumsub dropped 2026-05-03** — no self-serve signup, sales-touch even for sandbox. |
 
 ---
 
 ## Architecture
 
-### State machine
+### State machine (vendor-agnostic)
 
 ```
    ┌────────────────────────┐
@@ -42,9 +42,9 @@ This is the second mainnet bar after Plan 5 (compliance hooks for end users). Pl
    ┌────────────────────────┐
    │ kyb_pending            │
    │  ─ entity form filled  │
-   │  ─ Sumsub session open │
+   │  ─ vendor session open │   (Persona inquiry, or Manual upload page)
    └──────────┬─────────────┘
-              │   sumsub webhook: applicantReviewed
+              │   vendor webhook (Persona) or ops decision (Manual)
               ▼
         ┌─────────────────┐
         │ green / yellow  │
@@ -60,7 +60,7 @@ This is the second mainnet bar after Plan 5 (compliance hooks for end users). Pl
       │         ▼         ▼
       │     ┌────────────────┐
       │     │ ops_review     │
-      │     │ queue          │
+      │     │ queue          │  (always entered for Manual provider)
       │     └──────┬─────────┘
       │            │ ops decision
       │            ▼
@@ -79,6 +79,8 @@ This is the second mainnet bar after Plan 5 (compliance hooks for end users). Pl
    │ ─ active                 │
    └──────────────────────────┘
 ```
+
+`ManualKybProvider` short-circuits the vendor branch: every applicant lands in `ops_review` directly, no automated green path. `PersonaProvider` returns green/yellow/red from the provider's webhook.
 
 ### Data model (Drizzle)
 
@@ -102,10 +104,11 @@ export const merchantKyb = pgTable("merchant_kyb", {
   jurisdiction: text("jurisdiction").notNull(),       // ISO-3166 alpha-2
   taxId: text("tax_id").notNull(),
 
-  // Vendor handoff
-  sumsubApplicantId: text("sumsub_applicant_id"),
-  sumsubExternalId: text("sumsub_external_id").unique(),  // our merchantId, sent to Sumsub
-  sumsubReviewResult: jsonb("sumsub_review_result"),       // raw verbatim payload for audit
+  // Vendor handoff (provider-agnostic — Persona uses inquiryId, Manual uses null)
+  vendorProvider: text("vendor_provider").notNull(),       // 'persona' | 'manual' | 'noop'
+  vendorApplicantId: text("vendor_applicant_id"),          // Persona inquiry id, or null for Manual
+  vendorExternalId: text("vendor_external_id").unique(),   // our merchantId, sent to vendor as referenceId
+  vendorReviewResult: jsonb("vendor_review_result"),       // raw verbatim payload (or document refs for Manual)
 
   // ToS lifecycle
   tosVersionSigned: text("tos_version_signed"),            // semver-tagged ToS hash
@@ -146,42 +149,58 @@ export interface KybApplicantInput {
 }
 
 export interface KybSession {
-  sumsubApplicantId: string;
-  hostedFlowUrl: string;          // where the merchant uploads docs
+  vendorApplicantId: string | null;  // Persona inquiry id, null for Manual
+  hostedFlowUrl: string;             // Persona-hosted page, or our /m/onboarding/upload route for Manual
   expiresAt: Date;
 }
 
 export interface KybReview {
   decision: KybDecision;
   reasons: string[];
-  rawPayload: unknown;            // verbatim provider response
+  rawPayload: unknown;            // verbatim provider response (or document refs for Manual)
   reviewedAt: Date;
 }
 
 export interface KybProvider {
-  readonly name: "sumsub" | "noop";
+  readonly name: "persona" | "manual" | "noop";
   createSession(input: KybApplicantInput): Promise<KybSession>;
   // Webhook handler shape — provider-specific HMAC verification lives in the
-  // adapter, the route just forwards the raw payload.
+  // adapter, the route just forwards the raw payload. `ManualKybProvider`
+  // implements parseWebhook as a no-op (review fires from /m/admin/kyb route).
   parseWebhook(rawPayload: unknown, signature: string): Promise<KybReview>;
 }
 ```
 
-`NoopProvider` returns `green` for any input — used in vitest and on testnet so onboarding flows can be exercised without paying Sumsub.
+Three implementations:
 
-`SumsubProvider` calls Sumsub's REST API for session creation and verifies their webhook HMAC. Shape inferred from Sumsub's published docs; calibrated against their actual OpenAPI on contract sign.
+1. **`NoopProvider`** — always returns `green`. Used in vitest and on testnet when KYB enforcement is off. Default in dev.
+2. **`ManualKybProvider`** — primary track today. `createSession` returns a hosted-flow URL pointing at our own `/m/onboarding/upload` route; merchant uploads ID + entity docs to Vercel Blob; UBO names + entity name screened against locally-stored OFAC + EU lists; result lands in `ops_review` for Arcora ops to approve via `/m/admin/kyb`. `parseWebhook` is a no-op.
+3. **`PersonaProvider`** — Persona's [Cases API](https://docs.withpersona.com/) for KYB. `createSession` creates a Persona Case with our `vendorExternalId` as `reference-id`; returns the hosted flow URL. Webhooks are HMAC-SHA256 over the body; the adapter verifies and maps Persona's verdict to our `KybDecision`. Production billing starts only when we connect a payment method — sandbox is unlimited.
+
+### ManualKybProvider — what's actually doing the work
+
+| Concern | Implementation |
+|---|---|
+| Sanctions data | Daily cron pulls [OFAC SDN](https://www.treasury.gov/ofac/downloads/sdn.xml) + [EU Consolidated](https://webgate.ec.europa.eu/fsd/fsf) into a `sanctions_list_entries` Postgres table. Schema: `(provider, listed_at, entity_type, name, normalised_name, raw)`. Indexes on normalised_name (lowercased + diacritics-stripped). |
+| Name screening | `ILIKE` + trigram similarity (`pg_trgm`) match merchant entity name + each UBO name against `sanctions_list_entries`. False-positive review by ops is part of the workflow. |
+| Document upload | Vercel Blob private bucket. Pre-signed URLs scoped to merchant + 24h TTL. We store the blob URL + content hash; documents themselves never enter the app server. |
+| Review UI | `/m/admin/kyb` queue lists pending applicants with the docs, sanctions hits (if any), entered fields. Approve/reject/note. |
+| Refresh cadence | Daily (sanctions lists are updated by issuers daily). Cron lives on the existing VPS (`arcora-sanctions-refresh.timer`). |
 
 ### Routes
 
 ```
-POST /api/merchant/kyb/start         → creates kyb row, returns Sumsub hosted-flow URL
-POST /api/merchant/kyb/webhook       → Sumsub webhook, HMAC-verified
+POST /api/merchant/kyb/start         → creates kyb row, returns vendor hosted-flow URL
+                                       (Persona inquiry URL, or our own /m/onboarding/upload for Manual)
+POST /api/merchant/kyb/upload        → Manual provider: receive blob upload + run sanctions screen + queue ops_review
+POST /api/merchant/kyb/webhook       → Persona webhook, HMAC-verified (no-op for Manual)
 POST /api/merchant/kyb/sign-tos      → records ToS signature for current version
 POST /api/merchant/kyb/finalize      → server-side: runs Plan-5 payout screen + on-chain registerMerchant
 GET  /api/merchant/kyb               → returns merchant's own kyb status (for dashboard)
 
 POST /api/admin/kyb/review/[id]      → ops review action (approve / reject / note)
 GET  /api/admin/kyb/queue            → ops review queue
+GET  /api/admin/kyb/sanctions/refresh → manual-trigger refresh of OFAC + EU lists (also runs as cron)
 ```
 
 ### Pages
@@ -199,7 +218,7 @@ GET  /api/admin/kyb/queue            → ops review queue
 
 Plan 5 today fires `flow="merchant_payout"` on every `/api/invoices` call. With Plan 8 live, that screen shifts to **once at onboarding** plus the existing per-invoice cache lookup. Cache hit on every invoice, no provider call until cache TTL expires (24h). Net effect: same fail-closed posture, lower cost.
 
-The on-chain `registerMerchant` only runs after all three checks pass: Sumsub green/ops-approved, Plan-5 payout screen `decision: allow`, ToS signature verified. If any gates the merchant, the row stays `kyb_pending` or `ops_review` and on-chain merchant state never gets created.
+The on-chain `registerMerchant` only runs after all three checks pass: vendor green or ops-approved, Plan-5 payout screen `decision: allow`, ToS signature verified. If any gates the merchant, the row stays `kyb_pending` or `ops_review` and on-chain merchant state never gets created.
 
 ### ToS versioning
 
@@ -221,30 +240,42 @@ The on-chain gateway is **not** aware of ToS — that's an off-chain enforcement
 
 ## Out of scope (defer to v2 or separate plan)
 
-- **Adverse media / PEP screening** — Sumsub offers it as an add-on; not in light KYB. v2 ask.
+- **Adverse media / PEP screening** — vendor add-on (Persona offers it; ManualKybProvider doesn't). Not in light KYB. v2 ask.
 - **Multi-tenant policy customisation** (e.g. "this merchant requires deeper KYB") — single global policy in v1.
 - **TR market entry** — blocked by domestic regulation. Reopen if/when TR crypto-payment rules change.
-- **Periodic re-verification** — annual UBO / sanctions refresh. Add as a cron job in v1.x once data exists.
+- **Annual re-verification** — UBO + sanctions refresh on schedule. Add as a cron job in v1.x once data exists.
 - **Merchant disputes against rejection** — same posture as Plan 5: ops escalation only.
-- **Document storage** — Sumsub holds documents on their side; we store *only* references + result + UBO names. Reduces our GDPR surface.
+- **Document storage on PersonaProvider** — Persona holds documents on their side; we store only references + result + UBO names. ManualKybProvider stores docs in Vercel Blob (we control retention; default 5y for sanctions traceability per memory).
 
 ---
 
 ## Effort
 
+### Track A — `ManualKybProvider` (today, $0)
+
 | Phase | Time | Cost |
 |---|---|---|
-| Spec review + Sumsub sandbox account creation | 0.5 day | $0 (sandbox is free) |
-| `merchant_kyb` + `tos_versions` migrations + drizzle schema | 0.5 day | $0 |
-| `KybProvider` interface + `NoopProvider` + `SumsubProvider` | 1.5 days | $0 |
-| Webhook route + HMAC verification + state machine handlers | 1 day | $0 |
-| Onboarding pages (start / verify / sign-tos / done) | 1.5 days | $0 |
-| Ops review queue page + actions | 1 day | $0 |
+| `merchant_kyb` + `tos_versions` + `sanctions_list_entries` migrations | 0.5 day | $0 |
+| `KybProvider` interface + `NoopProvider` + `ManualKybProvider` | 1 day | $0 |
+| OFAC + EU list importer (cron job + initial backfill) | 1 day | $0 |
+| Onboarding pages (start / upload / sign-tos / done) | 1.5 days | $0 |
+| `/m/admin/kyb` queue + actions | 1 day | $0 |
 | Plan-5 + on-chain `registerMerchant` orchestration on finalize | 0.5 day | $0 |
 | Vitest coverage | 1 day | $0 |
-| Sumsub sandbox end-to-end smoke (3–5 fake applicants) | 0.5 day | $0 |
-| **Total to "KYB-ready on testnet, sandbox-only"** | **~8 days** | **$0** |
-| Sumsub production onboarding (paid contract, KYB live for real money) | 1 day | $200–500/month + $2–8/verification |
+| End-to-end smoke (3–5 fake applicants, sanctioned + clean) | 0.5 day | $0 |
+| **Total Track A — "Manual KYB live on testnet"** | **~7 days** | **$0** |
+
+### Track B — `PersonaProvider` (when revenue lands)
+
+| Phase | Time | Cost |
+|---|---|---|
+| Persona sandbox signup + Cases template config | 0.5 day | $0 (sandbox unlimited) |
+| `PersonaProvider` adapter + webhook handler | 1.5 days | $0 |
+| Hosted flow integration on `/m/onboarding/start` | 0.5 day | $0 |
+| Smoke against Persona sandbox | 0.5 day | $0 |
+| **Total Track B addition (assuming Track A live)** | **~3 days** | **$0** dev, ~$2–6 per business + $0.50–2 per UBO at production |
+
+Tracks compose: Track A landed first, Track B added on top, env flip selects which one production uses.
 
 ---
 
@@ -262,10 +293,11 @@ The on-chain gateway is **not** aware of ToS — that's an off-chain enforcement
 
 - ✅ Jurisdictions: OFAC + EU. TR dropped (domestic crypto-payment ban).
 - ✅ KYB depth: light (entity + UBO basics; no adverse-media / PEP).
-- ✅ Workflow: Sumsub green = auto-activate; yellow/red = ops queue.
+- ✅ Workflow: vendor green = auto-activate; yellow/red (and all Manual) = ops queue.
 - ✅ ToS: hash-versioned, re-sign required on each new version.
 - ✅ Compliance: auto-screen merchant payout via Plan-5 on onboarding finalize.
-- ✅ Vendor: Sumsub for v1; adapter pattern preserves switching cost low.
+- ✅ Two-track vendor strategy: `ManualKybProvider` today ($0), `PersonaProvider` post-revenue. Adapter pattern, env-flip switching.
+- ❌ Sumsub — dropped 2026-05-03 (no self-serve signup, sales-touch even for sandbox; doesn't fit pre-revenue posture).
 - ❌ Adverse-media / PEP — v2 ask.
 - ❌ Multi-tenant policy — v2 ask.
 - ❌ Merchant dispute path — ops escalation only.
@@ -275,7 +307,7 @@ The on-chain gateway is **not** aware of ToS — that's an off-chain enforcement
 
 ## When picking this up
 
-1. Open a Sumsub sandbox account (free) — get API key + webhook secret. Confirms their actual API shape before locking the adapter.
-2. Read this spec end-to-end; the open-decisions list may have updated.
-3. Coordinate with Plan 5 (`packages/app/lib/compliance/`) — the merchant-payout screen call shifts from per-invoice to once-at-onboarding; verify Plan-5's cache TTL stays sensible.
-4. Start with the migrations + adapter interface + Noop. Sumsub adapter follows once sandbox creds are in.
+1. Read this spec end-to-end; the open-decisions list may have updated.
+2. Coordinate with Plan 5 (`packages/app/lib/compliance/`) — the merchant-payout screen call shifts from per-invoice to once-at-onboarding; verify Plan-5's cache TTL stays sensible.
+3. **Track A first**: migrations (`merchant_kyb` + `tos_versions` + `sanctions_list_entries`) + `KybProvider` interface + `NoopProvider` + `ManualKybProvider`. The OFAC + EU importer is the unique-to-this-spec piece — all else is web-app boilerplate.
+4. **Track B second** (when revenue lands): open Persona sandbox at https://withpersona.com/signup using `compliance@arcorapay.xyz`. Their Cases API + webhook signing is documented; sandbox is free unlimited. Add `PersonaProvider` alongside `ManualKybProvider`; env flip selects.

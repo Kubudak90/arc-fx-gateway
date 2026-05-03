@@ -168,6 +168,11 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
   const max = Math.max(0, ...values);
   const min = Math.min(0, ...values);
   const range = max - min || 1;
+  // "All zero" means no settled or refunded volume in the window. Refund-only
+  // days produce min<0, max=0 — those still draw a downward line below the
+  // baseline, so we don't fall into the empty-state copy when refunds happened.
+  const allZero = max === 0 && min === 0;
+  const hasRefundOnly = max === 0 && min < 0;
 
   const W = 600, H = 140, P = 6;
   const xFor = (i: number) => P + (i / (days.length - 1)) * (W - 2 * P);
@@ -224,12 +229,12 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
         {/* zero baseline */}
         <line x1={P} y1={zeroY} x2={W - P} y2={zeroY}
               stroke="rgba(11,20,38,0.06)" strokeWidth="0.5" strokeDasharray="2 4" />
-        {max > 0 && (
+        {!allZero && (
           <>
-            <path d={area} fill={`url(#treasury-area-${series.token})`} />
-            <path d={line} fill="none" stroke="#00c2a8" strokeWidth="1.5"
+            {max > 0 && <path d={area} fill={`url(#treasury-area-${series.token})`} />}
+            <path d={line} fill="none" stroke={hasRefundOnly ? "#0284c7" : "#00c2a8"} strokeWidth="1.5"
                   strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx={xFor(lastIdx)} cy={yFor(last)} r="3" fill="#00c2a8" />
+            <circle cx={xFor(lastIdx)} cy={yFor(last)} r="3" fill={hasRefundOnly ? "#0284c7" : "#00c2a8"} />
             {hover && (
               <>
                 <line x1={xFor(hover.idx)} y1={P} x2={xFor(hover.idx)} y2={H - P}
@@ -240,17 +245,17 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
             )}
           </>
         )}
-        {max === 0 && (
+        {allZero && (
           <text x={W / 2} y={H / 2 + 4} textAnchor="middle"
                 fontFamily="var(--font-mono)" fontSize="10" fill="#5b6478">
-            no payouts in the last 30 days
+            no settlement activity in the last 30 days
           </text>
         )}
       </svg>
 
       {/* Tooltip — positioned in DOM space rather than SVG so the type rendering
           stays sharp and we don't have to fight viewBox scaling. */}
-      {hover && max > 0 && (
+      {hover && !allZero && (
         <div
           className="absolute pointer-events-none z-10 -translate-x-1/2 -translate-y-full"
           style={{

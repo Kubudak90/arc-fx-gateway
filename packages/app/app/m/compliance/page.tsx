@@ -86,7 +86,7 @@ export default function CompliancePage() {
                 <>
                   <RiskPill risk={own.risk} />
                   <div className="text-[11px] text-muted-foreground mt-1">
-                    {own.provider} · {formatRelativeTime(own.createdAt)}
+                    {providerLabel(own.provider)} · {formatRelativeTime(own.createdAt)}
                   </div>
                 </>
               ) : (
@@ -143,6 +143,15 @@ export default function CompliancePage() {
       </section>
     </main>
   );
+}
+
+function providerLabel(provider: string): string {
+  switch (provider) {
+    case "noop":     return "Testnet shadow screening";
+    case "elliptic": return "Elliptic";
+    case "trmlabs":  return "TRM Labs";
+    default:         return provider;
+  }
 }
 
 function RiskPill({ risk }: { risk: OwnScreen["risk"] }) {

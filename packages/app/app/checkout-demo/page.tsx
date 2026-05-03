@@ -10,7 +10,7 @@ import { SiteFooter } from "@/components/landing/SiteFooter";
  * call. The math behind every step uses real Arcora constants (1.0863
  * illustrative oracle rate, 2 bps App Kit provider fee, 30 bps Arcora
  * protocol fee) so the numbers a viewer sees match what the deployed
- * v0.8.1 gateway charges on Arc testnet. The interactive stepper lets a
+ * gateway charges on Arc testnet. The interactive stepper lets a
  * marketing visitor walk Invoice → Wallet → Quote → Pay → Settled at
  * their own pace.
  */
@@ -101,7 +101,7 @@ export default function CheckoutDemoPage() {
       </section>
 
       <div className="border-t border-arcora-border px-4 sm:px-6 py-5 text-[10px] sm:text-[11px] text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 font-[family-name:var(--font-mono)]">
-        <span>Illustrative quote at {ORACLE} EUR/USD; production rates come live from Arc&apos;s App Kit Swap. Fee numbers match the deployed v0.8.1 gateway config.</span>
+        <span>Illustrative quote at {ORACLE} EUR/USD; production rates come live from Arc&apos;s App Kit Swap. Fee numbers match the deployed gateway config.</span>
         <Link href="/" className="text-arcora-link hover:underline whitespace-nowrap">← Back to landing</Link>
       </div>
       <SiteFooter />

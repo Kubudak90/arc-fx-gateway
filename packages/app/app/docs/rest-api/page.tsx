@@ -111,18 +111,38 @@ Content-Type: application/json
   "error":         string | null
 }`}</code></pre>
 
-      <h2><code>GET /api/quote</code></h2>
-      <p>Live quote from App Kit Swap. Used by hosted checkout.</p>
-      <pre><code>{`GET /api/quote?invoiceId=0x...&payer=0x... HTTP/1.1
+      <h2><code>POST /api/checkout/quote</code></h2>
+      <p>
+        Live quote from App Kit Swap on Arc. Used by hosted checkout. Supports two modes —
+        <code>amountIn</code> for forward quotes (caller knows what they&apos;re paying), and
+        <code>targetOutput</code> for reverse quotes (caller knows the merchant floor; the response
+        carries the cushioned <code>amountIn</code> the customer should sign for).
+      </p>
+      <pre><code>{`POST /api/checkout/quote HTTP/1.1
+Content-Type: application/json
 
-→
 {
-  "amountIn":        "108630000",
-  "amountOut":       "100000000",
-  "rate":            "1.0863",
-  "ttlSeconds":      45,
-  "stale":           false
+  "payInToken":   "EURC",
+  "payoutToken":  "USDC",
+  "targetOutput": "49.99",
+  "slippageBps":  250
 }`}</code></pre>
+      <h3>Response</h3>
+      <pre><code>{`{
+  "payInToken":      "EURC",
+  "payoutToken":     "USDC",
+  "amountIn":        "46.045679",
+  "estimatedOutput": "49.99",
+  "stopLimit":       "49.49",
+  "fees":            [{ "token": "USDC", "amount": "0.5", "type": "providerFee" }],
+  "ttlSeconds":      30,
+  "issuedAt":        "2026-05-02T..."
+}`}</code></pre>
+      <p>
+        The legacy <code>GET /api/quote?from&amp;to&amp;amountIn</code> endpoint reads the v0.6
+        on-chain pool and is kept for read-only callers; new integrations should use
+        <code>/api/checkout/quote</code>.
+      </p>
 
       <h2><code>GET /api/merchant/treasury</code></h2>
       <p>Authenticated (SIWE session) merchant treasury rollup. Used by <code>/m/treasury</code>.</p>

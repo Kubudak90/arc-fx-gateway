@@ -42,7 +42,10 @@ const PG_URL =
 const ARC_RPC =
   process.env.ARC_TESTNET_RPC ?? "https://rpc.testnet.arc.network";
 
-const INDEXER_LAG_MAX = Number(process.env.INDEXER_LAG_BLOCKS_MAX ?? "50");
+// Arc testnet ≈ 2s blocks, indexer ticks every 30s → healthy lag is
+// 15–60 blocks at any given snapshot. 300 (~10 min) catches an indexer
+// that's been down without false-positiving on normal tick-bursts.
+const INDEXER_LAG_MAX = Number(process.env.INDEXER_LAG_BLOCKS_MAX ?? "300");
 
 const GATEWAY = (process.env.GATEWAY_ADDRESS_V8 ?? "") as Hex;
 

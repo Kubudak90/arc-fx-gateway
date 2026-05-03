@@ -42,6 +42,9 @@ jobs:
       - name: Coverage
         run: forge coverage --report summary --report lcov
 
+      - name: Coverage gate (Plan 7 Layer 2 #4)
+        run: bin/coverage-gate.sh lcov.info
+
       - uses: codecov/codecov-action@v4
         with:
           files: packages/contracts/lcov.info

@@ -80,31 +80,54 @@ App Kit Swap pair-availability is the real precondition, not anything we deploy.
 
 ---
 
+## Canonical token set (2026-05-03 — verified against Arc docs via arc-network MCP)
+
+**App Kit Swap aliases** (the set Circle ships first-class support for):
+USDC · EURC · USDT · USDe · DAI · PYUSD · NATIVE
+
+**Arc-native stablecoins** with canonical contract addresses:
+| Symbol | Address | Decimals | Notes |
+|---|---|---|---|
+| USDC | `0x3600000000000000000000000000000000000000` | 6 (ERC-20 iface) / 18 (native) | gas token; always read via the ERC-20 `decimals()` |
+| EURC | `0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a` | 6 | already live in v0.8.1 |
+| USYC | `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` | 6 | institutional yield-bearing; allowlist-gated, $100k min |
+
+**Critical testnet limitation**: `Among testnets, only Arc Testnet supports Swap (USDC and EURC only).` Any new stable beyond USDC/EURC can only be exercised end-to-end on **mainnet**. Testnet deploy of e.g. USDT will go through whitelist + UI listing fine, but `kit.swap` will revert until Circle stands up testnet liquidity.
+
+**Regional stables (TRYC/BRLC/MXNC) — not on Arc.** The previous plan listed these as v1.x #5d; they're not Circle-issued and don't appear in Arc docs. Drop until either Circle issues them or we decide to bridge external regional stables (out of scope for v1).
+
 ## Rollout sequence
 
-### v1.x #5a — USDT first (highest demand)
+### v1.x #5a — USDT first (highest demand) — mainnet-only
 
-1. **Verify App Kit pair coverage**: confirm `kit.swap(USDC, USDT)` and `kit.swap(USDT, USDC)` both quote on Arc. If a maker isn't quoting one direction, hold off on listing.
-2. **Find / mint testnet USDT on Arc**: prefer Circle's testnet USDT if they publish one; else mint a `MintableERC20` we control for app testing.
-3. **Whitelist on gateway**: owner calls `setTokenSupport(usdtAddress, true)`.
-4. **Relayer**: extend `tokenSymbol(addr)` and the symbol union (`"USDC" | "EURC" | "USDT"`). Audit any other USDC/EURC-only branches.
-5. **App config**: add USDT to `lib/chain/tokens.ts` (address, decimals — likely 6, App Kit pair flags).
-6. **Dashboard**: `CreateInvoiceDialog` payout-token picker re-reads the `supportedTokens` set instead of hardcoding USDC/EURC.
-7. **Checkout**: payIn picker likewise. Hosted checkout's Permit2 helper is token-agnostic; sanity-check decimal handling.
-8. **SDK**: export an updated `SupportedToken` enum + a runtime helper that fetches the on-chain whitelist (so SDK consumers don't go stale every time we list a new stable).
-9. **Live smoke**: USDC → USDT pay (regression: USDC → USDC, USDC → EURC still work).
+1. **Confirm App Kit USDT alias coverage on Arc mainnet**: `kit.quote({ tokenIn: "USDT", tokenOut: "USDC" })` and reverse — both directions should return rates with reasonable size.
+2. **Mainnet readiness check**: this is the first stable that *cannot* be smoke-tested on Arc Testnet. Either gate v1.x #5a behind the mainnet deploy milestone, or accept that "smoke testing" for USDT means staging-on-mainnet with low-value invoices.
+3. **Whitelist on gateway**: owner calls `setTokenSupport(usdtAddress, true)` on `ArcFXGatewayV8`.
+4. **Relayer**: extend `tokenSymbol(addr)` map + symbol union (`"USDC" | "EURC" | "USDT"`). Audit other USDC/EURC-only branches.
+5. **App config**: add USDT to `lib/chain/tokens.ts` (address, decimals 6, kit alias `"USDT"`).
+6. **Dashboard / Checkout**: pickers read from `/api/tokens` (registry-driven, not enum).
+7. **SDK**: export updated `SupportedToken` enum + runtime fetch helper.
+8. **Live smoke (mainnet)**: USDC → USDT pay; USDT → USDC pay; refund flow; treasury display.
 
-### v1.x #5b — PYUSD
+### v1.x #5b — PYUSD — mainnet-only
 
-PayPal-blessed, low political risk. Same playbook as USDT. Verify App Kit coverage first.
+PayPal-issued, low political risk. Same playbook as USDT. App Kit alias `"PYUSD"`.
 
-### v1.x #5c — DAI / USDS
+### v1.x #5c — DAI — mainnet-only, 18-decimal regression target
 
-Decentralized stable rails. DAI has 18 decimals — verify the app's `Number(formatUnits())` paths handle that cleanly (USDC/EURC are both 6, so this is the first non-6 we ship). Treasury aggregations, Permit2 amount conversion, checkout TTL display all need a regression sweep.
+Decentralized rails. **DAI has 18 decimals** — first non-6-decimal stable we'd ship. Before whitelisting, run a vitest matrix against the app's amount math:
+- Permit2 typed-data construction
+- Treasury aggregations (`merchantPayout`, `protocolFee` numerics)
+- Checkout TTL/quote display
+- Refund branch `recordPayerRefund`
 
-### v1.x #5d — Regional fiat-pegged (TRYC, BRLC, MXNC)
+### v1.x #5d — USDe — mainnet-only, yield-bearing
 
-Big unlock for emerging-market merchants. Gating factor: App Kit support. If Circle hasn't onboarded a regional stable's makers, this is a Circle conversation, not an Arcora one. Document the dependency and revisit per-token.
+Ethena's synthetic dollar. App Kit alias `"USDe"`. Yield accrual happens at the issuer level, not in our gateway — for our purposes USDe behaves like a regular ERC-20 stable. Decimals: 18 (same regression matrix as DAI).
+
+### v1.x #5e — USYC track (separate, not part of #5a-d)
+
+USYC is institutional-only (allowlist + $100k minimum). It's not interchangeable with retail stables in the dashboard picker. **Defer** to a future "institutional" merchant tier; the v1.x #5 track is about the App Kit Swap retail set.
 
 ---
 
@@ -154,12 +177,17 @@ The first stable does the legwork (token-list API, picker rewire, relayer audit)
 
 ---
 
+## Resolved (2026-05-03 — verified against Arc docs)
+
+1. **App Kit USDT testnet availability**: NOT supported. Only Arc Testnet supports Swap and only for USDC/EURC. Any stable beyond those is mainnet-only, period. v1.x #5a–d are gated on mainnet readiness.
+2. **Decimals beyond 6**: DAI and USDe are 18. The 18-decimal regression matrix is a one-time lift in #5c; #5d inherits it.
+3. **Regional stables (TRYC/BRLC/MXNC)**: dropped — not on Arc, not in App Kit's alias list.
+4. **USYC**: separate institutional track, not part of #5.
+
 ## Open questions
 
-1. **App Kit USDT availability on Arc testnet**: confirm with Circle / Arc team before starting v1.x #5a. If only mainnet has USDT makers, this becomes a mainnet-only unlock and we focus pre-mainnet effort elsewhere.
-2. **Should the SDK fetch the whitelist at runtime or codegen it at publish time?** Runtime fetch = no SDK release needed per listing, but adds a network round-trip on first SDK use. Codegen = friction per listing, but offline-compatible. Lean **runtime** with a typed hard-coded fallback for the same-day-as-listing case.
-3. **Decimals beyond 6**: DAI (18) is the first; do we add `mxnt`/regional stables that may use 2 or 4? Pin a regression matrix once the first 18-dec stable lands.
-4. **Token symbol collisions**: what if Circle issues a "USDT" on Arc that has a different address than we whitelisted? Our `tokenSymbol()` helper is address→symbol — collision-safe as long as we stay address-keyed everywhere.
+1. **SDK whitelist source**: runtime fetch (`/api/tokens`) vs codegen-at-publish? **Lean runtime**, with a typed hard-coded fallback for same-day-as-listing UX.
+2. **Token symbol collisions**: address-keyed everywhere keeps us collision-safe. Confirm `tokenSymbol(addr)` in the relayer is the only symbol→address lookup; if any caller reverses that, audit it before adding the third stable.
 
 ---
 
@@ -168,7 +196,9 @@ The first stable does the legwork (token-list API, picker rewire, relayer audit)
 - ✅ Drop in-house pool/registry from the canonical path. Use `ArcFXGatewayV8.supportedTokens` + App Kit Swap.
 - ✅ One token-list API serves dashboard + checkout + SDK.
 - ✅ Per-stable rollout = whitelist tx + relayer map + UI verify + smoke. No contract changes per stable.
-- ✅ Order: USDT → PYUSD → DAI/USDS → regional. Regional gated on App Kit maker availability.
+- ✅ Order: USDT → PYUSD → DAI → USDe. **All four mainnet-only** (App Kit Swap testnet limited to USDC/EURC).
+- ❌ Regional stables (TRYC/BRLC/MXNC) — not on Arc, not in App Kit alias list.
+- ❌ USYC — separate institutional track, not retail.
 - ❌ Multi-hop / DEX-aggregator on Arc — App Kit handles internally; not our problem at this layer.
 - ❌ External LP onboarding — not our liquidity to underwrite at v1.
 

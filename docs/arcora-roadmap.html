@@ -777,13 +777,18 @@ Merchant gets: preferred-stable on Arc · single InvoicePaid event</pre>
         </tr>
         <tr>
           <td><b>Audit-trigger metriği</b></td>
-          <td><span class="pill next">NEXT</span></td>
-          <td>Plan-7&apos;nin pinleyeceği X/Y eşiği. Annual TVL ≥ $X, settled volume ≥ $Y, ya da partner sözleşme şartı — ilk hangisi tetiklerse audit başlasın.</td>
+          <td><span class="pill next">SETTLED</span></td>
+          <td>Tetik = <b>partner sözleşmesi imzası VEYA fund kapanışı</b>. İlk hangisi gelirse Plan-7 firm RFP&apos;leri (Spearbit / Cantina / Sherlock) ateşlenir. TVL/volume eşikleri bu aşamada sinyal kirliliği.</td>
         </tr>
         <tr>
           <td><b>Multisig admin migration</b></td>
-          <td><span class="pill later">PLANNED</span></td>
-          <td>Bugün admin tek EOA. Mainnet&apos;ten önce 2-of-3 ya da 3-of-5 multisig&apos;e taşı. Ayrı runbook.</td>
+          <td><span class="pill later">MAINNET T-0</span></td>
+          <td>Bugün admin tek EOA. &quot;Mainnet&apos;e çıkıyoruz&quot; sinyali geldiğinde 2-of-3 ya da 3-of-5 multisig&apos;e taşınır. Ayrı runbook.</td>
+        </tr>
+        <tr>
+          <td><b>Mainnet target date</b></td>
+          <td><span class="pill later">ARC-DEPENDENT</span></td>
+          <td>Arc Network bugün testnet&apos;te; biz de testnet&apos;teyiz. Arc mainnet açıldığında bizim T-0 takvimimiz tetiklenir — kendimiz seçemiyoruz.</td>
         </tr>
         <tr>
           <td><b>Domain &amp; SSL</b></td>

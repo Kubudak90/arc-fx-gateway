@@ -97,7 +97,7 @@ export default function CompliancePage() {
         </Card>
         {own?.decision === "reject" && (
           <p className="text-xs text-red-700">
-            Your payout address has been blocked. Contact <a className="underline" href="mailto:compliance@arcora.dev">compliance@arcora.dev</a> to resolve.
+            Your payout address has been blocked. Contact <a className="underline" href="mailto:compliance@arcorapay.xyz">compliance@arcorapay.xyz</a> to resolve.
           </p>
         )}
       </section>

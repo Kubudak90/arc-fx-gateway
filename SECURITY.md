@@ -4,7 +4,7 @@ Arcora is a stablecoin checkout protocol. We take security findings seriously an
 
 ## Reporting a vulnerability
 
-Email **`compliance@arcora.dev`** with:
+Email **`compliance@arcorapay.xyz`** with:
 
 - Affected contract / endpoint / commit
 - Reproduction steps (PoC code or transaction trace welcome)

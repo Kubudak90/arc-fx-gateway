@@ -171,5 +171,5 @@ The on-chain contract assumes the relayer obeys the protocol but does not requir
 
 ## Reporting a finding
 
-Off-protocol disclosure: `compliance@arcora.dev`. We respond within 24h.
+Off-protocol disclosure: `compliance@arcorapay.xyz`. We respond within 24h.
 For a live mainnet deployment a public Immunefi program will be the canonical channel; until then please email.

@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       decision: "review",
       ticketId: result.ticketId,
       reason: "Compliance review required — we'll email the merchant within 24h.",
-      supportContact: "compliance@arcora.dev",
+      supportContact: "compliance@arcorapay.xyz",
     }, { status: 200 });
   }
 

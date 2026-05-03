@@ -167,7 +167,7 @@ Caching strategy:
 
 // response — manual review (rare, queued)
 { "decision": "review", "reason": "MEDIUM_RISK_EXPOSURE",
-  "supportContact": "compliance@arcora.dev",
+  "supportContact": "compliance@arcorapay.xyz",
   "ticketId": "rev_…" }
 
 // response — hard reject (sanctions / high risk)

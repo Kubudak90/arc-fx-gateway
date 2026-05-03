@@ -1,0 +1,55 @@
+# Known issues — tester preview
+
+This file is the canonical "what's rough on purpose" list for the testnet preview at [arcorapay.xyz](https://arcorapay.xyz). Mirrored on the [`/quickstart`](https://arcorapay.xyz/quickstart) page in a tester-friendly form.
+
+If you hit something that **isn't** listed here, that's a bug — please report it (`support@arcorapay.xyz` for general, `compliance@arcorapay.xyz` for security).
+
+---
+
+## Network / environment
+
+- **We're on Arc Testnet only** — Arc itself is on testnet, so we are too. Mainnet T-0 is gated on Arc going mainnet. Treat this preview as a working demo, not a production payment rail.
+- **No real money moves.** Faucet-issued USDC + EURC. Don't send real funds — they won't reach mainnet from here.
+- **Single-instance relayer.** One VPS handles every settle and refund. If it's slow or briefly down, your invoice queues up and processes when it's back. Multi-relayer with rolling failover is on the v1.x ops list.
+
+## Tokens
+
+- **Pay-in / payout: USDC and EURC only.** App Kit Swap on Arc Testnet supports only USDC ⇄ EURC today. USDT, PYUSD, DAI, USDe are mainnet-only on App Kit's alias list; we'll list them as Arc opens those on testnet or as we move to mainnet (see Plan 3).
+- **No regional stables (TRYC / BRLC / MXNC).** Not on Arc, not in App Kit aliases. Out of v1.x scope.
+- **No USYC.** Institutional yield-bearing stable; allowlist + $100k floor. Separate institutional track.
+
+## Compliance
+
+- **Sanctions screening is in shadow mode.** `/api/checkout/authorize` exists and writes audit rows; the active provider is Noop on testnet — no wallet is rejected today. Mainnet flips it to a real Elliptic / TRM Labs adapter via env, no code change.
+- **No KYB on testnet.** Mainnet will gate merchant onboarding behind a hybrid KYB flow (Manual + Persona, see Plan 8). Today any wallet can register as a merchant via SIWE signature alone.
+
+## Refunds & webhooks
+
+- **Refunds need the merchant to re-approve the gateway.** The refund flow pulls the merchant's payout-token funds back to send to the customer — the gateway needs an ERC-20 allowance from the merchant's wallet first. The dashboard's refund button handles the prompt automatically, but expect a wallet popup.
+- **Webhooks retry 5× over 30 minutes, then stop.** If your webhook endpoint is down longer than that, fetch missed events via the API. Long-term retry policy is on the v1.x list.
+
+## Operational caveats
+
+- **Foundry broadcast can lie.** On Arc testnet, `forge script --broadcast` has been observed reporting success while the tx silently failed to confirm. We always verify with `cast receipt` (status=1) AND `cast code <addr>` (non-empty). If you re-deploy, follow [`docs/audit/deploy-checklist.md`](docs/audit/deploy-checklist.md).
+- **Drizzle migration tracking is out of sync on Neon prod.** Migrations 0000–0005 have been applied via direct SQL exec, not via `drizzle-kit migrate`. Before any future migration, see `memory/compliance_phase0.md` for the workaround.
+
+## Versioning
+
+| Surface | Status |
+|---|---|
+| Gateway `ArcFXGatewayV8` | live, canonical |
+| Gateway v0.6 / v0.7 | deprecated, moved to `packages/contracts/legacy/` |
+| `@arcora/sdk` + `@arcora/sdk-react` | published 1.0.0 on npm |
+| Compliance hooks | Phase 0 LIVE (Noop default) — Plan 5 |
+| Audit prep | Layers 1+2 LIVE (zero-budget path) — Plan 7 |
+| KYB | spec'd two-track (Manual + Persona), not built — Plan 8 |
+| Mainnet target | gated on Arc Network mainnet (Arc-dependent) |
+
+---
+
+## Reporting
+
+- General feedback / bugs: `support@arcorapay.xyz` or [GitHub issues](https://github.com/Kubudak90/arc-fx-gateway/issues)
+- Security disclosure: `compliance@arcorapay.xyz` ([SECURITY.md](SECURITY.md))
+
+We aim to acknowledge within 24h. Coordinated disclosure expected for security findings.

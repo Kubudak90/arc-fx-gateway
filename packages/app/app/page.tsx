@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { ArcoraLogo } from "@/components/brand/Logo";
 import { LiveSettlement } from "@/components/landing/LiveSettlement";
 import { DashboardPreview } from "@/components/landing/DashboardPreview";
@@ -90,6 +91,7 @@ export default function Home() {
           <a href="#dashboard"    className="hidden lg:inline text-muted-foreground hover:text-foreground">Dashboard</a>
           <a href="#developers"   className="hidden lg:inline text-muted-foreground hover:text-foreground">Developers</a>
           <a href="#roadmap"      className="hidden md:inline text-muted-foreground hover:text-foreground">Roadmap</a>
+          <Link href={"/quickstart" as Route} className="hidden md:inline text-muted-foreground hover:text-foreground">Quickstart</Link>
           <a href="/m/login" className="text-arcora-link hover:underline whitespace-nowrap">Merchants</a>
           <a href="https://github.com/Kubudak90/arc-fx-gateway" className="text-muted-foreground hover:text-foreground">GitHub</a>
         </nav>
@@ -110,7 +112,8 @@ export default function Home() {
             and pays out in the stablecoin you choose. Secure. Compliant. Built for scale.
           </p>
           <div className="mt-10 flex flex-wrap justify-center gap-3">
-            <a href="/m/login" className="btn-arcora-pill">Sign in as merchant</a>
+            <Link href={"/quickstart" as Route} className="btn-arcora-pill">Test in 10 min</Link>
+            <a href="/m/login" className="btn-arcora-pill-light">Sign in as merchant</a>
             <a href="https://github.com/Kubudak90/arc-fx-gateway" className="btn-arcora-pill-light">View on GitHub</a>
           </div>
         </div>

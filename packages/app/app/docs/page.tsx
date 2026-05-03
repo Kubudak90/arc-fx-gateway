@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { DocsShell } from "@/components/docs/DocsShell";
+import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
 export const metadata = {
   title: "Documentation · Arcora",
@@ -22,21 +23,7 @@ export default function DocsIndex() {
       </p>
 
       <h2>Where Arcora fits</h2>
-      <pre><code>{`Customer wallet ──┐
-                  │  Permit2 signature (gas-less)
-                  ▼
-            ┌──────────────┐         ┌──────────────────┐
-            │ Arcora       │         │ Arc App Kit Swap │
-            │ relayer      │ ◀────▶ │ (Circle RFQ FX)  │
-            └──────┬───────┘         └──────────────────┘
-                   │  settleInvoice
-                   ▼
-            ┌──────────────┐
-            │ ArcFXGateway │ ── payout ──▶ Merchant wallet
-            └──────┬───────┘
-                   │  InvoicePaid event
-                   ▼
-            Indexer ── webhook ──▶ Merchant server`}</code></pre>
+      <FlowDiagram />
 
       <p>
         The customer signs once. Arcora&apos;s relayer pulls the funds via Permit2, runs an FX swap on Circle&apos;s App Kit

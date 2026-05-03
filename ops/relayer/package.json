@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "smoke":  "tsx smoke.ts",
-    "start":  "tsx run.ts",
-    "replay": "tsx replay.ts"
+    "smoke":     "tsx smoke.ts",
+    "start":     "tsx run.ts",
+    "replay":    "tsx replay.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@circle-fin/app-kit": "^1.4.1",

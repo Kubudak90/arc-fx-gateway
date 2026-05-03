@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx run.ts"
+    "start":     "tsx run.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "pg": "^8.13.0",

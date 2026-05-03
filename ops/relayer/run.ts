@@ -39,6 +39,11 @@ const CUSTOM_FEE_BPS = Number(process.env.CUSTOM_FEE_BPS ?? "100"); // 1% defaul
 const SLIPPAGE_BPS = Number(process.env.SLIPPAGE_BPS ?? "100");     // 1% default
 const TICK_MS      = Number(process.env.RELAYER_TICK_MS ?? "5000");
 const MAX_ATTEMPTS = Number(process.env.RELAYER_MAX_ATTEMPTS ?? "3");
+// A row stuck in `processing` beyond this window is treated as crashed mid-
+// flight (prev daemon died after permit2 pull / between swap + settle, etc.)
+// and reclaimed by the next claimNext call. Set generously above worst-case
+// kit.swap + settle latency. Audit P2 #5, 2026-05-03.
+const LEASE_SECONDS = Number(process.env.RELAYER_LEASE_SECONDS ?? "480"); // 8 min
 
 function need(k: string): string {
   const v = process.env[k];
@@ -122,33 +127,61 @@ function tokenSymbol(addr: string): "USDC" | "EURC" {
 
 // ── DB helpers ──────────────────────────────────────────────────────
 
+/** SQL fragment for atomic claim that also surfaces invoices.gateway_address
+ *  for per-row dispatch (Plan 9). The CTE + `for update skip locked` keeps
+ *  two relayer instances from grabbing the same row even though we run one
+ *  daemon today. */
+function claimSql(where: string): string {
+  return `with claimed as (
+            update relayer_queue
+               set status     = 'processing',
+                   attempts   = attempts + 1,
+                   updated_at = now()
+             where id = (
+               select id from relayer_queue
+                where ${where}
+                order by next_attempt
+                limit 1
+                for update skip locked
+             )
+             returning id, invoice_id, payer, pay_in_token, amount_in, payout_token,
+                       amount_out_min, permit2_data, permit2_signature, attempts
+          )
+          select c.*, i.gateway_address
+            from claimed c
+            left join invoices i on i.id = c.invoice_id`;
+}
+
 async function claimNext(): Promise<QueueRow | null> {
-  // Atomic claim: pending → processing in one statement so a crashed daemon
-  // restart doesn't double-process. The next_attempt clause is what gives
-  // us retry-with-backoff on the same row. Plan-9: also surface
-  // invoices.gateway_address so the relayer dispatches to the right contract.
-  const r = await pool.query<QueueRow>(
-    `with claimed as (
-       update relayer_queue
-          set status      = 'processing',
-              attempts    = attempts + 1,
-              updated_at  = now()
-        where id = (
-          select id from relayer_queue
-           where status = 'pending'
-             and next_attempt <= now()
-           order by next_attempt
-           limit 1
-           for update skip locked
-        )
-        returning id, invoice_id, payer, pay_in_token, amount_in, payout_token,
-                  amount_out_min, permit2_data, permit2_signature, attempts
-     )
-     select c.*, i.gateway_address
-       from claimed c
-       left join invoices i on i.id = c.invoice_id`,
+  // Audit P2 #5 (2026-05-03) — two-step claim:
+  //
+  //   1. Reclaim any row stuck in `processing` beyond the lease window. A
+  //      daemon crash after Permit2 pull but before mark-settled/refunded
+  //      leaves a row invisible to plain pending claims; this rescues those
+  //      so customer funds (potentially in the relayer hot wallet) can
+  //      finish flowing.
+  //   2. Otherwise, claim a normal pending row.
+  //
+  // The lease reclaim still increments `attempts`, so chronic stuck rows
+  // hit MAX_ATTEMPTS and surface for operator investigation rather than
+  // silently retrying forever.
+  const reclaim = await pool.query<QueueRow>(
+    claimSql(`status = 'processing' and updated_at < now() - ($1 || ' seconds')::interval`),
+    [String(LEASE_SECONDS)],
   );
-  return r.rows[0] ?? null;
+  if (reclaim.rows[0]) {
+    const row = reclaim.rows[0];
+    console.warn(
+      `relayer.lease_reclaimed id=${row.id} invoice=${row.invoice_id} attempts=${row.attempts} ` +
+      `lease_seconds=${LEASE_SECONDS} — previous daemon crashed mid-flight; resuming.`,
+    );
+    return row;
+  }
+
+  const pending = await pool.query<QueueRow>(
+    claimSql(`status = 'pending' and next_attempt <= now()`),
+  );
+  return pending.rows[0] ?? null;
 }
 
 async function markSettled(id: string, swapTx: Hex, settleTx: Hex): Promise<void> {

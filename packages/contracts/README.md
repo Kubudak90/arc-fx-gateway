@@ -59,14 +59,16 @@ bin/coverage-gate.sh              # threshold gate (Plan 7 Layer 2 #4)
 
 ### Coverage
 
-Audit-scope file (`src/ArcFXGatewayV8.sol`) coverage as of 2026-05-03:
+Audit-scope file (`src/ArcFXGatewayV8.sol`) coverage as of 2026-05-03 (after the test backfill — 49 tests):
 
 | Metric | Today | Floor (CI gate) | Target (audit-ready) |
 |---|---|---|---|
-| Lines     | 68.57% | 65% | 95% |
-| Branches  | 32.00% | 30% | 90% |
+| Lines     | **100.00%** | 95% | 95% |
+| Branches  | **100.00%** | 90% | 90% |
+| Statements | **100.00%** | — | — |
+| Functions  | **100.00%** | — | — |
 
-The gate prevents regression starting now. Closing the gap to 95/90 is tracked as a follow-up — the missing surfaces are merchant management, the delegate flow, and most of the revert matrix on `recordPayerRefund` / `refundInvoice`.
+Floor sits at the audit-ready bar so regressions below the bar fail CI immediately.
 
 ### Static analysis
 

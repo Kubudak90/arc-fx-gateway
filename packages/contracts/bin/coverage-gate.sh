@@ -20,8 +20,11 @@ export LC_ALL=C
 export LC_NUMERIC=C
 
 LCOV="${1:-lcov.info}"
-LINE_FLOOR="${COVERAGE_LINE_FLOOR:-65}"
-BRANCH_FLOOR="${COVERAGE_BRANCH_FLOOR:-30}"
+# Floors set to the audit-ready target after the V8 test backfill on
+# 2026-05-03 took coverage to 100% lines / 100% branches. Floors below
+# the audit-ready bar represent a regression and should fail CI.
+LINE_FLOOR="${COVERAGE_LINE_FLOOR:-95}"
+BRANCH_FLOOR="${COVERAGE_BRANCH_FLOOR:-90}"
 LINE_TARGET=95
 BRANCH_TARGET=90
 

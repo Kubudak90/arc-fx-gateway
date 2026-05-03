@@ -784,8 +784,8 @@ Merchant gets: preferred-stable on Arc · single InvoicePaid event</pre>
         </tr>
         <tr>
           <td><b>V9 refund source binding</b></td>
-          <td><span class="pill next">NEXT</span></td>
-          <td>Plan-9 spec yazıldı (2026-05-03). V8 refund <code>inv.merchant</code>&apos;dan para çekiyor; settlement <code>payoutAddress</code>&apos;e gidiyor. Split wallet&apos;ta refund kırılır. V9 = per-invoice <code>payoutSource</code> snapshot at settle, refund o adresten çeker. ~3.5 gün dev, $0.</td>
+          <td><span class="pill live">LIVE</span></td>
+          <td>V9 yayında (2026-05-03 deploy). <code>0xdf6233…ea21</code> Arc testnet&apos;te. <code>InvoicePayment.payoutSource</code> settle&apos;da snapshot, refund oradan çeker. Indexer triple-watch (V6+V8+V9), relayer per-row dispatch, dashboard&apos;da V9 activation card. 51 test 100/100 coverage.</td>
         </tr>
         <tr>
           <td><b>Multisig admin migration</b></td>

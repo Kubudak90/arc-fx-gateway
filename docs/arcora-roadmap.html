@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Arcora · Roadmap (2026-05-02)</title>
+<title>Arcora · Roadmap (2026-05-03)</title>
 <style>
   :root {
     --blue:    #2563FF;
@@ -292,9 +292,9 @@
       v0.8.1 ve v1.0.x üretimde. Müşteri tek bir Permit2 imzası atıyor; Arcora&apos;nın relayer&apos;ı App Kit Swap üzerinden FX&apos;i çalıştırıp tüccarın tercih ettiği stable&apos;ı saniyeler içinde teslim ediyor. Bundan sonrası: compliance, çapraz zincir, niyet (intent) tabanlı tek imza UX.
     </p>
     <div class="cover-meta">
-      <span><b>Tarih:</b> 2026-05-02</span>
+      <span><b>Tarih:</b> 2026-05-03</span>
       <span><b>Ağ:</b> Arc Testnet</span>
-      <span><b>Sürüm:</b> v0.8.1 + v1.0.2</span>
+      <span><b>Sürüm:</b> v0.8.1 + v1.0.2 + Plan-5 Phase 0</span>
     </div>
   </header>
 
@@ -557,17 +557,53 @@
     <div class="card">
       <div class="card-head">
         <span class="ver">v1.x</span>
-        <span class="pill next">NEXT</span>
-        <h3>Compliance hooks · Elliptic / TRM Labs</h3>
+        <span class="pill live">LIVE</span>
+        <h3>Compliance hooks · Phase 0 yayında</h3>
       </div>
       <p class="body">
-        Mainnet&apos;e geçmeden önceki bariyer: yaptırım listesi taraması ve risk skoru. Adapter pattern spec&apos;leniyor; bayrak arkasında staged rollout. Spec&apos;te <code>screen(payerAddress, amountUsd)</code> ile invoice oluşturma akışına erken-fail ekliyor.
+        Plan-5 Phase 0 prod&apos;a düştü (2026-05-02). NoopProvider varsayılan, Elliptic + TRM Labs adapter iskeletleri config-flip arkasında hazır. Müşteri checkout&apos;u <code>/api/checkout/authorize</code>&apos;la cüzdan tarama yapıyor; merchant invoice oluştururken payout adresi taranıyor; <code>/m/compliance</code> dashboard&apos;ı review queue&apos;yu listeliyor. Mainnet flip = env değişikliği, kod değil.
       </p>
-      <h4 style="margin-top:10px">Kabul kriterleri</h4>
+      <h4 style="margin-top:10px">Mainnet flip</h4>
       <ul>
-        <li>Elliptic &amp; TRM adapter implementasyonları, contract test&apos;leri</li>
-        <li>Mock provider ile e2e flow (allow / deny / error / timeout)</li>
-        <li>Config flag — varsayılan <code>off</code>, mainnet&apos;te <code>on</code></li>
+        <li><code>COMPLIANCE_PROVIDER=elliptic|trmlabs</code> + <code>COMPLIANCE_API_KEY</code> set</li>
+        <li>OFAC + EU listeleri default; UN/UK opsiyonel</li>
+        <li>Phase 1 shadow → Phase 2 sanctions enforce → Phase 3 full enforce</li>
+      </ul>
+    </div>
+
+    <!-- v1.x KYB -->
+    <div class="card">
+      <div class="card-head">
+        <span class="ver">v1.x</span>
+        <span class="pill next">NEXT</span>
+        <h3>KYB merchant onboarding · Sumsub</h3>
+      </div>
+      <p class="body">
+        Mainnet&apos;te merchant&apos;ın legal entity ve UBO doğrulaması yapılmış olmalı. Plan-8 spec&apos;leniyor: Sumsub vendor (sandbox bedava, prod $200–500/mo + $2–8/verification), light KYB (entity + UBO temel), OFAC+EU sanctions, hibrit akış (yeşil → otomatik aktif, sarı/kırmızı → ops review). ToS hash-versionlı, her güncellemede merchant tekrar imzalar. Plan-5 ile entegre — onboarding finalize&apos;da payout adresi otomatik taranıyor.
+      </p>
+      <h4 style="margin-top:10px">Önemli karar</h4>
+      <ul>
+        <li>TR-incorporated merchant&apos;lar policy-level reddedildi (yerel kripto ödeme yasağı)</li>
+        <li>Adverse media + PEP v2&apos;ye ertelendi (light KYB)</li>
+        <li>Vendor adaptör pattern — Sumsub değişmek istenirse maliyet düşük</li>
+      </ul>
+    </div>
+
+    <!-- v1.x Audit prep -->
+    <div class="card">
+      <div class="card-head">
+        <span class="ver">v1.x</span>
+        <span class="pill live">LIVE</span>
+        <h3>Audit prep · sıfır bütçe yolu</h3>
+      </div>
+      <p class="body">
+        Plan-7 Layer 1+2 tamam (2026-05-03). Slither + Mythril her PR&apos;da gating. Deprecated v0.6/v0.7 kontratları <code>legacy/</code>&apos;ye taşındı; canonical scope sadece <code>ArcFXGatewayV8.sol</code>. Threat model + deploy checklist + tam NatSpec + coverage gate + audit-ready README + repo-root SECURITY.md yayında. Layer 3 (Immunefi $5k tier) mainnet T-0&apos;a saklı. Bütçe gelene kadar paid firm engagement deferred.
+      </p>
+      <h4 style="margin-top:10px">Audit-trigger metriği (henüz konmadı)</h4>
+      <ul>
+        <li>Annual TVL ≥ $X, ya da</li>
+        <li>Cumulative settled volume ≥ $Y, ya da</li>
+        <li>Partner contract requires it</li>
       </ul>
     </div>
 
@@ -576,14 +612,15 @@
       <div class="card-head">
         <span class="ver">v1.x</span>
         <span class="pill next">NEXT</span>
-        <h3>Çoklu stable · Arc&apos;ın App Kit&apos;inde her ne varsa</h3>
+        <h3>Çoklu stable · App Kit Swap aliasları</h3>
       </div>
       <p class="body">
-        USDC ve EURC bugün canlı. App Kit Swap zaten USDT, USDe, DAI, PYUSD&apos;yi destekliyor. Arcora tarafında bunları açmak gateway&apos;de bir token-whitelist çağrısı; per-pair contract redeploy yok, AMM seed yok — FX katmanı Arc-native.
+        Plan-3 Arc docs ile doğrulandı (2026-05-03). USDC ve EURC bugün canlı. App Kit Swap aliasları: USDC, EURC, USDT, USDe, DAI, PYUSD. <b>Testnet Swap sadece USDC/EURC</b> — yeni stable smoke&apos;u mainnet gerektirir. Whitelist + relayer map + UI picker + smoke; per-stable redeploy yok. Bölgesel stable&apos;lar (TRYC/BRLC/MXNC) Arc&apos;ta ve App Kit&apos;te yok, listeden düştü.
       </p>
-      <h4 style="margin-top:10px">Açılacak listenin sırası</h4>
+      <h4 style="margin-top:10px">Mainnet&apos;te açılacak sıra</h4>
       <ul>
-        <li><b>USDT</b> (en çok talep) → <b>PYUSD</b> (PayPal-blessed, düşük politik risk) → <b>DAI / USDS</b> (decentralized) → bölgesel: <b>TRYC, BRLC, MXNC</b></li>
+        <li><b>USDT</b> (en çok talep) → <b>PYUSD</b> (PayPal-blessed) → <b>DAI</b> (ilk 18-decimal regression matrix) → <b>USDe</b> (yield-bearing, 18-decimal)</li>
+        <li>USYC ayrı institutional track ($100k floor + allowlist)</li>
       </ul>
     </div>
 
@@ -725,23 +762,28 @@ Merchant gets: preferred-stable on Arc · single InvoicePaid event</pre>
       <tbody>
         <tr>
           <td><b>External security audit</b></td>
-          <td><span class="pill later">PLANNED</span></td>
-          <td>Slither/Mythril gate + bağımsız firma incelemesi. v0.8.1 audit kapsamına alınır.</td>
+          <td><span class="pill later">DEFERRED</span></td>
+          <td>Bütçe yok. Sıfır bütçe yolu (Slither + Mythril CI gating, threat model, audit-ready README, NatSpec, deploy checklist) Layer 1+2 olarak yayında. Layer 3 = Immunefi mainnet T-0&apos;da. Paid firm = revenue tetikleyicisinde.</td>
         </tr>
         <tr>
           <td><b>Compliance hooks</b></td>
-          <td><span class="pill next">NEXT</span></td>
-          <td>v1.x. Elliptic / TRM adapter; varsayılan kapalı, mainnet&apos;te zorunlu.</td>
-        </tr>
-        <tr>
-          <td><b>Real Chainlink price feeds</b></td>
-          <td><span class="pill later">PLANNED</span></td>
-          <td>v0.8.1 zaten oracle&apos;a bağlı değil (App Kit RFQ). Eski v0.6 path için geçerliydi — mainnet için silinir.</td>
+          <td><span class="pill live">LIVE</span></td>
+          <td>Plan-5 Phase 0 prod&apos;a düştü (2026-05-02). Noop default; mainnet&apos;te env flip ile Elliptic veya TRM Labs.</td>
         </tr>
         <tr>
           <td><b>KYB / merchant onboarding</b></td>
+          <td><span class="pill next">NEXT</span></td>
+          <td>Plan-8 spec yazıldı (2026-05-03). Sumsub vendor, light KYB, OFAC+EU sanctions, hibrit akış. TR-incorporated merchant&apos;lar reddedildi (yerel düzenleme). Sandbox $0; prod $200–500/mo + $2–8/verification.</td>
+        </tr>
+        <tr>
+          <td><b>Audit-trigger metriği</b></td>
+          <td><span class="pill next">NEXT</span></td>
+          <td>Plan-7&apos;nin pinleyeceği X/Y eşiği. Annual TVL ≥ $X, settled volume ≥ $Y, ya da partner sözleşme şartı — ilk hangisi tetiklerse audit başlasın.</td>
+        </tr>
+        <tr>
+          <td><b>Multisig admin migration</b></td>
           <td><span class="pill later">PLANNED</span></td>
-          <td>Testnet wallet-only; mainnet için legal entity verification flow.</td>
+          <td>Bugün admin tek EOA. Mainnet&apos;ten önce 2-of-3 ya da 3-of-5 multisig&apos;e taşı. Ayrı runbook.</td>
         </tr>
         <tr>
           <td><b>Domain &amp; SSL</b></td>
@@ -758,7 +800,7 @@ Merchant gets: preferred-stable on Arc · single InvoicePaid event</pre>
   </section>
 
   <footer class="foot">
-    <span>Arcora · Roadmap brief · 2026-05-02</span>
+    <span>Arcora · Roadmap brief · 2026-05-03</span>
     <span><a href="https://arcorapay.xyz">arcorapay.xyz</a> · <a href="https://github.com/Kubudak90/arc-fx-gateway">github.com/Kubudak90/arc-fx-gateway</a></span>
   </footer>
 

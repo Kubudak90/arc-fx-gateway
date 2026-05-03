@@ -1,16 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { expectedWitnessHash } from "@/lib/checkout/witness";
+
+const TEST_INVOICE_ID = "0x" + "ab".repeat(32);
+const TEST_RELAYER = (process.env.NEXT_PUBLIC_RELAYER_ADDRESS ?? "0x9999999999999999999999999999999999999999") as `0x${string}`;
+const TEST_WITNESS = expectedWitnessHash(TEST_INVOICE_ID as `0x${string}`, TEST_RELAYER);
 
 const invoiceRow = {
-  id:          "0x" + "ab".repeat(32),
+  id:          TEST_INVOICE_ID,
   status:      "created",
+  payInToken:  "0x3600000000000000000000000000000000000000",
   payoutToken: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
   amountOut:   "100000000",
   expiresAt:   new Date(Date.now() + 60 * 60_000),
 };
 
-const dbState: { invoiceRows: typeof invoiceRow[]; insertedRows: unknown[] } = {
+const dbState: {
+  invoiceRows: typeof invoiceRow[];
+  queueDupRows: { id: string; status: string }[];
+  insertedRows: unknown[];
+  limitCalls: number;
+} = {
   invoiceRows: [invoiceRow],
+  queueDupRows: [],
   insertedRows: [],
+  limitCalls: 0,
 };
 
 vi.mock("@/lib/db/client", () => {
@@ -26,7 +39,12 @@ vi.mock("@/lib/db/client", () => {
   builder.select.mockImplementation(() => builder);
   builder.from.mockImplementation(() => builder);
   builder.where.mockImplementation(() => builder);
-  builder.limit.mockImplementation(async () => dbState.invoiceRows);
+  // First .limit() call → invoice rows. Second → queue dup rows.
+  builder.limit.mockImplementation(async () => {
+    dbState.limitCalls++;
+    if (dbState.limitCalls === 1) return dbState.invoiceRows;
+    return dbState.queueDupRows;
+  });
   builder.insert.mockImplementation(() => builder);
   builder.values.mockImplementation((row: unknown) => {
     dbState.insertedRows.push(row);
@@ -47,14 +65,14 @@ function makeRequest(body: unknown): Request {
 }
 
 const validBody = () => ({
-  invoiceId:        "0x" + "ab".repeat(32),
+  invoiceId:        TEST_INVOICE_ID,
   payer:            "0x" + "11".repeat(20),
   payInToken:       "0x3600000000000000000000000000000000000000",
   amountIn:         "100000",
   permit2Data: {
     nonce:             "1",
     deadline:          String(Math.floor(Date.now() / 1000) + 600),
-    witness:           "0x" + "cd".repeat(32),
+    witness:           TEST_WITNESS,
     witnessTypeString: "ArcoraSwapIntent witness)ArcoraSwapIntent(bytes32 invoiceId,address relayer)TokenPermissions(address token,uint256 amount)",
   },
   permit2Signature: "0x" + "ee".repeat(65),
@@ -62,7 +80,9 @@ const validBody = () => ({
 
 beforeEach(() => {
   dbState.invoiceRows = [invoiceRow];
+  dbState.queueDupRows = [];
   dbState.insertedRows = [];
+  dbState.limitCalls = 0;
 });
 
 describe("POST /api/checkout/submit", () => {
@@ -88,6 +108,22 @@ describe("POST /api/checkout/submit", () => {
     expect((await res.json()).error).toBe("permit_expired");
   });
 
+  it("rejects amountIn = 0", async () => {
+    const body = validBody();
+    body.amountIn = "0";
+    const res = await POST(makeRequest(body) as never);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("amount_in_out_of_range");
+  });
+
+  it("rejects amountIn beyond sane upper bound", async () => {
+    const body = validBody();
+    body.amountIn = (10n ** 31n).toString();
+    const res = await POST(makeRequest(body) as never);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("amount_in_out_of_range");
+  });
+
   it("returns 404 for unknown invoice", async () => {
     dbState.invoiceRows = [];
     const res = await POST(makeRequest(validBody()) as never);
@@ -105,5 +141,30 @@ describe("POST /api/checkout/submit", () => {
     dbState.invoiceRows = [{ ...invoiceRow, expiresAt: new Date(Date.now() - 60_000) }];
     const res = await POST(makeRequest(validBody()) as never);
     expect(res.status).toBe(410);
+  });
+
+  it("rejects payInToken mismatch", async () => {
+    const body = validBody();
+    body.payInToken = "0x" + "22".repeat(20); // some other address
+    const res = await POST(makeRequest(body) as never);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("pay_in_token_mismatch");
+  });
+
+  it("rejects witness hash that doesn't bind to (invoice, relayer)", async () => {
+    const body = validBody();
+    body.permit2Data.witness = "0x" + "00".repeat(32);
+    const res = await POST(makeRequest(body) as never);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("witness_mismatch");
+  });
+
+  it("rejects duplicate submission while a non-failed queue row exists", async () => {
+    dbState.queueDupRows = [{ id: "existing-sub", status: "pending" }];
+    const res = await POST(makeRequest(validBody()) as never);
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe("duplicate_submission");
+    expect(body.existingStatus).toBe("pending");
   });
 });

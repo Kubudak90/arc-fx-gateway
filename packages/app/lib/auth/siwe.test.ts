@@ -50,4 +50,47 @@ describe("siwe helpers", () => {
     await verifySiweMessage({ message, signature });
     await expect(verifySiweMessage({ message, signature })).rejects.toThrow(/nonce/i);
   });
+
+  it("rejects message signed for a different domain", async () => {
+    const pk = generatePrivateKey();
+    const acct = privateKeyToAccount(pk);
+    const nonce = await generateNonce();
+    const msg = new SiweMessage({
+      domain: "phishing.example.com",
+      address: acct.address, statement: "Sign in",
+      uri: "https://phishing.example.com", version: "1", chainId: 5042002, nonce,
+    });
+    const message = msg.prepareMessage();
+    const signature = await acct.signMessage({ message });
+    await expect(verifySiweMessage({ message, signature })).rejects.toThrow();
+  });
+
+  it("rejects message signed for a different chain", async () => {
+    const pk = generatePrivateKey();
+    const acct = privateKeyToAccount(pk);
+    const nonce = await generateNonce();
+    const msg = new SiweMessage({
+      domain: "localhost",
+      address: acct.address, statement: "Sign in",
+      uri: "http://localhost:3000", version: "1",
+      chainId: 1,           // mainnet ETH — not what we accept
+      nonce,
+    });
+    const message = msg.prepareMessage();
+    const signature = await acct.signMessage({ message });
+    await expect(verifySiweMessage({ message, signature })).rejects.toThrow(/chainId/i);
+  });
+
+  it("rejects unknown nonce (not generated server-side)", async () => {
+    const pk = generatePrivateKey();
+    const acct = privateKeyToAccount(pk);
+    const msg = new SiweMessage({
+      domain: "localhost", address: acct.address, statement: "Sign in",
+      uri: "http://localhost:3000", version: "1", chainId: 5042002,
+      nonce: "fakeNonce0123456",
+    });
+    const message = msg.prepareMessage();
+    const signature = await acct.signMessage({ message });
+    await expect(verifySiweMessage({ message, signature })).rejects.toThrow(/nonce/i);
+  });
 });

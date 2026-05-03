@@ -140,6 +140,12 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
     error InsufficientFeesForRefund(uint256 required, uint256 accrued);
 
     // ── Constructor ────────────────────────────────────────────────────
+
+    /// @notice Deploy the gateway with an initial admin + relayer pair and a fixed protocol fee.
+    /// @dev `protocolFeeBps` is locked for the life of the contract. To change it, deploy a new gateway.
+    /// @param protocolFeeBps fee in basis points (1 = 0.01%) charged on every settled invoice's gross payout
+    /// @param initialOwner   address granted `DEFAULT_ADMIN_ROLE` (manages tokens, pause, withdraw fees, role rotation)
+    /// @param initialRelayer address granted `RELAYER_ROLE` (calls `settleInvoice` and `recordPayerRefund`)
     constructor(
         uint256 protocolFeeBps,
         address initialOwner,
@@ -154,6 +160,10 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
 
     // ── Token whitelist (admin) ────────────────────────────────────────
 
+    /// @notice Add or remove a token from the supported set.
+    /// @dev Whitelist policy: only non-rebasing, non-fee-on-transfer tokens. The contract trusts admin to enforce this off-chain (see `docs/audit/threat-model.md` E1).
+    /// @param token  ERC-20 contract address
+    /// @param active true to allow as pay-in / payout, false to remove
     function setTokenSupport(address token, bool active) external onlyRole(DEFAULT_ADMIN_ROLE) {
         supportedTokens[token] = active;
         emit TokenSupportUpdated(token, active);
@@ -161,11 +171,19 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
 
     // ── Pause (admin) ──────────────────────────────────────────────────
 
+    /// @notice Halt every state-mutating entry point (merchant create, settle, refund). View calls stay live.
     function pause()   external onlyRole(DEFAULT_ADMIN_ROLE) { _pause(); }
+
+    /// @notice Resume normal operation after a `pause`.
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) { _unpause(); }
 
     // ── Merchant management ────────────────────────────────────────────
 
+    /// @notice One-time merchant registration. The caller is recorded as the merchant identity.
+    /// @dev `payoutToken` must already be in `supportedTokens`. To change either field later, use
+    ///       `updatePayoutAddress` / `updatePayoutToken` (those only affect future invoices).
+    /// @param payoutAddress wallet that will receive the merchant's net payout from each settled invoice
+    /// @param payoutToken   ERC-20 the merchant prefers to settle in
     function registerMerchant(address payoutAddress, address payoutToken) external {
         if (merchants[msg.sender].active) revert MerchantAlreadyRegistered();
         if (payoutAddress == address(0))  revert InvalidPayoutAddress();
@@ -178,6 +196,9 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
         emit MerchantRegistered(msg.sender, payoutAddress, payoutToken);
     }
 
+    /// @notice Rotate the merchant's payout wallet for future invoices.
+    /// @dev Pending invoices keep the address in effect at create time — see `_createInvoice`.
+    /// @param newPayoutAddress non-zero replacement wallet
     function updatePayoutAddress(address newPayoutAddress) external {
         Merchant storage m = merchants[msg.sender];
         if (!m.active) revert NotMerchant();
@@ -187,6 +208,9 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
         emit MerchantPayoutAddressUpdated(msg.sender, old, newPayoutAddress);
     }
 
+    /// @notice Change the merchant's preferred settle-in token for future invoices.
+    /// @dev Pending invoices keep the token in effect at create time. New token must be whitelisted.
+    /// @param newPayoutToken ERC-20 in `supportedTokens`
     function updatePayoutToken(address newPayoutToken) external {
         Merchant storage m = merchants[msg.sender];
         if (!m.active) revert NotMerchant();
@@ -196,6 +220,10 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
         emit MerchantPayoutTokenUpdated(msg.sender, old, newPayoutToken);
     }
 
+    /// @notice Soft-disable the merchant. New invoice creation reverts; existing invoices still settle/refund.
+    /// @dev There is no on-chain "reactivate"; a deactivated merchant must call `registerMerchant` again
+    ///       which would revert because their state row already exists. Reactivation is therefore a deploy-new
+    ///       or an admin migration concern, not a self-service flow today.
     function deactivateMerchant() external {
         Merchant storage m = merchants[msg.sender];
         if (!m.active) revert NotMerchant();
@@ -205,6 +233,15 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
 
     // ── Invoice creation ───────────────────────────────────────────────
 
+    /// @notice Create an invoice as the calling merchant.
+    /// @dev `globalId = keccak256(abi.encode(merchant, merchantInvoiceId))`. Reuse of `merchantInvoiceId`
+    ///       reverts with `InvoiceAlreadyExists`. Snapshots the merchant's current `payoutAddress` /
+    ///       `payoutToken`; later merchant edits don't reroute this invoice.
+    /// @param merchantInvoiceId merchant-supplied id (e.g. cart hash); only the merchant's own namespace
+    /// @param payIn             token the customer is expected to pay in (advisory only in v0.8)
+    /// @param amountOut         gross amount the merchant expects to receive in their `payoutToken`
+    /// @param expiresAt         unix timestamp after which `settleInvoice` reverts
+    /// @return globalId         deterministic invoice id used everywhere downstream
     function createInvoice(
         bytes32 merchantInvoiceId,
         address payIn,
@@ -214,6 +251,15 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
         return _createInvoice(msg.sender, merchantInvoiceId, payIn, amountOut, expiresAt);
     }
 
+    /// @notice Create an invoice on behalf of a merchant when the caller is an authorized delegate.
+    /// @dev The merchant must have called `authorizeDelegate(msg.sender, expiresAt)` first.
+    ///       Used by the API server hot wallet so merchants don't have to sign every invoice manually.
+    /// @param merchant          merchant whose namespace this invoice lives in
+    /// @param merchantInvoiceId merchant-supplied id
+    /// @param payIn             token the customer is expected to pay in
+    /// @param amountOut         gross expected payout
+    /// @param expiresAt         unix expiry
+    /// @return globalId         deterministic invoice id
     function createInvoiceFor(
         address merchant,
         bytes32 merchantInvoiceId,
@@ -361,6 +407,11 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
 
     // ── Fees (admin) ───────────────────────────────────────────────────
 
+    /// @notice Sweep all accrued fees of a single token to a receiving address.
+    /// @dev Sets `protocolFeesAccrued[token]` to zero before the transfer (CEI pattern).
+    /// @param token ERC-20 to withdraw — does not have to currently be in `supportedTokens`
+    ///              (e.g. a token that was de-listed but still has accrued fees on the books)
+    /// @param to    recipient (admin-controlled treasury wallet)
     function withdrawFees(address token, address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 amount = protocolFeesAccrued[token];
         protocolFeesAccrued[token] = 0;
@@ -370,12 +421,19 @@ contract ArcFXGatewayV8 is AccessControl, ReentrancyGuard, Pausable {
 
     // ── Delegate authorization ─────────────────────────────────────────
 
+    /// @notice Allow `delegate` to call `createInvoiceFor(msg.sender, ...)` until `expiresAt`.
+    /// @dev Setting `expiresAt` to a past timestamp (or zero) effectively revokes; `revokeDelegate`
+    ///       is the explicit-intent alias for that.
+    /// @param delegate  address that will be allowed to create invoices on the merchant's behalf
+    /// @param expiresAt unix timestamp at which the authorization expires
     function authorizeDelegate(address delegate, uint64 expiresAt) external {
         if (!merchants[msg.sender].active) revert NotMerchant();
         delegateAuthorizations[msg.sender][delegate] = expiresAt;
         emit DelegateAuthorized(msg.sender, delegate, expiresAt);
     }
 
+    /// @notice Revoke a previously authorized delegate immediately.
+    /// @param delegate address whose authorization is cleared
     function revokeDelegate(address delegate) external {
         delegateAuthorizations[msg.sender][delegate] = 0;
         emit DelegateRevoked(msg.sender, delegate);

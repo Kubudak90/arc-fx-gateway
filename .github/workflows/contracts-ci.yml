@@ -35,11 +35,9 @@ jobs:
       - name: Unit + integration tests
         run: forge test -vvv
 
-      - name: Fuzz (10k runs)
-        run: FOUNDRY_PROFILE=ci forge test --match-path "test/ArcFXGateway.fuzz.t.sol"
-
-      - name: Invariant (256 x 64)
-        run: FOUNDRY_PROFILE=ci forge test --match-path "test/ArcFXGateway.invariant.t.sol"
+      # NOTE: V8 fuzz/invariant suites haven't been written yet — the v0.7
+      # fuzz/invariant files were moved to legacy/ on 2026-05-03 (Plan-7
+      # cleanup). Re-add CI jobs once V8-targeted fuzz/invariant tests land.
 
       - name: Coverage
         run: forge coverage --report summary --report lcov

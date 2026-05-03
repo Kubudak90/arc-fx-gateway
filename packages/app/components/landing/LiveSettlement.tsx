@@ -28,7 +28,7 @@ const SCENARIOS: Scenario[] = [
 const ORACLE = 1.0863;        // illustrative EUR/USD rate; real swap quotes come from App Kit RFQ
 const POOL_FEE_BPS = 2;       // App Kit provider fee on every swap (0.02%)
 const PROTOCOL_FEE_BPS = 30;  // Arcora gateway fee (deducted from merchant payout)
-const GATEWAY_ADDR = "0x6fAaD9…ec5d507a8"; // ArcFXGateway v0.8 on Arc Testnet
+const GATEWAY_ADDR = "0xdf6233…ea21"; // ArcFXGatewayV9 on Arc Testnet (Plan 9 — refund-source binding)
 
 function calcAmountIn(s: Scenario): number {
   // Same-token: customer pays exactly amountOut (no swap).

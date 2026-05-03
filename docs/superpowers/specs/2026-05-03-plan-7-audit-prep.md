@@ -1,6 +1,6 @@
 # Plan 7 — Audit prep (pre-mainnet)
 
-**Status:** spec; ready to execute the static-analysis + scope-doc pieces in parallel
+**Status:** spec; ready to execute. **Budget reality (2026-05-03):** zero. Strategy is "self-audit to the maximum, defer paid review until first real revenue, set up bug bounty as the live shield." See "Zero-budget path" section below — that is the canonical strategy until funds arrive. Paid-firm sections kept for future reference.
 **Author:** Hüseyin + Claude Opus 4.7 (1M context)
 **Date:** 2026-05-03
 **Depends on:** v0.8.1 contract set
@@ -10,11 +10,12 @@
 
 ## Why now
 
-Plan-5 compliance hooks shipped Phase 0 in prod (2026-05-02). With the regulatory bar in place, the next pre-mainnet bar is the security audit. Audit firm calendars are 6–12 weeks out — booking lead time exceeds the actual code review duration, so spec'ing this now and locking the engagement is the long-pole item, not the report itself.
+Plan-5 compliance hooks shipped Phase 0 in prod (2026-05-02). With the regulatory bar in place, the next pre-mainnet bar is reducing on-chain risk. Without audit budget, the play is to **maximise the free signal** (static analysis, self-review, public surface, bounty) and treat the paid audit as a future upgrade once revenue exists.
 
-Two parallel tracks:
-1. **Static analysis CI gate** (Slither already in CI; add Mythril, lock down triage policy). Catches the cheap stuff before the firm sees it.
-2. **External firm review.** We pay for someone independent to read the code. Output: report + remediation cycle + final attestation.
+Three layers, all free or pay-on-findings:
+1. **Static analysis CI gate** — Slither + Mythril gating every push. Already in CI as of this plan.
+2. **Self-audit + public surface** — threat model, NatSpec sweep, deployed contracts verified on Arcscan, repo public. Community spots things for free if the surface is readable.
+3. **Bug bounty as the live shield** — Immunefi or in-house, pay-on-findings. Severity-graded pool, no upfront cost beyond setup time.
 
 ---
 
@@ -83,7 +84,63 @@ Before kickoff email goes out:
 
 ---
 
-## Firm shortlist
+## Zero-budget path (canonical strategy until revenue exists)
+
+The whole plan modulates around four moves we can make for free or close to it. Run these in this order; each one independently moves the needle.
+
+### Layer 1 — Static analysis (already shipping)
+
+- **Slither** — runs on every push/PR, `fail-on: medium`. Triage in `.slither-triage.md`.
+- **Mythril** — runs on push (skipped on PR for speed), 30-min timeout, V8 only. Symbolic execution catches things Slither misses.
+- **forge coverage** — already runs; **add a threshold gate**: lines ≥ 95%, branches ≥ 90%. Cheap follow-up PR.
+- **solhint** (low-priority polish) — NatSpec gaps, ordering, naming. Nice-to-have, skip if it slows you down.
+
+These cost zero dollars and a few hours of triage as findings come in.
+
+### Layer 2 — Self-audit + readability for community review
+
+The single highest-leverage free move: **make the contracts easy for a stranger to read**. Even unpaid, eyes will land on a public repo if it looks readable. Bounty hunters scan public verified contracts daily.
+
+- **Pre-audit cleanup PR** — delete or move to `legacy/` everything in the OUT-of-scope list. Keeps the canonical surface tight (~400 LOC). Free, ~half-day of work.
+- **NatSpec coverage** — every external/public function gets `@notice`, `@param`, `@return`, `@dev` for non-obvious bits. Free, ~1 day.
+- **Threat model document** — `docs/audit/threat-model.md`. Actors, assets, attack surface, mitigations, known assumptions. Free, ~1 day.
+- **Verify on Arcscan** — every deployed contract verified with source. Bytecode → readable code. Free, do it for every deploy.
+- **Public-facing audit-readiness README** — top of `packages/contracts/README.md` says "this is the canonical contract, here's the threat model link, here's how to report a finding." Free, ~1 hour.
+
+### Layer 3 — Bug bounty (pay only on findings)
+
+The "live audit." Doesn't catch issues before mainnet, but bounds the upside for an attacker once we're on mainnet.
+
+- **Immunefi** — set a tiered bounty pool. Critical $5–25k, High $1–5k, Medium $250–1k, Low $50–250. Pool can start at **$5k total** with severity caps; you only pay if a real finding lands. Setup: ~half-day to write the program scope + ToS, plus their onboarding. No upfront cost beyond a small platform fee on payouts.
+- **In-house program** — point a `security@arcorapay.xyz` mailbox + a SECURITY.md, set known-good response timelines. Even cheaper but loses Immunefi's hunter network reach.
+
+Pre-launch (testnet today): SECURITY.md is enough.
+At mainnet T-0 with first real merchant flow: Immunefi program live, $5k pool, severity-tiered.
+
+### Layer 4 — Cheap private review (when you have $5–10k spare, before $30k+)
+
+If a small budget appears before full revenue:
+
+- **Solo / freelance senior auditors** — Cantina has a "code review by individual senior auditor" option ($5–15k for V8-sized scope). Twitter audit indies (kalexotsu, OptimismPBC contributors, ex-Nexus folk) sometimes take small jobs at $5–10k.
+- **Sherlock contest with low pool** — $10k contest pool can attract decent reviewer attention if the scope is tight. Cheaper than a private firm; the tradeoff is uneven coverage.
+- **Spearbit / Cantina competition entry** — if they're running a sponsored or public competition that fits, free entry, sponsor pays prize pool.
+
+**Skip until full audit budget**: OpenZeppelin, Trail of Bits, full-team Spearbit private. They are correct picks at $30k+ but irrelevant pre-revenue.
+
+### What "audit-ready without an audit" looks like
+
+After Layers 1–3 are landed, this is what you can honestly say to a partner / merchant / regulator:
+
+- "Slither + Mythril gate every PR; medium+ findings either fixed or documented."
+- "Test coverage ≥ 95% lines / 90% branches on the canonical contract set."
+- "Threat model published; OUT-of-scope deprecated code removed from the production tree."
+- "Contracts verified on Arcscan; repo is public for review."
+- "Live Immunefi bug bounty with $X tiered pool."
+- "External audit will be commissioned before $Y annual TVL or first $Z monthly settlement volume — whichever lands first."
+
+That last bullet is honest and useful: it ties the audit trigger to a measurable business signal, not a vague calendar promise. Partners can validate "is this protocol approaching the trigger" themselves.
+
+## Firm shortlist (paid track — for future reference, not the active plan)
 
 Pick one of these tracks. Each row: typical scope, lead time, ballpark for a contract set our size (~400 LOC core + tests).
 
@@ -96,7 +153,9 @@ Pick one of these tracks. Each row: typical scope, lead time, ballpark for a con
 | **Sherlock** | Contest + insurance | 2–4 wk | $20–40k | Time-boxed; coverage layer is genuinely useful as a signal to merchants. |
 | **Code4rena** | Pure contest | 1–3 wk | $25–50k | Crowd-sourced; high finding volume, lower average severity, deduplication overhead. |
 
-**Recommended path for v1 mainnet**: Spearbit or Cantina for the primary review (private, senior-led, fast). Optionally chase with a Sherlock contest before mainnet to layer in crowd review. Skip OpenZeppelin/Trail unless we land a high-profile partner who asks for the brand name.
+**Recommended path when budget exists**: Spearbit or Cantina for the primary review (private, senior-led, fast). Optionally chase with a Sherlock contest before mainnet to layer in crowd review. Skip OpenZeppelin/Trail unless we land a high-profile partner who asks for the brand name.
+
+**Until budget exists**: see "Zero-budget path" section above. Layers 1–3 cover the floor; revisit Layer 4 when $5–10k is spare; revisit this firm shortlist when $30k+ is spare.
 
 ---
 
@@ -126,23 +185,31 @@ If the timeline gets compressed, the bottleneck is **firm calendar availability*
 
 ---
 
-## Decisions to settle this week
+## Decisions to settle this week (zero-budget mode)
 
-1. **Which firm?** Recommend kicking off RFPs to Spearbit + Cantina + Sherlock (in that order of preference). Decide based on quotes + first-call vibe.
-2. **Budget ceiling?** Spec assumes $30–50k. If the cap is higher, OpenZeppelin/Trail come back into play. If lower, contest-only (Sherlock or Code4rena).
-3. **Mainnet target date?** This anchors T-0 and back-calculates everything else. Suggest tying it to "post-audit + Phase 1 compliance flip + first paying merchant signed."
+1. **Audit-trigger metric** — pick the threshold that triggers spending audit budget. Suggest: first to land of (a) annual TVL crosses $X, or (b) cumulative settled volume crosses $Y, or (c) a partner deal requires it as a precondition. Pin specific numbers; vague triggers don't fire.
+2. **Bug bounty timing** — Immunefi program live by mainnet T-0 with a $5k tiered pool? Or hold until first paying merchant? Recommend tying to the first real settlement to avoid paying bounty platform fees on a dead program.
+3. **Public review window before mainnet** — give the repo (with the audit-ready README + threat model) at least 2 weeks of public-but-no-mainnet exposure before flipping. Frees community signal at zero cost.
+
+## Future decisions (revisit when budget appears)
+
+1. **Which firm?** Spearbit + Cantina + Sherlock RFPs (in that order of preference) once $30k+ is spare.
+2. **Budget ceiling?** $5–10k → Layer 4 (solo / Sherlock low-pool); $30–50k → Spearbit/Cantina; $50k+ → OpenZeppelin/Trail come back into play.
+3. **Mainnet target date?** Doesn't gate on the audit anymore — gates on Layers 1–3 + bug bounty live.
 
 ---
 
-## Effort
+## Effort (zero-budget path)
 
-| Phase | Time |
-|---|---|
-| Plan-7 spec review + RFP draft | 1 day |
-| Mythril CI job + Slither triage policy | 0.5 day |
-| Pre-audit cleanup (delete OUT-of-scope, close NatSpec gaps) | 1 day |
-| Threat model + handoff README | 1 day |
-| Coverage threshold gate + lcov report polish | 0.5 day |
-| **Total (our side, before firm engagement)** | **~4 days** |
+| Phase | Time | Cost |
+|---|---|---|
+| Mythril CI job + Slither triage policy | done (2026-05-03) | $0 |
+| Pre-audit cleanup PR (delete or move OUT-of-scope to `legacy/`) | 0.5 day | $0 |
+| Threat model document | 1 day | $0 |
+| NatSpec sweep + Arcscan verify-on-deploy | 1 day | $0 |
+| Coverage threshold gate (lines ≥95%, branches ≥90%) | 0.5 day | $0 |
+| Audit-ready README + SECURITY.md | 0.5 day | $0 |
+| Immunefi program setup (when revenue exists) | 0.5 day | $5k pool only paid on findings |
+| **Total to "audit-ready without an audit"** | **~3.5 days** | **$0 cash before mainnet** |
 
-The audit itself runs on the firm's calendar; our remediation cycle is ~3 days of code work spread across the report-receive → final cycle.
+Future paid track (when budget exists): firm engagement ~3-day remediation cycle on our side, calendar-driven from the firm.

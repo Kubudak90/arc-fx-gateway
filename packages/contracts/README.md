@@ -1,121 +1,113 @@
-# @arc-fx/contracts
+# @arc-fx/contracts — ArcFXGateway V8
 
-Protocol contracts for **Arcora** — a permissionless USDC ⇄ EURC swap layer plus an atomic merchant-settlement contract on [Arc Network](https://arc.network).
+Solidity contracts powering **Arcora**, a Stripe-shaped stablecoin checkout settling on [Arc Network](https://arc.network). The customer signs **one** EIP-712 (Permit2) message; an off-chain Arcora relayer pulls the pay-in, runs Circle App Kit Swap to convert it, and calls the gateway to deliver the merchant's preferred stablecoin payout.
 
-## Contracts
+## Audit scope
 
-| Contract | Role |
-|----------|------|
-| `ArcFXGateway.sol` | Merchant registry, invoice state, atomic `pay()` (swap-and-settle) |
-| `libraries/PriceGuard.sol` | Chainlink-backed deviation guard (±0.5%) |
-| `pool/StableSwap.sol` (+ helpers) | StableSwap AMM for the USDC/EURC pair (Saddle Finance Solidity port, MIT) |
+The canonical, in-scope contract is **`src/ArcFXGatewayV8.sol`** plus the OpenZeppelin libraries it imports. Everything else under `src/` is helper or testnet glue (`testnet/MintableERC20.sol`, etc.).
 
-## Architecture
+Deprecated v0.6 / v0.7 contracts (StablePool, StablecoinRegistry, OracleAMM, PriceGuard, MockChainlinkFeed) live in [`legacy/`](./legacy/) — out of audit scope, kept for traceability of design history.
+
+Read first if you're reviewing this code:
+- [`docs/audit/threat-model.md`](../../docs/audit/threat-model.md) — actors, assets, trust boundaries, A–H attack-surface matrix, accepted risks
+- [`docs/audit/deploy-checklist.md`](../../docs/audit/deploy-checklist.md) — how every deploy ends with a verified bytecode badge on Arcscan
+- [`docs/superpowers/specs/2026-05-03-plan-7-audit-prep.md`](../../docs/superpowers/specs/2026-05-03-plan-7-audit-prep.md) — full audit prep plan, including the zero-budget path that is canonical until revenue exists
+
+## Architecture in one diagram
 
 ```
-Customer EURC ──▶ ArcFXGateway.pay() ──▶ StableSwap.swap() ──▶ USDC ──▶ Merchant
-                          │
-                          └──▶ PriceGuard.check() ──▶ Chainlink EUR/USD (deviation guard)
+                              ┌──────────────────────────────┐
+   ┌────────────────┐         │ Arcora relayer (off-chain)   │
+   │ Customer EOA   │         │ ops/relayer/run.ts (VPS)     │
+   │ signs Permit2  │────────▶│  ─ Permit2.permitTransferFrom│
+   └────────────────┘         │  ─ kit.swap (App Kit Swap)   │
+                              │  ─ approve gateway           │
+                              │  ─ settleInvoice             │
+                              └─────┬────────────────────────┘
+                                    │ (msg.sender = relayer)
+                                    ▼
+                              ┌─────────────────────────────────┐
+                              │  ArcFXGatewayV8                 │
+                              │   ─ supportedTokens (whitelist) │
+                              │   ─ merchants                   │
+                              │   ─ invoices  (Created → ...)   │
+                              │   ─ payments  (refund accounting)│
+                              │   ─ AccessControl: ADMIN/RELAYER│
+                              │   ─ Pausable / ReentrancyGuard  │
+                              └─────────────┬───────────────────┘
+                                            │ safeTransfer
+                                            ▼
+                              ┌────────────────┐
+                              │ Merchant payout│
+                              └────────────────┘
 ```
 
-- **Gateway is immutable.** No upgrade proxy. v2 will deploy a new address.
-- **Pool is standalone.** Any other dApp can integrate it without touching the gateway.
-- **Oracle is guard-only.** Pricing is AMM-determined; Chainlink only rejects swaps that deviate >0.5% from the reference rate.
+The gateway never holds the pay-in token. App Kit Swap is the only swap surface, and it runs entirely off-chain via the relayer's signed RFQ flow against Circle's maker network.
 
-Full design: [`docs/superpowers/specs/2026-04-24-arc-fx-merchant-gateway-design.md`](../../docs/superpowers/specs/2026-04-24-arc-fx-merchant-gateway-design.md)
-Implementation plan: [`docs/superpowers/plans/2026-04-24-plan-1-protocol.md`](../../docs/superpowers/plans/2026-04-24-plan-1-protocol.md)
-
-## Build & Test
+## Build & test
 
 ```bash
 # from repo root
 pnpm install
 
 # from packages/contracts
-forge build
-forge test                                  # 47 tests across 4 suites
-FOUNDRY_PROFILE=ci forge test               # fuzz @ 10k runs, invariant @ 256×64
-forge coverage --report summary
+forge build --sizes
+forge test                        # 19 V8 tests today
+forge coverage --report summary   # see "Coverage" below
+bin/coverage-gate.sh              # threshold gate (Plan 7 Layer 2 #4)
 ```
 
-### Coverage thresholds
+### Coverage
 
-| File | Lines | Branches |
-|------|-------|----------|
-| `PriceGuard.sol` | 100% | 100% |
-| `ArcFXGateway.sol` | 100% | 92% |
+Audit-scope file (`src/ArcFXGatewayV8.sol`) coverage as of 2026-05-03:
 
-### Test layers
+| Metric | Today | Floor (CI gate) | Target (audit-ready) |
+|---|---|---|---|
+| Lines     | 68.57% | 65% | 95% |
+| Branches  | 32.00% | 30% | 90% |
 
-| Layer | Path | Notes |
-|-------|------|-------|
-| Unit | `test/PriceGuard.t.sol`, `test/ArcFXGateway.t.sol` | 25 tests |
-| Fuzz | `test/ArcFXGateway.fuzz.t.sol` | 10k runs, fee invariant |
-| Invariant | `test/ArcFXGateway.invariant.t.sol` | "no stuck funds", "payout + fee = total out" |
+The gate prevents regression starting now. Closing the gap to 95/90 is tracked as a follow-up — the missing surfaces are merchant management, the delegate flow, and most of the revert matrix on `recordPayerRefund` / `refundInvoice`.
 
-## Deploy (Arc testnet)
+### Static analysis
 
-```bash
-cp .env.example .env   # fill in values
+- **Slither** runs on every push and PR (`fail-on: medium`). Triage exceptions live in [`.slither-triage.md`](./.slither-triage.md).
+- **Mythril** runs on push (skipped on PR for speed), 30-min timeout, V8 only.
+- **Forge fuzz/invariant suites** for V8 are a follow-up — the v0.7 fuzz/invariant files were targeted at the deprecated pool path and moved to `legacy/`.
 
-# 1. Deploy a pool (or reuse one) — see deployments/ for already-deployed addresses
-# 2. Deploy the gateway
-forge script script/Deploy.s.sol --rpc-url arc_testnet --broadcast --verify
+## Deploy
 
-# 3. Seed liquidity (skip if pool already has liquidity)
-forge script script/BootstrapLiquidity.s.sol --rpc-url arc_testnet --broadcast
-```
+Use [`script/DeployV8.s.sol`](./script/DeployV8.s.sol) and follow [`docs/audit/deploy-checklist.md`](../../docs/audit/deploy-checklist.md). The checklist embeds a foundry-broadcast-lying gotcha (verified `cast receipt` + `cast code` are the ground-truth checks).
 
-Deployed addresses are recorded in `deployments/arc-testnet.json` after a successful broadcast.
-
-### Required env vars
+Required env vars:
 
 | Var | Purpose |
 |-----|---------|
-| `ARC_TESTNET_RPC` | Arc testnet RPC endpoint |
-| `DEPLOYER_PRIVATE_KEY` | EOA used for broadcast (testnet only) |
-| `STABLESWAP_POOL_ADDRESS` | Address of the deployed pool |
-| `CHAINLINK_EURUSD_FEED` | EUR/USD aggregator (mock feed acceptable for testnet) |
-| `TREASURY_OWNER` | Gateway owner; receives withdrawn fees |
-| `PROTOCOL_FEE_BPS` | Fee in basis points (10 = 0.10%) |
-| `USDC_ADDRESS`, `EURC_ADDRESS` | Token addresses on Arc testnet |
-| `BOOTSTRAP_USDC`, `BOOTSTRAP_EURC` | Raw token units to seed (e.g. `100000000000` = 100k USDC at 6 decimals) |
+| `ARC_TESTNET_RPC` (or mainnet RPC) | RPC endpoint |
+| `DEPLOYER_PRIVATE_KEY` | EOA used for broadcast |
+| `PROTOCOL_FEE_BPS` | Fee in basis points (locked at deploy; default 30 = 0.30%) |
+| `INITIAL_OWNER` | Address granted `DEFAULT_ADMIN_ROLE` |
+| `INITIAL_RELAYER` | Address granted `RELAYER_ROLE` |
+| `ARC_EXPLORER_KEY` / `ARC_EXPLORER_URL` | For `--verify` to land Arcscan source verification in the same broadcast |
 
-## Security
+After deploy, update `GATEWAY_ADDRESS_V8` in Vercel + the VPS relayer/indexer envs. Memory has the canonical addresses (see `~/.claude/projects/.../memory/`).
 
-- **CI:** `.github/workflows/contracts-ci.yml` runs build, tests (default + CI profile), coverage, and Slither on every push. Workflow is configured but inactive on first deploy if the repo owner has GitHub Actions disabled at the account level — enable at https://github.com/settings/actions to activate.
-- **Static:** Slither runs in CI; build fails on any high/medium finding.
-- **Dynamic:** Foundry fuzz (10k runs/property) + invariant (256×64).
-- **Manual:** SWC registry checklist passes; vendored Saddle pool reviewed patch-by-patch against upstream `master` at vendor time.
-- **Architectural:** immutable construction params, custom errors only, ReentrancyGuard on mutating entry points.
+## Live testnet deployments
 
-## Live Arc-testnet deployment (v0.3.0 — Gateway with delegate auth)
+| Contract | Address | Status |
+|---|---|---|
+| ArcFXGatewayV8 | `0x6fAaD9…507a8` | live, canonical |
+| ArcFXGateway v0.6 | `0x7c1137…b7a3` | deprecated; events still indexed for legacy invoices |
+| FxEscrow (App Kit Swap settlement) | `0x867650…a9f8` | Circle-managed |
+| Permit2 | `0x000000…78BA3` | universal Permit2 |
+| USDC / EURC | Circle-managed canonical addresses | live |
 
-| | Address |
-|---|---|
-| ArcFXGateway (v0.3) | [`0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF`](https://testnet.arcscan.app/address/0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF) |
-| OracleAMM | [`0xC2020098aF328ac9CBD274267F424822C400dD66`](https://testnet.arcscan.app/address/0xC2020098aF328ac9CBD274267F424822C400dD66) |
-| MockChainlinkFeed (EUR/USD = 1.0863) | [`0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3`](https://testnet.arcscan.app/address/0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3) |
+(Full address list with explorer links: see the live brief at `docs/arcora-roadmap.html` or run the dashboard at `arcorapay.xyz`.)
 
-v0.3.0 adds `createInvoiceFor` + `authorizeDelegate` + `revokeDelegate` (backwards-compatible) so the Plan 2 server hot wallet can submit invoices on a merchant's behalf. Smoke-test tx: [`0xf22c076d…77a5fcebfd`](https://testnet.arcscan.app/tx/0xf22c076de9ac629a880ce629d5490d0a06e1d3fb1c3f166af7b67577a5fcebfd).
+## Reporting a finding
 
-End-to-end smoke-test transaction: [`0x31ddbf35…fc2bf0bd1c2064a`](https://testnet.arcscan.app/tx/0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a) — invoice for 0.10 USDC paid in EURC at the real 1.0863 EUR/USD rate, settled, marked Paid.
-
-Pool quote example: 0.1 EURC → 0.108587 USDC (gross 0.108630 USDC at oracle = 1.0863, minus 4 bps pool fee = 0.108587).
-
-Full deployment record (current + deprecated v0.1.0): [`deployments/arc-testnet.json`](./deployments/arc-testnet.json)
-
-### Pool architecture — OracleAMM
-
-Plan 1.5 replaces Saddle StableSwap with [`OracleAMM`](src/pool/OracleAMM.sol), a Chainlink-priced two-token pool inspired by Lifinity / Mercurial. Every swap reads the live oracle and quotes at `oracle ± swapFeeBps`. There is no bonding curve — capital efficiency is bounded only by reserves and oracle freshness. Suitable for stable FX pairs that move within a narrow band; LPs face oracle-rate convergence as the pool's mark-to-market value.
-
-The legacy Saddle StableSwap port (`src/pool/StableSwap.sol` and helpers) is left in place for reference but is no longer deployed. See [`deployments/arc-testnet.json`](./deployments/arc-testnet.json) for the deprecated v0.1.0 addresses.
-
-## Pool choice — why Saddle, not Curve
-
-The original plan called for vendoring Curve's Vyper StableSwap. The Curve sources we tried (`curvefi/curve-contract` master) target Vyper 0.2.x, while only Vyper ≥0.3.10 is comfortably installable today. Rather than maintain an old toolchain, we vendored Saddle Finance's Solidity StableSwap port (MIT, last reviewed at upstream master before Saddle's archive). Math is the StableSwap invariant — equivalent behavior, native Foundry compile, no FFI.
+See repo-root [`SECURITY.md`](../../SECURITY.md) — short version: email `compliance@arcora.dev`, 24h response. A live Immunefi bug bounty replaces this channel at mainnet T-0.
 
 ## License
 
-- Our code (`src/ArcFXGateway.sol`, `src/libraries/PriceGuard.sol`, scripts, tests): **MIT**
-- Vendored Saddle pool (`src/pool/*`): **MIT** (preserved from upstream)
+- `src/ArcFXGatewayV8.sol`, scripts, tests: **MIT**
+- `legacy/*` (deprecated): **MIT** — Saddle Finance's StableSwap port preserved upstream-MIT for the historical record only

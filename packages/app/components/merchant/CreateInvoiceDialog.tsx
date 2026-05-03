@@ -42,7 +42,11 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
 
   return (
     <>
-      <button className="btn-arcora-pill-light inline-flex items-center gap-2" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-2 rounded-full bg-arcora-slate text-white px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-blue transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-arcora-blue"
+      >
         <Plus className="size-4" /> New invoice
       </button>
       <Dialog open={open} onOpenChange={setOpen}>

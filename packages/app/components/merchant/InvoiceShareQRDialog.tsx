@@ -1,7 +1,6 @@
 "use client";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { QRCodeSVG } from "qrcode.react";
 import { Copy, Printer } from "lucide-react";
 import { useState } from "react";
@@ -32,12 +31,20 @@ export function InvoiceShareQRDialog({ invoiceId, onClose }: { invoiceId: string
           </div>
           <code className="block text-xs text-muted-foreground break-all px-2">{url}</code>
           <div className="flex gap-2 justify-center print:hidden">
-            <Button onClick={copy} variant="outline" size="sm">
-              <Copy className="size-4 mr-2" /> {copied ? "Copied!" : "Copy URL"}
-            </Button>
-            <Button onClick={handlePrint} variant="outline" size="sm">
-              <Printer className="size-4 mr-2" /> Print
-            </Button>
+            <button
+              type="button"
+              onClick={copy}
+              className="inline-flex items-center gap-2 rounded-full bg-arcora-slate text-white px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-blue transition-colors"
+            >
+              <Copy className="size-4" /> {copied ? "Copied!" : "Copy URL"}
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-2 rounded-full border border-arcora-border bg-white text-arcora-slate px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-gray/60 transition-colors"
+            >
+              <Printer className="size-4" /> Print
+            </button>
           </div>
         </div>
       </DialogContent>

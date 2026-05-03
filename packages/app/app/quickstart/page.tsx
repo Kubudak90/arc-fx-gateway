@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { ArcoraLogo } from "@/components/brand/Logo";
 import { SiteFooter } from "@/components/landing/SiteFooter";
+import { AddArcTestnetButton } from "@/components/quickstart/AddArcTestnetButton";
 
 const NETWORK = {
   name: "Arc Testnet",
@@ -20,20 +21,28 @@ const STEPS: Array<{ n: string; title: string; body: React.ReactNode }> = [
     body: (
       <>
         <p className="text-muted-foreground leading-relaxed">
-          Arcora settles on Arc Testnet today. If your wallet doesn&apos;t have it yet, add a custom network with these values:
+          Arcora settles on Arc Testnet today. One click to add the network — your wallet will prompt for confirmation.
         </p>
-        <dl className="mt-4 grid grid-cols-[140px_1fr] gap-y-2 text-sm font-[family-name:var(--font-mono)]">
-          <dt className="text-muted-foreground">Network name</dt>
-          <dd className="text-arcora-slate">{NETWORK.name}</dd>
-          <dt className="text-muted-foreground">Chain ID</dt>
-          <dd className="text-arcora-slate">{NETWORK.chainId}</dd>
-          <dt className="text-muted-foreground">RPC URL</dt>
-          <dd className="text-arcora-slate break-all">{NETWORK.rpcUrl}</dd>
-          <dt className="text-muted-foreground">Symbol</dt>
-          <dd className="text-arcora-slate">{NETWORK.symbol}</dd>
-          <dt className="text-muted-foreground">Explorer</dt>
-          <dd className="text-arcora-slate break-all">{NETWORK.explorer}</dd>
-        </dl>
+        <div className="mt-5">
+          <AddArcTestnetButton />
+        </div>
+        <details className="mt-5 group">
+          <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground select-none">
+            Or add it manually with these values
+          </summary>
+          <dl className="mt-3 grid grid-cols-[140px_1fr] gap-y-2 text-sm font-[family-name:var(--font-mono)]">
+            <dt className="text-muted-foreground">Network name</dt>
+            <dd className="text-arcora-slate">{NETWORK.name}</dd>
+            <dt className="text-muted-foreground">Chain ID</dt>
+            <dd className="text-arcora-slate">{NETWORK.chainId}</dd>
+            <dt className="text-muted-foreground">RPC URL</dt>
+            <dd className="text-arcora-slate break-all">{NETWORK.rpcUrl}</dd>
+            <dt className="text-muted-foreground">Symbol</dt>
+            <dd className="text-arcora-slate">{NETWORK.symbol}</dd>
+            <dt className="text-muted-foreground">Explorer</dt>
+            <dd className="text-arcora-slate break-all">{NETWORK.explorer}</dd>
+          </dl>
+        </details>
         <p className="mt-4 text-xs text-muted-foreground">
           On Arc, gas is paid in <span className="font-[family-name:var(--font-mono)]">USDC</span>, not ETH.
           Native USDC has 18 decimals; the ERC-20 interface (the one you&apos;ll see in dapps) is 6 decimals.

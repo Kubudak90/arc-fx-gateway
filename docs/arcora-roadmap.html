@@ -783,6 +783,11 @@ Merchant gets: preferred-stable on Arc · single InvoicePaid event</pre>
           <td>Tetik = <b>partner sözleşmesi imzası VEYA fund kapanışı</b>. İlk hangisi gelirse Plan-7 firm RFP&apos;leri (Spearbit / Cantina / Sherlock) ateşlenir. TVL/volume eşikleri bu aşamada sinyal kirliliği.</td>
         </tr>
         <tr>
+          <td><b>V9 refund source binding</b></td>
+          <td><span class="pill next">NEXT</span></td>
+          <td>Plan-9 spec yazıldı (2026-05-03). V8 refund <code>inv.merchant</code>&apos;dan para çekiyor; settlement <code>payoutAddress</code>&apos;e gidiyor. Split wallet&apos;ta refund kırılır. V9 = per-invoice <code>payoutSource</code> snapshot at settle, refund o adresten çeker. ~3.5 gün dev, $0.</td>
+        </tr>
+        <tr>
           <td><b>Multisig admin migration</b></td>
           <td><span class="pill later">MAINNET T-0</span></td>
           <td>Bugün admin tek EOA. &quot;Mainnet&apos;e çıkıyoruz&quot; sinyali geldiğinde 2-of-3 ya da 3-of-5 multisig&apos;e taşınır. Ayrı runbook.</td>

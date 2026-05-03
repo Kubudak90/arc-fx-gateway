@@ -92,6 +92,7 @@ export default function Home() {
           <a href="#developers"   className="hidden lg:inline text-muted-foreground hover:text-foreground">Developers</a>
           <a href="#roadmap"      className="hidden md:inline text-muted-foreground hover:text-foreground">Roadmap</a>
           <Link href={"/quickstart" as Route} className="hidden md:inline text-muted-foreground hover:text-foreground">Quickstart</Link>
+          <Link href={"/docs" as Route} className="hidden md:inline text-muted-foreground hover:text-foreground">Docs</Link>
           <a href="/m/login" className="text-arcora-link hover:underline whitespace-nowrap">Merchants</a>
           <a href="https://github.com/Kubudak90/arc-fx-gateway" className="text-muted-foreground hover:text-foreground">GitHub</a>
         </nav>

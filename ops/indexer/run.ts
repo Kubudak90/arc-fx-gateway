@@ -7,18 +7,21 @@ import { randomUUID } from "node:crypto";
 
 const RPC          = need("ARC_TESTNET_RPC");
 const GATEWAY      = need("GATEWAY_ADDRESS").toLowerCase() as Address;
-// Optional second gateway for the v0.8 (relayer-driven) deploy. The indexer
-// watches both addresses simultaneously during cutover; once /api/invoices
-// is fully on v0.8, the legacy GATEWAY env can be removed in a follow-up.
+// V8 + V9 gateways. The indexer watches each one in parallel; events from
+// V9 are decode-compatible with V8 because event signatures are unchanged.
+// V9 also emits `SettlementSource` (new in v0.9, Plan 9) which the decoder
+// silently ignores — we read payoutSource from storage when needed. As soon
+// as the V8 in-flight cohort drains we can drop V8 from the list.
 const GATEWAY_V8   = (process.env.GATEWAY_ADDRESS_V8 ?? "").toLowerCase() as Address;
+const GATEWAY_V9   = (process.env.GATEWAY_ADDRESS_V9 ?? "").toLowerCase() as Address;
 const PG_URL       = need("POSTGRES_URL_NON_POOLING");
 const REORG_BUFFER = BigInt(process.env.INDEXER_REORG_BUFFER_BLOCKS ?? "5");
 const TICK_MS      = Number(process.env.INDEXER_TICK_MS ?? "30000");
 const MAX_RANGE    = 9_000n; // Arc testnet eth_getLogs cap
 
-const GATEWAYS: Address[] = GATEWAY_V8 && GATEWAY_V8.startsWith("0x")
-  ? [GATEWAY, GATEWAY_V8]
-  : [GATEWAY];
+const GATEWAYS: Address[] = [GATEWAY, GATEWAY_V8, GATEWAY_V9].filter(
+  (a): a is Address => Boolean(a) && a.startsWith("0x"),
+) as Address[];
 
 function need(k: string): string {
   const v = process.env[k];

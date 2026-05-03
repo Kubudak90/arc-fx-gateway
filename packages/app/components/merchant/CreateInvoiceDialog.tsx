@@ -21,11 +21,10 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
     if (!apiKey) { toast.error("Generate an API key in Settings first"); return; }
     setBusy(true);
     try {
-      // Audit incident fix (2026-05-03): dashboard creates v8 invoices so they
-      // hit the relayer-driven Permit2 flow. The legacy v6 default left the
-      // last test payment stranded — invoice on v6, customer signed Permit2
-      // for v8, no relayer queue entry was ever produced.
-      const res = await fetch("/api/invoices?engine=v8", {
+      // Plan 9 (2026-05-03): default engine is now v9 (refund-source binding
+      // fix on the gateway contract). V8 + V6 remain available via explicit
+      // ?engine= query for testing.
+      const res = await fetch("/api/invoices?engine=v9", {
         method: "POST",
         headers: { "content-type": "application/json", "X-Arcora-Api-Key": apiKey },
         body: JSON.stringify({ amountUsdc: Number(amount), payInToken: payIn, successUrl }),

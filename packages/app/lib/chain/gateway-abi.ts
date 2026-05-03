@@ -1,5 +1,12 @@
 import { parseAbi } from "viem";
 
+/**
+ * Cross-version gateway ABI. Function calls + events are binary-compatible
+ * across V6, V8, and V9 — the only on-chain shape that differs is the
+ * `payments(bytes32)` getter (V9 returns an extra `payoutSource` address
+ * alongside merchantPayout + fee, per Plan 9). For per-version reads of
+ * payments() use `PAYMENTS_V8_ABI` / `PAYMENTS_V9_ABI` below.
+ */
 export const GATEWAY_ABI = parseAbi([
   "function createInvoice(bytes32 merchantInvoiceId, address payIn, uint256 amountOut, uint64 expiresAt) external returns (bytes32 globalId)",
   "function createInvoiceFor(address merchant, bytes32 merchantInvoiceId, address payIn, uint256 amountOut, uint64 expiresAt) external returns (bytes32 globalId)",
@@ -14,7 +21,6 @@ export const GATEWAY_ABI = parseAbi([
   "function withdrawFees(address token, address to) external",
   "function merchants(address) view returns (address payoutAddress, address payoutToken, bool active)",
   "function invoices(bytes32) view returns (address merchant, address payIn, address payoutToken, uint256 amountOut, uint64 expiresAt, uint8 status, address paidBy)",
-  "function payments(bytes32) view returns (uint256 merchantPayout, uint256 fee)",
   "function delegateAuthorizations(address merchant, address delegate) view returns (uint64)",
   "event MerchantRegistered(address indexed merchant, address payoutAddress, address payoutToken)",
   "event MerchantPayoutAddressUpdated(address indexed merchant, address oldAddress, address newAddress)",
@@ -25,4 +31,14 @@ export const GATEWAY_ABI = parseAbi([
   "event InvoiceRefunded(bytes32 indexed globalId, address indexed refundedTo, address indexed payoutToken, uint256 merchantPayout, uint256 protocolFeeReturned)",
   "event DelegateAuthorized(address indexed merchant, address indexed delegate, uint64 expiresAt)",
   "event DelegateRevoked(address indexed merchant, address indexed delegate)",
+]);
+
+/** V6/V8 payments() getter shape. */
+export const PAYMENTS_V8_ABI = parseAbi([
+  "function payments(bytes32) view returns (uint256 merchantPayout, uint256 fee)",
+]);
+
+/** V9 payments() getter — adds payoutSource snapshotted at settle time. */
+export const PAYMENTS_V9_ABI = parseAbi([
+  "function payments(bytes32) view returns (uint256 merchantPayout, uint256 fee, address payoutSource)",
 ]);

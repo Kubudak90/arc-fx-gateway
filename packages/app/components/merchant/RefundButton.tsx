@@ -5,7 +5,7 @@ import { useAccount, useWriteContract, usePublicClient, useChainId } from "wagmi
 import { parseAbi, type Hex, type Address } from "viem";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
+import { GATEWAY_ABI, PAYMENTS_V8_ABI, PAYMENTS_V9_ABI } from "@/lib/chain/gateway-abi";
 import { mapChainError } from "@/lib/chain/error-mapper";
 
 const ERC20_ABI = parseAbi([
@@ -16,19 +16,28 @@ const ERC20_ABI = parseAbi([
 interface RefundButtonProps {
   invoiceId: string;
   payoutToken: string;
+  /** The gateway address this invoice lives on. Plan-9 cutover: per-row
+   *  routing so V8 invoices refund on V8 contract and V9 on V9 contract.
+   *  Falls back to NEXT_PUBLIC_GATEWAY_ADDRESS for legacy v0.6 invoices. */
+  gatewayAddress?: string | null;
   onRefunded?: () => void;
 }
 
 type State = "idle" | "approving" | "refunding" | "success" | "error";
 
-export function RefundButton({ invoiceId, payoutToken, onRefunded }: RefundButtonProps) {
+const GATEWAY_V9 = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V9 ?? "").toLowerCase();
+
+export function RefundButton({ invoiceId, payoutToken, gatewayAddress, onRefunded }: RefundButtonProps) {
   const { address } = useAccount();
   const chainId = useChainId();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const [state, setState] = useState<State>("idle");
 
-  const gateway = process.env.NEXT_PUBLIC_GATEWAY_ADDRESS as Address;
+  const fallbackGateway = process.env.NEXT_PUBLIC_GATEWAY_ADDRESS as Address;
+  const gateway = (gatewayAddress ?? fallbackGateway) as Address;
+  const isV9 = !!gatewayAddress && gatewayAddress.toLowerCase() === GATEWAY_V9;
+  const paymentsAbi = isV9 ? PAYMENTS_V9_ABI : PAYMENTS_V8_ABI;
   const arcId = 5042002;
 
   async function handleClick() {
@@ -39,12 +48,15 @@ export function RefundButton({ invoiceId, payoutToken, onRefunded }: RefundButto
     }
     try {
       // Look up the exact merchantPayout we owe back; we'll approve only that.
-      const [merchantPayout] = await publicClient!.readContract({
+      // Destructure handles both V8 [merchantPayout, fee] and V9
+      // [merchantPayout, fee, payoutSource] shapes via PAYMENTS_V*_ABI.
+      const result = await publicClient!.readContract({
         address: gateway,
-        abi: GATEWAY_ABI,
+        abi: paymentsAbi,
         functionName: "payments",
         args: [invoiceId as Hex],
       });
+      const merchantPayout = result[0];
       if (merchantPayout === 0n) {
         toast.error("Refund record missing on-chain — invoice may not be paid yet.");
         return;

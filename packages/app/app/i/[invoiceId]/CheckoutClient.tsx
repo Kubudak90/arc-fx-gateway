@@ -24,8 +24,10 @@ interface CheckoutClientProps {
   amountOut: string;
   successUrl: string;
   cancelUrl?: string;
-  /** v6 = legacy on-chain swap path; v8 = relayer-driven Permit2 path. */
-  engine: "v6" | "v8";
+  /** v6 = legacy on-chain swap path; v8 + v9 = relayer-driven Permit2 path
+   *  (UI shape identical, the relayer dispatches to the right gateway based
+   *  on invoice.gatewayAddress). */
+  engine: "v6" | "v8" | "v9";
 }
 
 export default function CheckoutClient(props: CheckoutClientProps) {
@@ -62,7 +64,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
 
   return (
     <div className="space-y-4">
-      {props.engine === "v8" ? (
+      {props.engine === "v8" || props.engine === "v9" ? (
         <QuoteDisplayV8
           payInTokenAddress={props.payInTokenAddress}
           payoutTokenAddress={props.payoutTokenAddress}
@@ -86,7 +88,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
           theme="light"
         />
 
-        {props.engine === "v8" ? (
+        {props.engine === "v8" || props.engine === "v9" ? (
           <PayButtonV8
             invoiceId={props.invoiceId}
             payInTokenAddress={props.payInTokenAddress as Address}

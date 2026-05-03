@@ -43,6 +43,13 @@
       "when": 1777753905837,
       "tag": "0005_compliance_screenings_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777826788371,
+      "tag": "0006_v9_gateway_address",
+      "breakpoints": true
     }
   ]
 }

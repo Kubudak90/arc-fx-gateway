@@ -39,7 +39,9 @@ fi
 awk '
   BEGIN { in_scope = 0 }
   /^SF:/ {
-    in_scope = ($0 ~ /^SF:src\/ArcFXGatewayV8\.sol$/) ? 1 : 0
+    # Audit scope: V8 + V9 (both deployed; V8 in legacy refund maintenance,
+    # V9 is the new canonical with refund-source binding).
+    in_scope = ($0 ~ /^SF:src\/ArcFXGateway(V8|V9)\.sol$/) ? 1 : 0
   }
   in_scope && /^LF:/  { sub(/^LF:/,"");  lf  += $0 }
   in_scope && /^LH:/  { sub(/^LH:/,"");  lh  += $0 }

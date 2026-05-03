@@ -31,10 +31,15 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
   const inv = rows[0]!;
   const expired = inv.expiresAt.getTime() < Date.now();
   const initialStatus = expired && inv.status === "created" ? "expired" : inv.status;
-  // The /api/invoices ?engine=v8 path stamps `metadata.engine` so the client
-  // knows which PayButton to render. v0.6 invoices (default) have no engine
-  // field; treat absence as v6.
-  const engine = (inv.metadata as { engine?: string } | null)?.engine === "v8" ? "v8" : "v6";
+  // /api/invoices stamps `metadata.engine` so the client knows which
+  // PayButton to render. V8 + V9 share the same client-side Permit2 flow;
+  // the difference lives on the relayer + contract (V9 = refund-source
+  // binding per Plan 9). Legacy V6 invoices have no engine field.
+  const rawEngine = (inv.metadata as { engine?: string } | null)?.engine;
+  const engine: "v6" | "v8" | "v9" =
+    rawEngine === "v9" ? "v9" :
+    rawEngine === "v8" ? "v8" :
+    "v6";
 
   return (
     <main className="min-h-screen grid place-items-center px-6 py-10">

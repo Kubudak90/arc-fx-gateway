@@ -18,6 +18,7 @@ export interface InvoiceRow {
   amountOut: string;
   status: InvoiceStatus;
   paidTx: string | null;
+  gatewayAddress: string | null;
   createdAt: string;
 }
 
@@ -56,7 +57,12 @@ export function InvoiceTable({ invoices, payoutToken, onChange }: InvoiceTablePr
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
                   {inv.status === "paid" && (
-                    <RefundButton invoiceId={inv.id} payoutToken={payoutToken} onRefunded={onChange} />
+                    <RefundButton
+                      invoiceId={inv.id}
+                      payoutToken={payoutToken}
+                      gatewayAddress={inv.gatewayAddress}
+                      onRefunded={onChange}
+                    />
                   )}
                   <Button size="sm" variant="ghost" onClick={() => setQrInvoiceId(inv.id)}>
                     <QrCode className="size-4" />

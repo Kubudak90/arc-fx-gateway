@@ -94,7 +94,16 @@ type QueueRow = {
   };
   permit2_signature: Hex;
   attempts: number;
+  gateway_address: string | null;
 };
+
+/** Plan-9 dispatch — every queue row carries the gateway address its invoice
+ *  was created against. settleInvoice + recordPayerRefund get routed there.
+ *  Legacy rows without gateway_address fall back to the daemon's default. */
+function gatewayFor(row: QueueRow): Address {
+  const addr = (row.gateway_address ?? GATEWAY).toLowerCase();
+  return addr as Address;
+}
 
 // ── Token symbol resolution for kit.swap ────────────────────────────
 // App Kit takes ticker symbols, not addresses. Maintain a small lookup
@@ -116,22 +125,28 @@ function tokenSymbol(addr: string): "USDC" | "EURC" {
 async function claimNext(): Promise<QueueRow | null> {
   // Atomic claim: pending → processing in one statement so a crashed daemon
   // restart doesn't double-process. The next_attempt clause is what gives
-  // us retry-with-backoff on the same row.
+  // us retry-with-backoff on the same row. Plan-9: also surface
+  // invoices.gateway_address so the relayer dispatches to the right contract.
   const r = await pool.query<QueueRow>(
-    `update relayer_queue
-        set status      = 'processing',
-            attempts    = attempts + 1,
-            updated_at  = now()
-      where id = (
-        select id from relayer_queue
-         where status = 'pending'
-           and next_attempt <= now()
-         order by next_attempt
-         limit 1
-         for update skip locked
-      )
-      returning id, invoice_id, payer, pay_in_token, amount_in, payout_token,
-                amount_out_min, permit2_data, permit2_signature, attempts`,
+    `with claimed as (
+       update relayer_queue
+          set status      = 'processing',
+              attempts    = attempts + 1,
+              updated_at  = now()
+        where id = (
+          select id from relayer_queue
+           where status = 'pending'
+             and next_attempt <= now()
+           order by next_attempt
+           limit 1
+           for update skip locked
+        )
+        returning id, invoice_id, payer, pay_in_token, amount_in, payout_token,
+                  amount_out_min, permit2_data, permit2_signature, attempts
+     )
+     select c.*, i.gateway_address
+       from claimed c
+       left join invoices i on i.id = c.invoice_id`,
   );
   return r.rows[0] ?? null;
 }
@@ -245,18 +260,20 @@ async function callSettle(
 ): Promise<Hex> {
   // The relayer holds payoutToken in its hot wallet now. Approve the gateway
   // to pull `grossPayoutBaseUnits`, then call settleInvoice.
+  const targetGateway = gatewayFor(row);
+
   const approveTx = await wallet.writeContract({
     chain: undefined,
     address: row.payout_token as Address,
     abi: ERC20,
     functionName: "approve",
-    args: [GATEWAY as Address, grossPayoutBaseUnits],
+    args: [targetGateway, grossPayoutBaseUnits],
   });
   await chain.waitForTransactionReceipt({ hash: approveTx });
 
   const tx = await wallet.writeContract({
     chain: undefined,
-    address: GATEWAY as Address,
+    address: targetGateway,
     abi: GATEWAY_ABI,
     functionName: "settleInvoice",
     args: [
@@ -304,7 +321,7 @@ async function refundPayer(row: QueueRow, reason: string): Promise<Hex> {
   ) as Hex;
   const recordTx = await wallet.writeContract({
     chain: undefined,
-    address: GATEWAY as Address,
+    address: gatewayFor(row),
     abi: GATEWAY_ABI,
     functionName: "recordPayerRefund",
     args: [

@@ -25,6 +25,7 @@ export async function GET() {
       amountOut: i.amountOut,
       status: i.status,
       paidTx: i.paidTx,
+      gatewayAddress: i.gatewayAddress,
       createdAt: i.createdAt.toISOString(),
     })),
     apiKey: session.apiKey ?? null,

@@ -44,6 +44,11 @@ export const invoices = pgTable("invoices", {
   protocolFee: numeric("protocol_fee"),
   refundTx: text("refund_tx"),
   refundedAt: timestamp("refunded_at", { withTimezone: true }),
+  // Which on-chain gateway this invoice lives on. Set at create time so the
+  // relayer knows which contract to call settleInvoice against, and the
+  // indexer knows which gateway's events to associate. Lower-cased 0x-address.
+  // Added in Plan 9 / V9 cutover (2026-05-03).
+  gatewayAddress: text("gateway_address"),
   metadata: jsonb("metadata"),
   successUrl: text("success_url").notNull(),
   cancelUrl: text("cancel_url"),

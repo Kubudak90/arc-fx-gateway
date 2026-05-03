@@ -10,10 +10,13 @@ import { resolveComplianceProvider } from "@/lib/compliance/factory";
 import { screenWithAudit } from "@/lib/compliance/screen";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
-// Opt-in v0.8 path. Set via env on Vercel; merchants pass ?engine=v8 when
-// calling /api/invoices to land their invoices on the relayer-driven gateway.
-// Default behaviour is unchanged so existing v0.6 traffic isn't disturbed.
+// Per-engine gateway addresses. Plan 9 (2026-05-03) made V9 the canonical
+// default: V8's refundInvoice broke for merchants whose payout wallet
+// differs from their identity wallet, V9 snapshots `payoutSource` per
+// invoice. V8 stays addressable via `?engine=v8` for testing; V6 via
+// `?engine=v6` for legacy traffic.
 const GATEWAY_V8 = (process.env.GATEWAY_ADDRESS_V8 ?? "") as Address;
+const GATEWAY_V9 = (process.env.GATEWAY_ADDRESS_V9 ?? "") as Address;
 
 const Body = z.object({
   amountUsdc: z.number().positive(),
@@ -100,12 +103,22 @@ export async function POST(req: NextRequest) {
   const amountOut = BigInt(Math.round(amountUsdc * 1_000_000));
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + INVOICE_TTL_SEC);
 
-  // Engine selection: default to v0.6 (current production), let merchants
-  // opt into v0.8 with `?engine=v8`. Both paths land an invoice in the same
-  // DB row shape; the differentiator lives in `invoices.metadata.engine`,
-  // which the hosted checkout reads to decide which PayButton to render.
-  const engine = new URL(req.url).searchParams.get("engine") === "v8" ? "v8" : "v6";
-  const targetGateway: Address = engine === "v8" ? GATEWAY_V8 : GATEWAY;
+  // Engine selection: V9 default (Plan 9 — refund-source binding fix). V8 +
+  // V6 remain addressable via `?engine=v8` and `?engine=v6` for testing /
+  // legacy traffic. The hosted checkout reads `metadata.engine` to decide
+  // which PayButton to render.
+  const engineParam = new URL(req.url).searchParams.get("engine");
+  const engine: "v6" | "v8" | "v9" =
+    engineParam === "v8" ? "v8" :
+    engineParam === "v6" ? "v6" :
+    "v9";
+  const targetGateway: Address =
+    engine === "v9" ? GATEWAY_V9 :
+    engine === "v8" ? GATEWAY_V8 :
+    GATEWAY;
+  if (engine === "v9" && !GATEWAY_V9) {
+    return corsResponse({ error: "v9_gateway_not_configured" }, { status: 503 });
+  }
   if (engine === "v8" && !GATEWAY_V8) {
     return corsResponse({ error: "v8_gateway_not_configured" }, { status: 503 });
   }
@@ -136,6 +149,7 @@ export async function POST(req: NextRequest) {
     amountOut: amountOut.toString(),
     expiresAt: new Date(Number(expiresAt) * 1000),
     status: "created",
+    gatewayAddress: targetGateway.toLowerCase(),
     metadata: { ...(metadata ?? {}), engine },
     successUrl,
     cancelUrl: cancelUrl ?? null,

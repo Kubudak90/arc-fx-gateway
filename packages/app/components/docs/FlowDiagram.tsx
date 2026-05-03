@@ -46,10 +46,11 @@ function Step({
   side?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-stretch gap-3 sm:gap-4">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
       <div className="flex items-center">{primary}</div>
       {side && (
-        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-3 sm:flex-1 sm:min-w-0 ml-5 sm:ml-0">
+          <CornerArrow className="sm:hidden" />
           <span className="hidden sm:inline-block flex-1 h-px bg-arcora-slate/20 max-w-12" />
           {sideLabel && (
             <span className="font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-[0.14em] text-muted-foreground whitespace-nowrap">
@@ -80,7 +81,7 @@ function Connector({ label }: { label: string }) {
 
 function MainBox({ title, sub }: { title: string; sub?: string }) {
   return (
-    <div className="rounded-xl bg-gradient-to-br from-arcora-blue/10 to-arcora-teal/10 border border-arcora-blue/25 px-4 py-3 min-w-[170px] sm:min-w-[200px]">
+    <div className="rounded-xl bg-gradient-to-br from-arcora-blue/10 to-arcora-teal/10 border border-arcora-blue/25 px-4 py-3 sm:min-w-[200px]">
       <div className="font-semibold text-arcora-slate text-[15px] leading-tight">{title}</div>
       {sub && (
         <div className="font-[family-name:var(--font-mono)] text-[10.5px] text-muted-foreground mt-0.5">
@@ -93,12 +94,10 @@ function MainBox({ title, sub }: { title: string; sub?: string }) {
 
 function SideBox({ title, sub }: { title: string; sub?: string }) {
   return (
-    <div className="rounded-xl bg-white border border-arcora-border px-4 py-3">
-      <div className="font-semibold text-arcora-slate text-[15px] leading-tight whitespace-nowrap">
-        {title}
-      </div>
+    <div className="rounded-xl bg-white border border-arcora-border px-4 py-3 min-w-0">
+      <div className="font-semibold text-arcora-slate text-[15px] leading-tight">{title}</div>
       {sub && (
-        <div className="font-[family-name:var(--font-mono)] text-[10.5px] text-muted-foreground mt-0.5 whitespace-nowrap">
+        <div className="font-[family-name:var(--font-mono)] text-[10.5px] text-muted-foreground mt-0.5">
           {sub}
         </div>
       )}
@@ -118,6 +117,21 @@ function ArrowDown() {
   return (
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-arcora-slate/45 flex-none -mt-0.5">
       <path d="M5 0v8m0 0L1 4m4 4l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CornerArrow({ className }: { className?: string }) {
+  // Down-then-right ↳ glyph for mobile side branches.
+  return (
+    <svg
+      width="14" height="14" viewBox="0 0 14 14" fill="none"
+      className={`text-arcora-slate/45 flex-none ${className ?? ""}`}
+    >
+      <path
+        d="M3 1v6a3 3 0 0 0 3 3h7m0 0L9 6m4 4l-4 4"
+        stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+      />
     </svg>
   );
 }

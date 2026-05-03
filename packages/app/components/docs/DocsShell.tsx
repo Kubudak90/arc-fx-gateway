@@ -66,8 +66,35 @@ export function DocsShell({
         </nav>
       </header>
 
+      {/* Mobile/tablet docs nav: horizontal scrolling chips. Hidden on lg+
+           where the sticky sidebar takes over. */}
+      <nav
+        aria-label="Docs navigation"
+        className="lg:hidden border-b border-arcora-border overflow-x-auto"
+      >
+        <ul className="flex items-center gap-1 px-4 sm:px-6 py-3 whitespace-nowrap text-sm">
+          {DOCS_NAV.flatMap((g) => g.items).map((item) => {
+            const active = currentPath === item.href;
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href as Route}
+                  className={`block rounded-full px-3 py-1.5 transition-colors ${
+                    active
+                      ? "bg-arcora-blue/10 text-arcora-blue font-semibold"
+                      : "text-muted-foreground hover:bg-arcora-gray/40 hover:text-foreground"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-8 lg:gap-12 pt-8 pb-16">
-        <aside className="lg:sticky lg:top-20 lg:self-start">
+        <aside className="hidden lg:block lg:sticky lg:top-20 lg:self-start">
           <nav className="space-y-7 text-sm">
             {DOCS_NAV.map((group) => (
               <div key={group.title}>
@@ -100,7 +127,7 @@ export function DocsShell({
 
         <main className="min-w-0">
           <header className="mb-8">
-            <h1 className="font-[family-name:var(--font-display)] text-[36px] sm:text-[44px] leading-[1.05] tracking-tight text-arcora-slate text-balance">
+            <h1 className="font-[family-name:var(--font-display)] text-[34px] sm:text-[44px] leading-[1.05] tracking-tight text-arcora-slate text-balance">
               {title}
             </h1>
             {description && (

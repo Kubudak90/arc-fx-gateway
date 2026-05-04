@@ -86,6 +86,14 @@ export async function POST(req: NextRequest) {
   // post-onboarding). Read the on-chain payoutAddress and screen THAT — a
   // merchant who rotates to an unscreened wallet must hit the gate before
   // we mint a fresh invoice routed to it.
+  //
+  // Audit residual P2 (2026-05-05): RPC failure used to silently fall back
+  // to the DB identity wallet. createInvoiceFor would then proceed against
+  // the same RPC moments later and likely succeed, settling to a wallet
+  // that was never screened. Now we fail closed by default; the existing
+  // COMPLIANCE_FAIL_OPEN_FOR_INVOICE flag (currently default-true for
+  // compliance provider outages) explicitly governs whether to fall through
+  // here too. Different surface, same operator-level decision.
   let payoutAddress: Address = merchant.address as Address;
   try {
     const onchain = await publicClient.readContract({
@@ -101,10 +109,17 @@ export async function POST(req: NextRequest) {
     // If the on-chain merchant struct is zero, the merchant isn't registered
     // on this gateway yet — fall through; createInvoiceFor below will revert
     // with the right error and we won't have wasted a provider call here.
-  } catch {
-    // RPC hiccup — fall through with the DB identity wallet so we don't
-    // block invoice creation on transient infra issues. The screen still
-    // happens, just on a possibly-conservative target.
+  } catch (e: any) {
+    const failOpen = (process.env.COMPLIANCE_FAIL_OPEN_FOR_INVOICE ?? "true") !== "false";
+    if (!failOpen) {
+      return corsResponse({
+        error: "payout_read_failed",
+        detail: e?.shortMessage ?? String(e),
+      }, { status: 503 });
+    }
+    // failOpen: identity wallet is the conservative target. The flag
+    // already governs compliance-provider outages; same operator decision
+    // applies here.
   }
 
   // Compliance gate on the merchant payout address. Cached per-address for

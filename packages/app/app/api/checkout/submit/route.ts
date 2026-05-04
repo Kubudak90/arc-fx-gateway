@@ -4,7 +4,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Address, Hex } from "viem";
 import { db } from "@/lib/db/client";
 import { invoices, relayerQueue, checkoutAuthorizations } from "@/lib/db/schema";
-import { expectedWitnessHash } from "@/lib/checkout/witness";
+import { expectedWitnessHash, PERMIT2_WITNESS_TYPE_STRING } from "@/lib/checkout/witness";
 import { verifyPermit2Signature, ARC_TESTNET_CHAIN_ID } from "@/lib/checkout/permit2-verify";
 
 /**
@@ -107,6 +107,15 @@ export async function POST(req: NextRequest) {
   const expected = expectedWitnessHash(invoiceId as Hex, RELAYER_ADDRESS);
   if (permit2Data.witness.toLowerCase() !== expected.toLowerCase()) {
     return NextResponse.json({ error: "witness_mismatch" }, { status: 400 });
+  }
+
+  // Audit residual P1 (2026-05-05): server-side EIP-712 recovery uses our
+  // canonical types and ignores the request's witnessTypeString — but the
+  // relayer passes the request value verbatim to Permit2 on-chain, where
+  // any mutation produces a different typed-data hash and triggers a gas
+  // burn. Pin the field exactly to the SDK constant.
+  if (permit2Data.witnessTypeString !== PERMIT2_WITNESS_TYPE_STRING) {
+    return NextResponse.json({ error: "witness_type_string_mismatch" }, { status: 400 });
   }
 
   // Authorization gate (audit pass 1 #2): require an unconsumed, unexpired

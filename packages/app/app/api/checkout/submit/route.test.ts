@@ -203,6 +203,14 @@ describe("POST /api/checkout/submit", () => {
     expect((await res.json()).error).toBe("witness_mismatch");
   });
 
+  it("rejects mutated witnessTypeString (relayer would burn gas on Permit2 revert)", async () => {
+    const body = validBody();
+    body.permit2Data.witnessTypeString = "ArcoraSwapIntent witness)Different(bytes32 invoiceId,address relayer)TokenPermissions(address token,uint256 amount)";
+    const res = await POST(makeRequest(body) as never);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("witness_type_string_mismatch");
+  });
+
   it("rejects when no checkout_authorizations row exists for (invoice, payer)", async () => {
     dbState.authRows = [];
     const res = await POST(makeRequest(validBody()) as never);

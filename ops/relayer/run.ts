@@ -208,6 +208,13 @@ async function persistSwapTx(id: string, tx: Hex): Promise<void> {
   );
 }
 
+async function persistSettleTx(id: string, tx: Hex): Promise<void> {
+  await pool.query(
+    `update relayer_queue set settle_tx_hash = $2, updated_at = now() where id = $1`,
+    [id, tx],
+  );
+}
+
 async function markSettled(id: string, swapTx: Hex, settleTx: Hex): Promise<void> {
   // Same-token rows never wrote swap_tx_hash; backfill it here for
   // observability. swap_tx_hash on cross-token rows was already persisted
@@ -319,9 +326,18 @@ async function callSettle(
   row: QueueRow,
   grossPayoutBaseUnits: bigint,
   swapTxHash: Hex,
+  onBroadcast: (tx: Hex) => Promise<void>,
 ): Promise<Hex> {
   // The relayer holds payoutToken in its hot wallet now. Approve the gateway
   // to pull `grossPayoutBaseUnits`, then call settleInvoice.
+  //
+  // Audit residual P2 (2026-05-05): persist the settle tx hash via
+  // onBroadcast() the moment writeContract returns, before awaiting the
+  // receipt. Crashing during the receipt-await window used to lose the
+  // hash; reclaim would then re-call settleInvoice → V9 reverts as already
+  // paid → markFailed even though the on-chain payment landed. Approve
+  // doesn't get the same treatment because it's idempotent (raises
+  // allowance to the same value); resuming can re-issue it safely.
   const targetGateway = gatewayFor(row);
 
   const approveTx = await wallet.writeContract({
@@ -347,6 +363,7 @@ async function callSettle(
       swapTxHash,
     ],
   });
+  await onBroadcast(tx);
   await chain.waitForTransactionReceipt({ hash: tx });
   return tx;
 }
@@ -516,20 +533,49 @@ async function processOne(row: QueueRow): Promise<void> {
   }
 
   // Step 3: settle. If settle_tx_hash is already set, the previous attempt
-  // landed on-chain but the row never moved to `settled` status — just mark
-  // it now and bail (re-calling the gateway would revert with InvoicePayment
-  // already exists).
+  // broadcast settleInvoice — query the receipt to learn the outcome:
+  //   success → the merchant was paid, just markSettled and bail.
+  //   reverted → don't re-broadcast (would revert again as InvoicePayment
+  //              already exists or as some other terminal state); markFailed
+  //              for operator review.
+  //   pending/missing → wait briefly and recurse the same logic; failing
+  //              that, leave the row in `processing` for the next lease
+  //              reclaim to retry.
   if (row.settle_tx_hash) {
-    await markSettled(row.id, swapTxHash, row.settle_tx_hash as Hex);
-    log("info", { msg: "settle.skip", reason: "already-settled", tx: row.settle_tx_hash });
-    return;
+    try {
+      const rcpt = await chain.waitForTransactionReceipt({
+        hash: row.settle_tx_hash as Hex,
+        timeout: 30_000,
+      });
+      if (rcpt.status === "success") {
+        await markSettled(row.id, swapTxHash, row.settle_tx_hash as Hex);
+        log("info", { msg: "settle.skip", reason: "already-broadcast-success", tx: row.settle_tx_hash });
+        return;
+      }
+      await markFailed(row.id, `settle: prior tx ${row.settle_tx_hash} reverted, manual reconciliation needed`);
+      log("error", { msg: "settle.prior_reverted", tx: row.settle_tx_hash });
+      return;
+    } catch (e) {
+      // Receipt unavailable — likely still pending or RPC timeout. Don't
+      // re-broadcast (would race the pending tx); leave the row in
+      // processing and let the next lease reclaim retry.
+      log("warn", {
+        msg: "settle.receipt_unavailable",
+        tx: row.settle_tx_hash,
+        err: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
   }
 
   try {
     if (grossPayout < BigInt(row.amount_out_min)) {
       throw new Error(`gross ${grossPayout} below floor ${row.amount_out_min}`);
     }
-    const settleTx = await callSettle(row, grossPayout, swapTxHash);
+    const settleTx = await callSettle(
+      row, grossPayout, swapTxHash,
+      async (tx) => { await persistSettleTx(row.id, tx); },
+    );
     await markSettled(row.id, swapTxHash, settleTx);
     log("info", { msg: "settle.ok", tx: settleTx, gross: grossPayout.toString() });
   } catch (e) {

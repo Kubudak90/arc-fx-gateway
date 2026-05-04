@@ -107,9 +107,16 @@ export async function POST(req: NextRequest) {
           payoutToken: outSym,
           targetOutputBaseUnits: BigInt(inv.amountOut),
         });
-        // 3% cushion below the recommended quote — absorbs rate drift
-        // between this estimate and the customer's actual signing moment.
-        minAmountIn = (q.recommendedPayInBaseUnits * 97n) / 100n;
+        // Audit residual P1 (2026-05-05): the floor is the recommended
+        // payIn exactly. Previous version stored 0.97 × recommended as a
+        // "rate-drift cushion" but recommended already bakes in 250 bps
+        // of slippage; accepting 0.97 of that lands the post-swap output
+        // below merchant floor (0.97 × 1.025 = 0.99425) and recreates the
+        // tiny-amount grief Finding #4 was meant to close. Rate movement
+        // upward is handled by quote refresh (TTL ~30s); customers commit
+        // ≥ recommended or refetch. Movement downward is favourable, so a
+        // sub-recommended commit only ever hurts the merchant.
+        minAmountIn = q.recommendedPayInBaseUnits;
       } catch (e) {
         return NextResponse.json({
           error: "quote_unavailable",

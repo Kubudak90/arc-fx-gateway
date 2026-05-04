@@ -405,34 +405,46 @@ async function processOne(row: QueueRow): Promise<void> {
     return;
   }
 
-  // Step 2: swap.
-  let swap: { amountOut: string; txHash: Hex };
-  try {
-    swap = await runSwap(row);
-    log("info", { msg: "swap.ok", tx: swap.txHash, amountOut: swap.amountOut });
-  } catch (e) {
-    const err = e instanceof Error ? e.message : String(e);
-    log("error", { msg: "swap.fail", err });
+  // Step 2: swap (skipped when payIn == payout — App Kit refuses identical
+  // legs with "Swap from USDC to USDC ... not supported" and the customer
+  // ends up refunded for a payment that should have settled directly).
+  const sameToken = row.pay_in_token.toLowerCase() === row.payout_token.toLowerCase();
+  let grossPayout: bigint;
+  let swapTxHash:  Hex;
+
+  if (sameToken) {
+    grossPayout = BigInt(row.amount_in);
+    swapTxHash  = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
+    log("info", { msg: "swap.skip", reason: "same-token", grossPayout: grossPayout.toString() });
+  } else {
     try {
-      const refundTx = await refundPayer(row, err);
-      await markRefunded(row.id, refundTx, err);
-      log("info", { msg: "refund.ok", tx: refundTx });
-    } catch (re) {
-      const rerr = re instanceof Error ? re.message : String(re);
-      log("error", { msg: "refund.fail", err: rerr });
-      await markFailed(row.id, `swap=${err}; refund=${rerr}`);
+      const swap = await runSwap(row);
+      grossPayout = parseHumanAmount(swap.amountOut, 6);
+      swapTxHash  = swap.txHash;
+      log("info", { msg: "swap.ok", tx: swap.txHash, amountOut: swap.amountOut });
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      log("error", { msg: "swap.fail", err });
+      try {
+        const refundTx = await refundPayer(row, err);
+        await markRefunded(row.id, refundTx, err);
+        log("info", { msg: "refund.ok", tx: refundTx });
+      } catch (re) {
+        const rerr = re instanceof Error ? re.message : String(re);
+        log("error", { msg: "refund.fail", err: rerr });
+        await markFailed(row.id, `swap=${err}; refund=${rerr}`);
+      }
+      return;
     }
-    return;
   }
 
   // Step 3: settle.
   try {
-    const grossPayout = parseHumanAmount(swap.amountOut, 6);
     if (grossPayout < BigInt(row.amount_out_min)) {
       throw new Error(`gross ${grossPayout} below floor ${row.amount_out_min}`);
     }
-    const settleTx = await callSettle(row, grossPayout, swap.txHash);
-    await markSettled(row.id, swap.txHash, settleTx);
+    const settleTx = await callSettle(row, grossPayout, swapTxHash);
+    await markSettled(row.id, swapTxHash, settleTx);
     log("info", { msg: "settle.ok", tx: settleTx, gross: grossPayout.toString() });
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);

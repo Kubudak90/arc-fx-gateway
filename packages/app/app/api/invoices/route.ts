@@ -60,6 +60,53 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return corsResponse({ error: "bad_body", detail: parsed.error.format() }, { status: 400 });
   const { amountUsdc, payInToken, successUrl, cancelUrl, metadata } = parsed.data;
 
+  // Engine selection moves up — we need targetGateway to read the on-chain
+  // payoutAddress for compliance screening (audit pass 4 #8). Was below;
+  // moved above so we can both screen the right wallet AND short-circuit
+  // unknown-engine errors before any provider call.
+  const engineParam = new URL(req.url).searchParams.get("engine");
+  const engine: "v6" | "v8" | "v9" =
+    engineParam === "v8" ? "v8" :
+    engineParam === "v6" ? "v6" :
+    "v9";
+  const targetGateway: Address =
+    engine === "v9" ? GATEWAY_V9 :
+    engine === "v8" ? GATEWAY_V8 :
+    GATEWAY;
+  if (engine === "v9" && !GATEWAY_V9) {
+    return corsResponse({ error: "v9_gateway_not_configured" }, { status: 503 });
+  }
+  if (engine === "v8" && !GATEWAY_V8) {
+    return corsResponse({ error: "v8_gateway_not_configured" }, { status: 503 });
+  }
+
+  // Audit pass 4 (2026-05-04, finding #8): we used to screen
+  // `merchant.address` (the identity wallet) but V9 settles to
+  // `merchants[m].payoutAddress` which can be a separate wallet (or rotated
+  // post-onboarding). Read the on-chain payoutAddress and screen THAT — a
+  // merchant who rotates to an unscreened wallet must hit the gate before
+  // we mint a fresh invoice routed to it.
+  let payoutAddress: Address = merchant.address as Address;
+  try {
+    const onchain = await publicClient.readContract({
+      address: targetGateway,
+      abi: GATEWAY_ABI,
+      functionName: "merchants",
+      args: [merchant.address as Address],
+    }) as readonly [Address, Address, boolean];
+    const [onchainPayoutAddr] = onchain;
+    if (onchainPayoutAddr && onchainPayoutAddr !== "0x0000000000000000000000000000000000000000") {
+      payoutAddress = onchainPayoutAddr;
+    }
+    // If the on-chain merchant struct is zero, the merchant isn't registered
+    // on this gateway yet — fall through; createInvoiceFor below will revert
+    // with the right error and we won't have wasted a provider call here.
+  } catch {
+    // RPC hiccup — fall through with the DB identity wallet so we don't
+    // block invoice creation on transient infra issues. The screen still
+    // happens, just on a possibly-conservative target.
+  }
+
   // Compliance gate on the merchant payout address. Cached per-address for
   // the provider's TTL so this is a DB hit on the hot path, not a provider
   // call. In Phase 0 (testnet / Noop) this is unconditionally `allow`.
@@ -68,7 +115,7 @@ export async function POST(req: NextRequest) {
     const provider = resolveComplianceProvider();
     payoutScreen = await screenWithAudit({
       db, provider,
-      address: merchant.address,
+      address: payoutAddress,
       context: { flow: "merchant_payout", merchantId: merchant.id },
     });
   } catch (e: any) {
@@ -103,25 +150,10 @@ export async function POST(req: NextRequest) {
   const amountOut = BigInt(Math.round(amountUsdc * 1_000_000));
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + INVOICE_TTL_SEC);
 
-  // Engine selection: V9 default (Plan 9 — refund-source binding fix). V8 +
-  // V6 remain addressable via `?engine=v8` and `?engine=v6` for testing /
-  // legacy traffic. The hosted checkout reads `metadata.engine` to decide
-  // which PayButton to render.
-  const engineParam = new URL(req.url).searchParams.get("engine");
-  const engine: "v6" | "v8" | "v9" =
-    engineParam === "v8" ? "v8" :
-    engineParam === "v6" ? "v6" :
-    "v9";
-  const targetGateway: Address =
-    engine === "v9" ? GATEWAY_V9 :
-    engine === "v8" ? GATEWAY_V8 :
-    GATEWAY;
-  if (engine === "v9" && !GATEWAY_V9) {
-    return corsResponse({ error: "v9_gateway_not_configured" }, { status: 503 });
-  }
-  if (engine === "v8" && !GATEWAY_V8) {
-    return corsResponse({ error: "v8_gateway_not_configured" }, { status: 503 });
-  }
+  // engine + targetGateway already resolved above (moved up for on-chain
+  // payoutAddress read). Plan 9 default = v9; v8/v6 reachable via ?engine=
+  // for testing / legacy traffic; the hosted checkout reads metadata.engine
+  // to choose the right PayButton.
 
   let txHash: Hex;
   try {

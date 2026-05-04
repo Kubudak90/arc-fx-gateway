@@ -117,11 +117,23 @@ async function tick(): Promise<{
       );
       if (!mr.rowCount) continue; // unknown merchant - cannot satisfy FK
 
+      // Audit pass 4 (2026-05-04, finding #9): backfill row used to write
+      // gateway_address NULL and metadata { backfilled, txHash } only — the
+      // checkout page then defaulted missing metadata.engine to v6, and
+      // the relayer used the legacy GATEWAY for routing. If the post-
+      // createInvoiceFor INSERT in /api/invoices ever failed, this recovery
+      // path produced silently mis-routed invoices. Now we stamp both the
+      // emitting gateway and the derived engine.
+      const emittingGateway = log.address.toLowerCase();
+      const engineForGateway: "v6" | "v8" | "v9" =
+        emittingGateway === GATEWAY_V9 ? "v9" :
+        emittingGateway === GATEWAY_V8 ? "v8" :
+        "v6";
       await pool.query(
         `insert into invoices
            (id, merchant_invoice_id, merchant_id, pay_in_token, payout_token,
-            amount_out, expires_at, status, success_url, metadata)
-         values ($1, $2, $3, $4, $5, $6, to_timestamp($7), 'created', '', $8::jsonb)
+            amount_out, expires_at, status, success_url, metadata, gateway_address)
+         values ($1, $2, $3, $4, $5, $6, to_timestamp($7), 'created', '', $8::jsonb, $9)
          on conflict (id) do nothing`,
         [
           id,
@@ -131,7 +143,8 @@ async function tick(): Promise<{
           a.payoutToken as Hex,
           (a.amountOut as bigint).toString(),
           Number(a.expiresAt as bigint),
-          JSON.stringify({ backfilled: true, txHash: log.transactionHash }),
+          JSON.stringify({ backfilled: true, txHash: log.transactionHash, engine: engineForGateway }),
+          emittingGateway,
         ],
       );
       backfilled++;

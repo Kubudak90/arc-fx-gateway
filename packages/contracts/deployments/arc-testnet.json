@@ -9,8 +9,37 @@
     "EURC": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a"
   },
   "current": {
+    "deployedAt": "2026-05-03",
+    "label": "v0.9.0 (Plan 9) — Refund-source binding: payoutSource snapshot at settle, refundInvoice pulls from there so split-wallet merchants can refund cleanly",
+    "contracts": {
+      "ArcFXGatewayV9": "0xdf6233943c06d4c207d60b91ff18b9158485ea21"
+    },
+    "relayer": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b",
+    "config": {
+      "protocolFeeBps": 30,
+      "feeRecipient": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b",
+      "permit2Spender": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+    },
+    "changes": [
+      "InvoicePayment struct gains payoutSource (address): the wallet that actually received settlement, snapshotted at settleInvoice time. refundInvoice pulls merchantPayout from payoutSource — not inv.merchant — so merchants who rotate their payoutAddress mid-flight can still refund cleanly without round-tripping the identity multisig.",
+      "Authorization expanded: refundInvoice callable by merchant identity OR by the snapshotted payoutSource (covers the operational-wallet-as-payout case).",
+      "Tests: 51 forge tests (pre-existing 48 + 3 new V9-specific: pulls-from-payee, payoutSource auth, frozen-after-rotation). 100% coverage on V9 paths."
+    ],
+    "deployTx": "—",
+    "deployNotes": "Plan 9 cutover spec at docs/superpowers/specs/2026-05-03-plan-9-refund-source-binding.md. /api/invoices defaults engine=v9 since 2026-05-03; v8 + v6 still reachable via explicit ?engine= for legacy/testing."
+  },
+  "deprecated_v0.8.0": {
+    "deployedAt": "2026-05-01",
+    "label": "v0.8.0 — Permit2 + relayer-driven settlement (App Kit Swap orchestrator)",
+    "reason": "Superseded by v0.9 which adds payoutSource snapshot for split-wallet refund support. V8 stays alive for any in-flight refund of pre-Plan-9 invoices; new traffic lands on V9.",
+    "contracts": {
+      "ArcFXGatewayV8": "0x6fAaD920b329d0c3eAb700f2BceE6A4ec5d507a8"
+    }
+  },
+  "deprecated_v0.6.0": {
     "deployedAt": "2026-04-29",
     "label": "v0.6.0 — Refunds: refundInvoice() + Refunded enum + payments mapping for exact merchantPayout/fee tracking",
+    "reason": "Superseded by v0.8 (relayer-driven Permit2 settlement, no on-chain swap pool dependency). v0.6 is the legacy on-chain-swap path. Kept for any in-flight refund of pre-v0.8 invoices.",
     "contracts": {
       "ArcFXGateway": "0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
@@ -24,15 +53,7 @@
       "oracleAnswer": 108630000,
       "oracleAnswerHuman": "1.0863 (real EUR/USD)"
     },
-    "changes": [
-      "InvoiceStatus enum gains Refunded (= 3); existing None/Created/Paid values unchanged",
-      "payments[globalId] mapping records exact (merchantPayout, fee) at pay() time so refundInvoice() doesn't have to re-derive them from oracle math",
-      "refundInvoice(bytes32) external nonReentrant: pulls merchantPayout from merchant via transferFrom (requires payoutToken approve to gateway), forwards to inv.paidBy, returns the protocol fee from accrued back to merchant. Callable by merchant or owner.",
-      "InvoiceRefunded event with (globalId, refundedTo, payoutToken, merchantPayout, protocolFeeReturned)",
-      "Errors: InvoiceNotRefundable, InsufficientFeesForRefund (when owner already withdrew accrued fees)"
-    ],
-    "deployTx": "0x78f8da52c8e41321fe022659e38db711209c09e929d75cb9fb27dbe4bea24d37",
-    "deployNotes": "First v0.6 broadcast (hash 0x6bff47fe…) reported success in foundry's broadcast file but the tx never confirmed on Arc testnet — the 0xf127c79c… address has no code. Redeployed with --legacy flag at 0x7c113740…; this is the canonical v0.6."
+    "deployTx": "0x78f8da52c8e41321fe022659e38db711209c09e929d75cb9fb27dbe4bea24d37"
   },
   "deprecated_v0.5.0": {
     "deployedAt": "2026-04-29",

@@ -100,6 +100,13 @@ type QueueRow = {
   permit2_signature: Hex;
   attempts: number;
   gateway_address: string | null;
+  // Stage progress markers — populated by persistPermit2Tx / persistSwapTx
+  // / markSettled / markRefunded as each step succeeds. claimNext re-reads
+  // them on reclaim so processOne knows where to resume. Audit P1 #3.
+  permit2_tx_hash: string | null;
+  swap_tx_hash:    string | null;
+  settle_tx_hash:  string | null;
+  refund_tx_hash:  string | null;
 };
 
 /** Plan-9 dispatch — every queue row carries the gateway address its invoice
@@ -145,7 +152,8 @@ function claimSql(where: string): string {
                 for update skip locked
              )
              returning id, invoice_id, payer, pay_in_token, amount_in, payout_token,
-                       amount_out_min, permit2_data, permit2_signature, attempts
+                       amount_out_min, permit2_data, permit2_signature, attempts,
+                       permit2_tx_hash, swap_tx_hash, settle_tx_hash, refund_tx_hash
           )
           select c.*, i.gateway_address
             from claimed c
@@ -184,10 +192,31 @@ async function claimNext(): Promise<QueueRow | null> {
   return pending.rows[0] ?? null;
 }
 
+// Stage-aware persistors — write each tx hash as soon as the chain receipt
+// returns so a daemon crash mid-flight is recoverable. Audit P1 #3.
+async function persistPermit2Tx(id: string, tx: Hex): Promise<void> {
+  await pool.query(
+    `update relayer_queue set permit2_tx_hash = $2, updated_at = now() where id = $1`,
+    [id, tx],
+  );
+}
+
+async function persistSwapTx(id: string, tx: Hex): Promise<void> {
+  await pool.query(
+    `update relayer_queue set swap_tx_hash = $2, updated_at = now() where id = $1`,
+    [id, tx],
+  );
+}
+
 async function markSettled(id: string, swapTx: Hex, settleTx: Hex): Promise<void> {
+  // Same-token rows never wrote swap_tx_hash; backfill it here for
+  // observability. swap_tx_hash on cross-token rows was already persisted
+  // by persistSwapTx; coalesce to keep that value if non-null.
   await pool.query(
     `update relayer_queue
-        set status = 'settled', swap_tx_hash = $2, settle_tx_hash = $3,
+        set status = 'settled',
+            swap_tx_hash   = coalesce(swap_tx_hash, $2),
+            settle_tx_hash = $3,
             updated_at = now()
       where id = $1`,
     [id, swapTx, settleTx],
@@ -383,6 +412,17 @@ function humanizeAmount(baseUnits: string, _symbol: "USDC" | "EURC"): string {
 
 // ── Main loop ───────────────────────────────────────────────────────
 
+const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
+
+/** Heuristic: did Permit2 revert because the nonce was already consumed?
+ *  Permit2's `_useUnorderedNonce` reverts with `InvalidNonce()` (selector
+ *  0x756688fe) when the bit is already flipped. viem surfaces both the name
+ *  and the hex selector in the error message depending on whether ABI
+ *  decoding succeeded — match either. */
+function isPermit2NonceUsed(err: string): boolean {
+  return /InvalidNonce/i.test(err) || /0x756688fe/i.test(err);
+}
+
 async function processOne(row: QueueRow): Promise<void> {
   const log = (level: string, fields: Record<string, unknown>) => {
     console.log(JSON.stringify({
@@ -391,18 +431,44 @@ async function processOne(row: QueueRow): Promise<void> {
     }));
   };
 
-  log("info", { msg: "row.claimed" });
+  log("info", {
+    msg: "row.claimed",
+    resume: {
+      permit2: !!row.permit2_tx_hash,
+      swap:    !!row.swap_tx_hash,
+      settle:  !!row.settle_tx_hash,
+    },
+  });
 
-  // Step 1: pull pay-in via Permit2.
-  let pullTx: Hex;
-  try {
-    pullTx = await pullViaPermit2(row);
-    log("info", { msg: "permit2.ok", tx: pullTx });
-  } catch (e) {
-    const err = e instanceof Error ? e.message : String(e);
-    log("error", { msg: "permit2.fail", err });
-    await reschedule(row.id, `permit2: ${err}`, row.attempts);
-    return;
+  // Step 1: pull pay-in via Permit2 (skip if a previous attempt already
+  // pulled — Permit2 nonce is consumed on-chain, retrying would revert).
+  if (!row.permit2_tx_hash) {
+    try {
+      const pullTx = await pullViaPermit2(row);
+      await persistPermit2Tx(row.id, pullTx);
+      row.permit2_tx_hash = pullTx;
+      log("info", { msg: "permit2.ok", tx: pullTx });
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      log("error", { msg: "permit2.fail", err, attempts: row.attempts });
+      // If a previous attempt actually pulled the funds but we crashed
+      // before persisting permit2_tx_hash, the next attempt will hit
+      // InvalidNonce. The customer's payIn is sitting in the relayer wallet;
+      // operator needs to reconcile rather than letting us silently retry
+      // forever. Surface as failed so it shows up in the ops dashboard.
+      if (isPermit2NonceUsed(err) && row.attempts > 1) {
+        await markFailed(
+          row.id,
+          `permit2 nonce already used on retry — pay-in likely in relayer wallet, ` +
+          `manual reconciliation needed: ${err}`,
+        );
+        return;
+      }
+      await reschedule(row.id, `permit2: ${err}`, row.attempts);
+      return;
+    }
+  } else {
+    log("info", { msg: "permit2.skip", reason: "already-pulled", tx: row.permit2_tx_hash });
   }
 
   // Step 2: swap (skipped when payIn == payout — App Kit refuses identical
@@ -414,11 +480,22 @@ async function processOne(row: QueueRow): Promise<void> {
 
   if (sameToken) {
     grossPayout = BigInt(row.amount_in);
-    swapTxHash  = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
+    swapTxHash  = ZERO_HASH;
     log("info", { msg: "swap.skip", reason: "same-token", grossPayout: grossPayout.toString() });
+  } else if (row.swap_tx_hash) {
+    // Resumed after swap — kit.swap was called and persisted, but settle
+    // didn't complete (or didn't get marked). We don't have the kit.swap
+    // amountOut in memory anymore. Use the merchant floor (amount_out_min)
+    // as a conservative grossPayout: settle will pull exactly that, the
+    // surplus stays in the relayer wallet (existing fee-bucket territory).
+    swapTxHash  = row.swap_tx_hash as Hex;
+    grossPayout = BigInt(row.amount_out_min);
+    log("info", { msg: "swap.skip", reason: "already-swapped", tx: swapTxHash, conservativeGross: grossPayout.toString() });
   } else {
     try {
       const swap = await runSwap(row);
+      await persistSwapTx(row.id, swap.txHash);
+      row.swap_tx_hash = swap.txHash;
       grossPayout = parseHumanAmount(swap.amountOut, 6);
       swapTxHash  = swap.txHash;
       log("info", { msg: "swap.ok", tx: swap.txHash, amountOut: swap.amountOut });
@@ -438,7 +515,16 @@ async function processOne(row: QueueRow): Promise<void> {
     }
   }
 
-  // Step 3: settle.
+  // Step 3: settle. If settle_tx_hash is already set, the previous attempt
+  // landed on-chain but the row never moved to `settled` status — just mark
+  // it now and bail (re-calling the gateway would revert with InvoicePayment
+  // already exists).
+  if (row.settle_tx_hash) {
+    await markSettled(row.id, swapTxHash, row.settle_tx_hash as Hex);
+    log("info", { msg: "settle.skip", reason: "already-settled", tx: row.settle_tx_hash });
+    return;
+  }
+
   try {
     if (grossPayout < BigInt(row.amount_out_min)) {
       throw new Error(`gross ${grossPayout} below floor ${row.amount_out_min}`);

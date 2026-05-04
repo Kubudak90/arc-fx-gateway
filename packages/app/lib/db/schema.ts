@@ -153,6 +153,11 @@ export const relayerQueue = pgTable("relayer_queue", {
   status: relayerQueueStatus("status").notNull().default("pending"),
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
+  // Per-stage tx hashes — populated immediately after each step succeeds so
+  // a daemon crash mid-flight can resume from the next pending stage on
+  // reclaim instead of replaying step 1 (which would revert with
+  // Permit2 InvalidNonce). Audit pass 2 / finding #3, 2026-05-04.
+  permit2TxHash: text("permit2_tx_hash"),
   swapTxHash: text("swap_tx_hash"),
   settleTxHash: text("settle_tx_hash"),
   refundTxHash: text("refund_tx_hash"),

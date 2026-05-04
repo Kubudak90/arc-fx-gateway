@@ -48,7 +48,10 @@ export default function CheckoutPage() {
         body:    JSON.stringify({ items, address, payIn }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "checkout_failed");
+      if (!res.ok) {
+        const detail = data.detail?.error ?? data.detail?.message ?? data.message;
+        throw new Error(detail ? `${data.error}: ${detail}` : (data.error ?? "checkout_failed"));
+      }
       window.location.href = data.url;
     } catch (e: any) {
       setError(e.message);

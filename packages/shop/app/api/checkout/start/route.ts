@@ -68,12 +68,35 @@ export async function POST(req: NextRequest) {
 
   const orderRef = `shop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const metadata = {
-    source:   "arcora-shop",
-    orderRef,
-    items:    body.items.map(i => ({ sku: i.sku, name: i.name, qty: i.qty, size: i.size, lineTotal: +(i.price * i.qty).toFixed(2) })),
-    shipping: a,
+  // Arcora's /api/invoices accepts `metadata: Record<string,string>` only —
+  // no nested objects or arrays. Flatten cart line items to a JSON-encoded
+  // string and shipping fields to flat shipping_* keys so the operator can
+  // read every order detail straight off /m/dashboard's invoice metadata
+  // view.
+  const itemsCompact = body.items.map(i => ({
+    sku:       i.sku,
+    name:      i.name,
+    qty:       i.qty,
+    size:      i.size,
+    lineTotal: +(i.price * i.qty).toFixed(2),
+  }));
+  const itemsSummary = body.items
+    .map(i => `${i.qty}× ${i.name}${i.size ? ` (${i.size})` : ""}`)
+    .join(", ");
+
+  const metadata: Record<string, string> = {
+    source:            "arcora-shop",
+    order_ref:         orderRef,
+    items_summary:     itemsSummary,
+    items_json:        JSON.stringify(itemsCompact),
+    shipping_email:    a.email,
+    shipping_name:     a.fullName,
+    shipping_line1:    a.line1,
+    shipping_city:     a.city,
+    shipping_postal:   a.postalCode,
+    shipping_country:  a.country,
   };
+  if (a.line2) metadata.shipping_line2 = a.line2;
 
   let arcoraRes: Response;
   try {

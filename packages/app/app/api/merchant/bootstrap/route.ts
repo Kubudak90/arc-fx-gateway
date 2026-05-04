@@ -6,6 +6,7 @@ import { merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateApiKey, hashApiKey } from "@/lib/auth/apikey";
 import { encrypt } from "@/lib/crypto/secret";
+import { assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { randomBytes } from "node:crypto";
 
 const Body = z.object({
@@ -22,6 +23,21 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "bad_body" }, { status: 400 });
+
+  // Audit pass 3 (2026-05-04): bootstrap previously stored any URL that
+  // passed `z.string().url()`, including localhost / RFC1918 / link-local
+  // addresses. The webhook daemon would later fetch them, exposing internal
+  // services. Same SSRF guard the merchant settings PATCH already runs.
+  if (parsed.data.webhookUrl) {
+    try {
+      await assertSafePublicUrl(parsed.data.webhookUrl);
+    } catch (e) {
+      return NextResponse.json({
+        error: "unsafe_webhook_url",
+        detail: e instanceof Error ? e.message : String(e),
+      }, { status: 400 });
+    }
+  }
 
   const apiKey = generateApiKey();
   const apiKeyHash = await hashApiKey(apiKey);

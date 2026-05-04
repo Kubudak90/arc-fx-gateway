@@ -19,7 +19,11 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const [busy, setBusy] = useState<"register" | "authorize" | null>(null);
-  const gateway = process.env.NEXT_PUBLIC_GATEWAY_ADDRESS as Address;
+  // Plan 9 default: invoices land on V9. Delegate auth must be set on the
+  // same gateway the relayer/server signs against, otherwise createInvoiceFor
+  // reverts with DelegateNotAuthorized. V6's NEXT_PUBLIC_GATEWAY_ADDRESS is
+  // kept for backwards-compat but isn't where new traffic goes.
+  const gateway = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V9 ?? process.env.NEXT_PUBLIC_GATEWAY_ADDRESS) as Address;
   const usdc = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;
 
   const { data: merchantInfo } = useReadContract({

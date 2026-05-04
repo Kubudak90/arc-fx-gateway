@@ -27,10 +27,13 @@ interface QuoteDisplayV8Props {
 }
 
 export function QuoteDisplayV8(props: QuoteDisplayV8Props) {
-  const [estimateOut, setEstimateOut] = useState<bigint | null>(null);
-  const [payInAmount, setPayInAmount] = useState<bigint | null>(null);
+  const sameToken = props.payInTokenAddress.toLowerCase() === props.payoutTokenAddress.toLowerCase();
+  const exactOut  = BigInt(props.amountOut);
+
+  const [estimateOut, setEstimateOut] = useState<bigint | null>(sameToken ? exactOut : null);
+  const [payInAmount, setPayInAmount] = useState<bigint | null>(sameToken ? exactOut : null);
   const [stale,   setStale]           = useState(false);
-  const [loading, setLoading]         = useState(true);
+  const [loading, setLoading]         = useState(!sameToken);
   const [error,   setError]           = useState<string | null>(null);
   const fetchedAt = useRef<number>(0);
   const ttlRef    = useRef<number>(30);
@@ -73,6 +76,15 @@ export function QuoteDisplayV8(props: QuoteDisplayV8Props) {
   }
 
   useEffect(() => {
+    if (sameToken) {
+      // Direct payment path — payInToken == payoutToken means no swap, no
+      // App Kit RFQ. Customer commits exactly amountOut; the relayer's
+      // settle path skips kit.swap on the same-token branch. Without this
+      // bypass the quote endpoint returns same_token 400 and the UI gets
+      // stuck with an estimated output of "same_token".
+      props.onQuote(exactOut, exactOut);
+      return;
+    }
     void fetchQuote();
     const t = setInterval(() => {
       const ageS = (Date.now() - fetchedAt.current) / 1000;
@@ -91,7 +103,14 @@ export function QuoteDisplayV8(props: QuoteDisplayV8Props) {
   return (
     <Card className={`rounded-2xl ${stale ? "border-arcora-blue" : "border-arcora-border"}`}>
       <CardContent className="p-6 space-y-3">
-        <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">You pay</div>
+        <div className="flex items-center justify-between">
+          <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">You pay</div>
+          {sameToken && (
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+              No swap
+            </span>
+          )}
+        </div>
         {loading && !payInAmount ? (
           <div className="h-8 w-32 rounded bg-arcora-gray animate-pulse" />
         ) : (

@@ -14,7 +14,7 @@ export const PRODUCTS: readonly Product[] = [
     name:    "Arcora Cap",
     tagline: "Embroidered logo, Pay-from-anywhere stitch",
     price:   9.99,
-    image:   "/products/cap.svg",
+    image:   "/products/cap.jpg",
     description:
       "Heavy 100% cotton twill, six-panel structured crown, brass slide buckle. Front embroidery in Arcora blue and teal; side embroidery reads Pay from anywhere.",
   },
@@ -23,7 +23,7 @@ export const PRODUCTS: readonly Product[] = [
     name:    "Arcora Tee",
     tagline: "Stablecoin Checkout & Settlement on Arc",
     price:   9.99,
-    image:   "/products/tee.svg",
+    image:   "/products/tee.jpg",
     sizes:   ["S", "M", "L", "XL"],
     description:
       "Mid-weight 220 gsm combed cotton, unisex cut. Small chest mark front, full lockup with strapline on the back. Pre-shrunk, machine washable.",
@@ -33,7 +33,7 @@ export const PRODUCTS: readonly Product[] = [
     name:    "Arcora Mug",
     tagline: "Ceramic, 11oz, full-color print",
     price:   9.99,
-    image:   "/products/mug.svg",
+    image:   "/products/mug.jpg",
     description:
       "Glossy white ceramic, dishwasher and microwave safe. Front carries the Arcora mark; opposite side has the horizontal lockup with the Stablecoin Checkout & Settlement on Arc strapline.",
   },

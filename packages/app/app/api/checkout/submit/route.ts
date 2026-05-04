@@ -1,25 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Address, Hex } from "viem";
 import { db } from "@/lib/db/client";
-import { invoices, relayerQueue } from "@/lib/db/schema";
+import { invoices, relayerQueue, checkoutAuthorizations } from "@/lib/db/schema";
 import { expectedWitnessHash } from "@/lib/checkout/witness";
+import { verifyPermit2Signature, ARC_TESTNET_CHAIN_ID } from "@/lib/checkout/permit2-verify";
 
 /**
  * v0.8 customer-side submit. The customer signs a Permit2 EIP-712 message
  * in their wallet (gas-less); the SDK POSTs it here. We validate, persist
  * to relayer_queue, and the daemon picks it up on its next tick.
  *
- * Hardening (audit P1, 2026-05-03):
- *  - Witness re-derivation: the witness hash sent in must equal the value we
- *    compute from (invoiceId, relayer). This locks the signed message to
- *    *our* relayer, so a griefer can't submit Permit2 messages signed for
- *    another spender against a public invoice id and waste relayer gas.
- *  - payInToken bind: must match the invoice's expected pay-in token.
- *  - amountIn bounds: positive, below a sanity cap, in base units.
- *  - Idempotency: reject if a queue row in pending/processing/settled state
- *    already exists for this invoice. Failed/refunded rows clear the lane.
+ * Audit pass 1 hardening (2026-05-04):
+ *  - Authorization required: an active (unconsumed, unexpired) row must
+ *    exist in `checkout_authorizations` for (invoice_id, payer). Closes
+ *    the frontend-only compliance gate bypass.
+ *  - Off-chain Permit2 signature recovery: we reconstruct the typed-data
+ *    server-side from bound parameters (chain id, our relayer, invoice id,
+ *    token, amount, nonce, deadline) and recover the signer. If recovery
+ *    doesn't match the claimed payer, reject — relayer never burns gas on
+ *    a forged sig.
+ *  - Min amountIn: amountIn must clear the floor recorded at authorize
+ *    time (same-token: invoice.amountOut; cross-token: 97% of server quote).
+ *    Closes the tiny-amount grief vector that wasted relayer gas at swap
+ *    or settle.
+ *  - Idempotency: relayer_queue has a partial unique index on (invoice_id)
+ *    over active statuses, so the unique-constraint violation on concurrent
+ *    submits maps to `duplicate_submission` instead of double-pulling.
+ *
+ * Pre-existing hardening (kept):
+ *  - Witness re-derivation: witness hash sent in must equal the value we
+ *    compute from (invoiceId, relayer).
+ *  - payInToken bind to invoice.
+ *  - amountIn sanity bounds.
  */
 
 const HEX = /^0x[0-9a-fA-F]+$/;
@@ -43,8 +57,6 @@ const SubmitBody = z.object({
 const RELAYER_ADDRESS = (process.env.NEXT_PUBLIC_RELAYER_ADDRESS ?? "") as Address;
 const MAX_AMOUNT_IN_BASE_UNITS = 10n ** 30n; // ~10^30, generous upper bound covers any sane stable transfer
 
-const ACTIVE_QUEUE_STATUSES = ["pending", "processing", "settled"] as const satisfies readonly ("pending" | "processing" | "settled")[];
-
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = SubmitBody.safeParse(body);
@@ -59,8 +71,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "permit_expired" }, { status: 400 });
   }
 
-  // amountIn must be positive and within a sane bound. Zod regex `^\d+$`
-  // allows zero — handle that here, and reject obviously-bogus huge values.
+  // amountIn must be positive and within a sane bound.
   let amountInBig: bigint;
   try {
     amountInBig = BigInt(amountIn);
@@ -71,9 +82,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "amount_in_out_of_range" }, { status: 400 });
   }
 
-  // Invoice must exist and be in `created` state. Anything else means
-  // either someone replayed an old invoice id or the indexer already moved
-  // it to paid/expired/refunded; either way we don't queue.
+  // Invoice must exist and be in `created` state.
   const invRows = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
   const inv = invRows[0];
   if (!inv) {
@@ -91,8 +100,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "pay_in_token_mismatch" }, { status: 400 });
   }
 
-  // Bind witness to (invoiceId, our relayer). If RELAYER_ADDRESS isn't set
-  // we can't validate — fail closed instead of accepting any witness.
+  // Bind witness to (invoiceId, our relayer). Fail closed if relayer not configured.
   if (!RELAYER_ADDRESS || !RELAYER_ADDRESS.startsWith("0x")) {
     return NextResponse.json({ error: "relayer_unconfigured" }, { status: 503 });
   }
@@ -101,37 +109,97 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "witness_mismatch" }, { status: 400 });
   }
 
-  // Idempotency: reject if a non-failed queue row already exists for this
-  // invoice. Customer should not submit twice; relayer would either retry
-  // their first attempt or settle from it. Failed/refunded rows clear the
-  // lane (they didn't settle, retry is welcome).
-  const existing = await db
-    .select({ id: relayerQueue.id, status: relayerQueue.status })
-    .from(relayerQueue)
+  // Authorization gate (audit pass 1 #2): require an unconsumed, unexpired
+  // checkout_authorizations row for (invoice, payer). The compliance check
+  // happened there; without an active row, the customer either skipped
+  // authorize or it returned review/reject — either way, no queueing.
+  const auth = (await db
+    .select()
+    .from(checkoutAuthorizations)
     .where(and(
-      eq(relayerQueue.invoiceId, invoiceId),
-      inArray(relayerQueue.status, ACTIVE_QUEUE_STATUSES),
+      eq(checkoutAuthorizations.invoiceId, invoiceId),
+      eq(checkoutAuthorizations.payer, payer.toLowerCase()),
+      isNull(checkoutAuthorizations.consumedAt),
+      gt(checkoutAuthorizations.expiresAt, new Date()),
     ))
-    .limit(1);
-  if (existing[0]) {
-    return NextResponse.json(
-      { error: "duplicate_submission", existingStatus: existing[0].status },
-      { status: 409 },
-    );
+    .orderBy(sql`${checkoutAuthorizations.createdAt} desc`)
+    .limit(1))[0];
+  if (!auth) {
+    return NextResponse.json({ error: "authorization_required" }, { status: 401 });
   }
 
-  // Insert the queue row. The relayer daemon claims it on its next tick
-  // (≤ RELAYER_TICK_MS, default 5s).
-  const inserted = await db.insert(relayerQueue).values({
-    invoiceId,
-    payer:            payer.toLowerCase(),
-    payInToken:       payInToken.toLowerCase(),
-    amountIn,
-    payoutToken:      inv.payoutToken,
-    amountOutMin:     inv.amountOut,
-    permit2Data,
-    permit2Signature,
-  }).returning({ id: relayerQueue.id });
+  // Min amountIn (audit pass 1 #4): customer's commit must clear the floor
+  // we recorded at authorize time. Same-token = exact invoice.amountOut;
+  // cross-token = 97% of the server's quote.
+  if (amountInBig < BigInt(auth.minAmountIn)) {
+    return NextResponse.json({
+      error: "amount_below_floor",
+      minAmountIn: auth.minAmountIn,
+    }, { status: 400 });
+  }
+
+  // Off-chain Permit2 signature recovery (audit pass 1 #1). Reconstruct the
+  // typed-data from server-bound parameters and verify the signer is the
+  // claimed payer. This is the load-bearing check — without it, a griefer
+  // could submit forged signatures and burn relayer gas in
+  // permitWitnessTransferFrom.
+  let sigOk = false;
+  try {
+    sigOk = await verifyPermit2Signature({
+      chainId:    ARC_TESTNET_CHAIN_ID,
+      invoiceId:  invoiceId as Hex,
+      payer:      payer as Address,
+      payInToken: inv.payInToken as Address,
+      amountIn:   amountInBig,
+      relayer:    RELAYER_ADDRESS,
+      nonce:      BigInt(permit2Data.nonce),
+      deadline:   BigInt(permit2Data.deadline),
+      signature:  permit2Signature as Hex,
+    });
+  } catch {
+    sigOk = false;
+  }
+  if (!sigOk) {
+    return NextResponse.json({ error: "signature_invalid" }, { status: 401 });
+  }
+
+  // Atomic auth-consume + queue insert. Two layers of race protection:
+  //   (a) UPDATE ... WHERE consumed_at IS NULL — only one writer wins.
+  //   (b) partial UNIQUE INDEX on relayer_queue (invoice_id) WHERE
+  //       status IN ('pending','processing','settled') — fallback even if
+  //       (a) somehow doesn't catch (e.g. multiple authorizations).
+  const consumed = await db
+    .update(checkoutAuthorizations)
+    .set({ consumedAt: new Date() })
+    .where(and(
+      eq(checkoutAuthorizations.id, auth.id),
+      isNull(checkoutAuthorizations.consumedAt),
+    ))
+    .returning({ id: checkoutAuthorizations.id });
+  if (consumed.length === 0) {
+    return NextResponse.json({ error: "authorization_consumed" }, { status: 409 });
+  }
+
+  let inserted: { id: string }[];
+  try {
+    inserted = await db.insert(relayerQueue).values({
+      invoiceId,
+      payer:            payer.toLowerCase(),
+      payInToken:       payInToken.toLowerCase(),
+      amountIn,
+      payoutToken:      inv.payoutToken,
+      amountOutMin:     inv.amountOut,
+      permit2Data,
+      permit2Signature,
+    }).returning({ id: relayerQueue.id });
+  } catch (e) {
+    // Partial unique index violation — concurrent submitter beat us.
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("uniq_relayer_queue_active_invoice")) {
+      return NextResponse.json({ error: "duplicate_submission" }, { status: 409 });
+    }
+    throw e;
+  }
 
   return NextResponse.json({
     submissionId: inserted[0]!.id,

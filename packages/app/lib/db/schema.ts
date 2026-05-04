@@ -116,6 +116,27 @@ export const complianceScreenings = pgTable("compliance_screenings", {
   index("idx_compliance_screenings_merchant").on(t.merchantId),
 ]);
 
+// Short-lived authorization row written by /api/checkout/authorize when
+// compliance returns `allow`. /api/checkout/submit fetches an unconsumed,
+// unexpired row for (invoice_id, payer) and consumes it atomically before
+// queueing the Permit2 message. Without this binding, a blocked wallet could
+// skip the React-side authorize call and POST to /submit directly — see audit
+// pass 1, finding #2.
+//
+// `min_amount_in` is the floor the customer's amountIn must meet. Same-token
+// invoices store invoice.amountOut here; cross-token store a server-issued
+// quote less a small slippage cushion.
+export const checkoutAuthorizations = pgTable("checkout_authorizations", {
+  id:           uuid("id").defaultRandom().primaryKey(),
+  invoiceId:    text("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  payer:        text("payer").notNull(),
+  payInToken:   text("pay_in_token").notNull(),
+  minAmountIn:  numeric("min_amount_in").notNull(),
+  expiresAt:    timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumedAt:   timestamp("consumed_at", { withTimezone: true }),
+  createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Queue of customer-signed Permit2 messages waiting for the Arcora relayer to
 // pull funds, run kit.swap, and settle the invoice. Producer: /api/checkout/submit.
 // Consumer: ops/relayer/run.ts.

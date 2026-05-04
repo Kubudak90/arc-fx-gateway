@@ -18,6 +18,15 @@ vi.mock("drizzle-orm", () => ({
   desc: (x: any) => x,
 }));
 
+// Server-side App Kit estimate — we never let it be invoked in these tests
+// (every invoice we set up uses same-token, which short-circuits the helper).
+vi.mock("@/lib/checkout/quote-server", () => ({
+  estimateSwapForTarget: vi.fn(async () => ({
+    recommendedPayInBaseUnits: 0n,
+    estimatedOutputBaseUnits:  0n,
+  })),
+}));
+
 const dbMod = await import("@/lib/db/client");
 const factoryMod = await import("@/lib/compliance/factory");
 const screenMod = await import("@/lib/compliance/screen");
@@ -26,7 +35,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.COMPLIANCE_FAIL_OPEN_FOR_PAY;
   // Default: invoice + merchant rows exist; webhook insert is a no-op.
-  // Tests that need different shapes override these directly.
+  // Same-token invoice (USDC pay-in, USDC payout) avoids the App Kit quote
+  // path. Tests that need different shapes override these directly.
   let selectCount = 0;
   (dbMod.db as any).select = () => ({
     from: () => ({
@@ -34,7 +44,14 @@ beforeEach(() => {
         limit: async () => {
           selectCount++;
           if (selectCount === 1) {
-            return [{ id: "0x" + "a".repeat(64), status: "created", merchantId: "00000000-0000-0000-0000-000000000001" }];
+            return [{
+              id:           "0x" + "a".repeat(64),
+              status:       "created",
+              merchantId:   "00000000-0000-0000-0000-000000000001",
+              payInToken:   "0x3600000000000000000000000000000000000000",
+              payoutToken:  "0x3600000000000000000000000000000000000000",
+              amountOut:    "100000000",
+            }];
           }
           return [{ webhookUrl: null }];
         },
@@ -120,7 +137,12 @@ describe("POST /api/checkout/authorize", () => {
         where: () => ({
           limit: async () => {
             selectCount++;
-            if (selectCount === 1) return [{ id: INV, status: "created", merchantId: "m-1" }];
+            if (selectCount === 1) return [{
+              id: INV, status: "created", merchantId: "m-1",
+              payInToken:  "0x3600000000000000000000000000000000000000",
+              payoutToken: "0x3600000000000000000000000000000000000000",
+              amountOut:   "100000000",
+            }];
             return [{ webhookUrl: "https://m.example/hook" }];
           },
         }),

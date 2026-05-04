@@ -49,10 +49,16 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
 
   async function copyLink() {
     if (!created) return;
-    await navigator.clipboard.writeText(created.url);
-    setCopied(true);
-    toast.success("Link copied");
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(created.url);
+      setCopied(true);
+      toast.success("Link copied");
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Insecure context or permission denied — surface the URL so the
+      // merchant can still grab it manually instead of silently failing.
+      toast.error("Couldn't copy automatically — select the link to copy manually");
+    }
   }
 
   async function shareLink() {

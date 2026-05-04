@@ -19,7 +19,7 @@ export default function RestApiDocs() {
       <h2><code>POST /api/invoices</code></h2>
       <p>Create an invoice and stage it on-chain.</p>
       <h3>Request</h3>
-      <pre><code>{`POST /api/invoices?engine=v8 HTTP/1.1
+      <pre><code>{`POST /api/invoices?engine=v9 HTTP/1.1
 Content-Type: application/json
 X-Arcora-Api-Key: ak_live_...
 
@@ -31,8 +31,9 @@ X-Arcora-Api-Key: ak_live_...
   "metadata":    { "orderId": "123" }
 }`}</code></pre>
       <p>
-        The <code>engine=v8</code> query selects the relayer-driven v0.8 gateway. Without it, invoices land on the legacy
-        v0.6 gateway (still live, no new traffic post-cutover).
+        The <code>engine</code> query selects the on-chain gateway: <code>v9</code> (default since
+        2026-05-03 — refund-source binding fix), <code>v8</code> (relayer-driven, kept for legacy
+        invoices), <code>v6</code> (read-only). Omit it and the API uses <code>v9</code>.
       </p>
 
       <h3>Response</h3>

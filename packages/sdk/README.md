@@ -128,7 +128,7 @@ try {
 
 ## Live demo
 
-[arc-fx-gateway.vercel.app](https://arc-fx-gateway.vercel.app) — pay in USDC or EURC on Arc testnet. Get test EURC from [faucet.circle.com](https://faucet.circle.com) (select Arc Testnet).
+[arcorapay.xyz](https://arcorapay.xyz) — pay in USDC or EURC on Arc testnet. Get test EURC from [faucet.circle.com](https://faucet.circle.com) (select Arc Testnet).
 
 ## Bundle
 

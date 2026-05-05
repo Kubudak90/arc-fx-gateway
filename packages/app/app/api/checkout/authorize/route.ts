@@ -50,6 +50,35 @@ function tokenSymbol(addr: string): "USDC" | "EURC" | null {
   return null;
 }
 
+/**
+ * Compute the floor amountIn the customer must commit. Used by both the
+ * normal allow path and the fail-open path so a fail-open cross-token
+ * invoice doesn't store inv.amountOut as the floor (in payoutToken units)
+ * which is unreachable from a payInToken commit and would force submit to
+ * always reject with amount_below_floor. Audit residual P2 (2026-05-05).
+ *
+ * Throws on unknown token or quote failure — caller decides whether to
+ * fail closed (normal path: 503) or fall through to a degraded reject
+ * (fail-open path: same 503 — there's no safe default for "compliance
+ * provider down AND quote provider down").
+ */
+async function calculateMinAmountIn(inv: { payInToken: string; payoutToken: string; amountOut: string }): Promise<bigint> {
+  if (inv.payInToken.toLowerCase() === inv.payoutToken.toLowerCase()) {
+    return BigInt(inv.amountOut);
+  }
+  const inSym  = tokenSymbol(inv.payInToken);
+  const outSym = tokenSymbol(inv.payoutToken);
+  if (!inSym || !outSym) {
+    throw new Error("unknown_token");
+  }
+  const q = await estimateSwapForTarget({
+    payInToken:  inSym,
+    payoutToken: outSym,
+    targetOutputBaseUnits: BigInt(inv.amountOut),
+  });
+  return q.recommendedPayInBaseUnits;
+}
+
 export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -71,18 +100,23 @@ export async function POST(req: NextRequest) {
     });
   } catch {
     if (envFlag("COMPLIANCE_FAIL_OPEN_FOR_PAY")) {
-      // Audit residual P2 (2026-05-05): fail-open used to return decision:
-      // allow without persisting a checkout_authorizations row, so the
-      // frontend started the Permit2 sign flow but submit then rejected
-      // with authorization_required. If we're committing to fail-open, the
-      // auth row must follow. Same-token uses the merchant floor exactly;
-      // cross-token in degraded compliance mode also uses the merchant
-      // floor as a conservative grief-resistant minimum (effectively
-      // "customer must commit at least amountOut units regardless of
-      // token") rather than calling the App Kit estimator while the
-      // compliance provider is already failing.
-      const minAmountIn = BigInt(inv.amountOut);
-      const expiresAt   = new Date(Date.now() + AUTH_TTL_MINUTES * 60_000);
+      // Audit residual P2 (2026-05-05): fail-open path computes the SAME
+      // minAmountIn as the normal allow path — for cross-token, that means
+      // hitting the App Kit estimator. If the quote also fails, we can't
+      // return a usable allow (submit would reject every commit with
+      // amount_below_floor); fall through to the same 503 reject the
+      // normal compliance-only failure produces.
+      let minAmountIn: bigint;
+      try {
+        minAmountIn = await calculateMinAmountIn(inv);
+      } catch {
+        return NextResponse.json({
+          decision: "reject",
+          code: "PROVIDER_UNAVAILABLE",
+          reason: "Compliance and quote providers are currently unavailable. Please try again shortly.",
+        }, { status: 503 });
+      }
+      const expiresAt = new Date(Date.now() + AUTH_TTL_MINUTES * 60_000);
       try {
         await db.insert(checkoutAuthorizations).values({
           invoiceId,
@@ -92,15 +126,14 @@ export async function POST(req: NextRequest) {
           expiresAt,
         });
       } catch {
-        // Persist failure shouldn't reverse the fail-open decision; surface
-        // unverified state to the SDK so it knows submit will refuse.
+        // Persist failed too — fail-open without a queueable authorization
+        // is a soft-deny anyway. Surface as reject so the frontend doesn't
+        // start a sign flow that submit would only reject.
         return NextResponse.json({
-          decision: "allow",
-          providerDegraded: true,
-          authorizationPersisted: false,
-          screenedAt: new Date().toISOString(),
-          ttlSeconds: 0,
-        }, { status: 200 });
+          decision: "reject",
+          code: "PROVIDER_UNAVAILABLE",
+          reason: "Authorization could not be persisted. Please try again shortly.",
+        }, { status: 503 });
       }
       return NextResponse.json({
         decision: "allow",
@@ -119,43 +152,22 @@ export async function POST(req: NextRequest) {
   }
 
   if (result.decision === "allow") {
-    // Compute min_amount_in. Same-token: customer commits exactly amountOut.
-    // Cross-token: estimate server-side, take 97% as the floor (rates can
-    // drift up between authorize and signing without exceeding 3% in
-    // testnet windows; mainnet RFQ is tighter still).
+    // Compute floor via the shared helper — same logic the fail-open path
+    // uses. Audit residual: previously the two paths diverged (fail-open
+    // used inv.amountOut for cross-token, which is the merchant floor in
+    // the wrong token).
     let minAmountIn: bigint;
-    if (inv.payInToken.toLowerCase() === inv.payoutToken.toLowerCase()) {
-      minAmountIn = BigInt(inv.amountOut);
-    } else {
-      const inSym  = tokenSymbol(inv.payInToken);
-      const outSym = tokenSymbol(inv.payoutToken);
-      if (!inSym || !outSym) {
-        // Unknown token — can't quote. Fail closed; merchants on testnet
-        // are USDC/EURC only.
+    try {
+      minAmountIn = await calculateMinAmountIn(inv);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === "unknown_token") {
         return NextResponse.json({ error: "unknown_token", payInToken: inv.payInToken }, { status: 503 });
       }
-      try {
-        const q = await estimateSwapForTarget({
-          payInToken:  inSym,
-          payoutToken: outSym,
-          targetOutputBaseUnits: BigInt(inv.amountOut),
-        });
-        // Audit residual P1 (2026-05-05): the floor is the recommended
-        // payIn exactly. Previous version stored 0.97 × recommended as a
-        // "rate-drift cushion" but recommended already bakes in 250 bps
-        // of slippage; accepting 0.97 of that lands the post-swap output
-        // below merchant floor (0.97 × 1.025 = 0.99425) and recreates the
-        // tiny-amount grief Finding #4 was meant to close. Rate movement
-        // upward is handled by quote refresh (TTL ~30s); customers commit
-        // ≥ recommended or refetch. Movement downward is favourable, so a
-        // sub-recommended commit only ever hurts the merchant.
-        minAmountIn = q.recommendedPayInBaseUnits;
-      } catch (e) {
-        return NextResponse.json({
-          error: "quote_unavailable",
-          message: e instanceof Error ? e.message : String(e),
-        }, { status: 502 });
-      }
+      return NextResponse.json({
+        error: "quote_unavailable",
+        message: msg,
+      }, { status: 502 });
     }
 
     const expiresAt = new Date(Date.now() + AUTH_TTL_MINUTES * 60_000);

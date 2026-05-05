@@ -34,6 +34,15 @@ export function useComplianceGate(invoiceId: string, address: string | undefined
         const body = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (body?.decision === "allow") {
+          // Audit residual P2 (2026-05-05): a `decision: allow` response
+          // without minAmountIn means the server couldn't persist a
+          // checkout_authorizations row (or returned a malformed allow).
+          // Submit would reject with authorization_required, so don't let
+          // the customer start the Permit2 sign flow.
+          if (typeof body.minAmountIn !== "string") {
+            setState({ status: "error", reason: "authorization_not_persisted" });
+            return;
+          }
           setState({ status: "allow" });
         } else if (body?.decision === "review") {
           setState({ status: "review", ticketId: body.ticketId, reason: body.reason });

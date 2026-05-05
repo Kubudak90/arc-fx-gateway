@@ -36,7 +36,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
     items: [
       { href: "/docs/deployment", label: "Self-host" },
       { href: "/docs/compliance", label: "Compliance" },
-      { href: "/docs/migration", label: "Migration · v0.6 → v0.8" },
+      { href: "/docs/migration", label: "Migration · v0.6 → v0.9" },
     ],
   },
 ];

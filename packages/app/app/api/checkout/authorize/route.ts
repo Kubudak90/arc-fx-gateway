@@ -71,11 +71,44 @@ export async function POST(req: NextRequest) {
     });
   } catch {
     if (envFlag("COMPLIANCE_FAIL_OPEN_FOR_PAY")) {
+      // Audit residual P2 (2026-05-05): fail-open used to return decision:
+      // allow without persisting a checkout_authorizations row, so the
+      // frontend started the Permit2 sign flow but submit then rejected
+      // with authorization_required. If we're committing to fail-open, the
+      // auth row must follow. Same-token uses the merchant floor exactly;
+      // cross-token in degraded compliance mode also uses the merchant
+      // floor as a conservative grief-resistant minimum (effectively
+      // "customer must commit at least amountOut units regardless of
+      // token") rather than calling the App Kit estimator while the
+      // compliance provider is already failing.
+      const minAmountIn = BigInt(inv.amountOut);
+      const expiresAt   = new Date(Date.now() + AUTH_TTL_MINUTES * 60_000);
+      try {
+        await db.insert(checkoutAuthorizations).values({
+          invoiceId,
+          payer:        address.toLowerCase(),
+          payInToken:   inv.payInToken.toLowerCase(),
+          minAmountIn:  minAmountIn.toString(),
+          expiresAt,
+        });
+      } catch {
+        // Persist failure shouldn't reverse the fail-open decision; surface
+        // unverified state to the SDK so it knows submit will refuse.
+        return NextResponse.json({
+          decision: "allow",
+          providerDegraded: true,
+          authorizationPersisted: false,
+          screenedAt: new Date().toISOString(),
+          ttlSeconds: 0,
+        }, { status: 200 });
+      }
       return NextResponse.json({
         decision: "allow",
         providerDegraded: true,
         screenedAt: new Date().toISOString(),
         ttlSeconds: 0,
+        minAmountIn: minAmountIn.toString(),
+        authorizationExpiresAt: expiresAt.toISOString(),
       }, { status: 200 });
     }
     return NextResponse.json({

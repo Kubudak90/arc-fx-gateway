@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Arcora, ArcoraError } from "@arcora/sdk";
 
-const API_BASE = (import.meta.env.VITE_ARC_BASE_URL ?? "https://arc-fx-gateway.vercel.app").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_ARC_BASE_URL ?? "https://arcorapay.xyz").replace(/\/$/, "");
 const API_KEY  = import.meta.env.VITE_ARC_API_KEY ?? "";
 
 Arcora.init({ apiKey: API_KEY, baseUrl: API_BASE });

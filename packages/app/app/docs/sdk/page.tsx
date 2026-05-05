@@ -31,7 +31,7 @@ export default function SdkDocs() {
 const arcora = new Arcora({
   apiKey:  string,            // required — created at /m/settings
   baseUrl?: string,           // default 'https://arcorapay.xyz'
-  engine?: 'v6' | 'v8',       // default 'v6'; opt into the relayer-driven v0.8 path with 'v8'
+  engine?: 'v6' | 'v8' | 'v9', // default 'v9' (Plan 9 — refund-source binding); 'v8' for the legacy relayer path, 'v6' for the on-chain swap pool
 });`}</code></pre>
 
       <h3><code>arcora.createInvoice(input)</code></h3>

@@ -159,6 +159,12 @@ export const relayerQueue = pgTable("relayer_queue", {
   // Permit2 InvalidNonce). Audit pass 2 / finding #3, 2026-05-04.
   permit2TxHash: text("permit2_tx_hash"),
   swapTxHash: text("swap_tx_hash"),
+  // Exact kit.swap output (decimal string, base units of payoutToken). Stored
+  // alongside swap_tx_hash so a stage-aware resume can use the real gross
+  // payout instead of falling back to the merchant floor — surplus would
+  // otherwise sit silently in the relayer hot wallet. Audit residual P2,
+  // 2026-05-05.
+  swapAmountOut: numeric("swap_amount_out"),
   settleTxHash: text("settle_tx_hash"),
   refundTxHash: text("refund_tx_hash"),
   nextAttempt: timestamp("next_attempt", { withTimezone: true }).notNull().defaultNow(),

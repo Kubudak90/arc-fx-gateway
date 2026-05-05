@@ -105,6 +105,10 @@ type QueueRow = {
   // them on reclaim so processOne knows where to resume. Audit P1 #3.
   permit2_tx_hash: string | null;
   swap_tx_hash:    string | null;
+  /** Exact kit.swap amountOut in base units of payoutToken — persisted
+   *  alongside swap_tx_hash so resume can use the real gross instead of
+   *  conservatively settling at the merchant floor. Audit residual 2026-05-05. */
+  swap_amount_out: string | null;
   settle_tx_hash:  string | null;
   refund_tx_hash:  string | null;
 };
@@ -153,7 +157,8 @@ function claimSql(where: string): string {
              )
              returning id, invoice_id, payer, pay_in_token, amount_in, payout_token,
                        amount_out_min, permit2_data, permit2_signature, attempts,
-                       permit2_tx_hash, swap_tx_hash, settle_tx_hash, refund_tx_hash
+                       permit2_tx_hash, swap_tx_hash, swap_amount_out,
+                       settle_tx_hash, refund_tx_hash
           )
           select c.*, i.gateway_address
             from claimed c
@@ -201,10 +206,12 @@ async function persistPermit2Tx(id: string, tx: Hex): Promise<void> {
   );
 }
 
-async function persistSwapTx(id: string, tx: Hex): Promise<void> {
+async function persistSwapTx(id: string, tx: Hex, amountOutBaseUnits: bigint): Promise<void> {
   await pool.query(
-    `update relayer_queue set swap_tx_hash = $2, updated_at = now() where id = $1`,
-    [id, tx],
+    `update relayer_queue
+        set swap_tx_hash = $2, swap_amount_out = $3, updated_at = now()
+      where id = $1`,
+    [id, tx, amountOutBaseUnits.toString()],
   );
 }
 
@@ -270,10 +277,21 @@ async function reschedule(id: string, lastError: string, attempts: number): Prom
 
 // ── On-chain step helpers ───────────────────────────────────────────
 
-async function pullViaPermit2(row: QueueRow): Promise<Hex> {
+async function pullViaPermit2(
+  row: QueueRow,
+  onBroadcast: (tx: Hex) => Promise<void>,
+): Promise<Hex> {
   // Permit2 permitWitnessTransferFrom: pulls amountIn of payInToken from
   // payer → relayer wallet, atomically validating the customer's signature
   // and the witness binding.
+  //
+  // Audit residual P2 (2026-05-05): persist permit2_tx_hash via
+  // onBroadcast() the moment writeContract returns, before awaiting the
+  // receipt — same pattern as callSettle. A daemon crash in the
+  // receipt-await window used to lose the hash; reclaim then re-issued
+  // permitWitnessTransferFrom against an already-spent nonce → InvalidNonce
+  // → markFailed/manual-reconciliation, with the customer's payIn already
+  // in the relayer wallet.
   const tx = await wallet.writeContract({
     chain: undefined,
     address: PERMIT2 as Address,
@@ -298,6 +316,7 @@ async function pullViaPermit2(row: QueueRow): Promise<Hex> {
       row.permit2_signature,
     ],
   });
+  await onBroadcast(tx);
   await chain.waitForTransactionReceipt({ hash: tx });
   return tx;
 }
@@ -461,9 +480,10 @@ async function processOne(row: QueueRow): Promise<void> {
   // pulled — Permit2 nonce is consumed on-chain, retrying would revert).
   if (!row.permit2_tx_hash) {
     try {
-      const pullTx = await pullViaPermit2(row);
-      await persistPermit2Tx(row.id, pullTx);
-      row.permit2_tx_hash = pullTx;
+      const pullTx = await pullViaPermit2(row, async (tx) => {
+        await persistPermit2Tx(row.id, tx);
+        row.permit2_tx_hash = tx;
+      });
       log("info", { msg: "permit2.ok", tx: pullTx });
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
@@ -500,21 +520,31 @@ async function processOne(row: QueueRow): Promise<void> {
     swapTxHash  = ZERO_HASH;
     log("info", { msg: "swap.skip", reason: "same-token", grossPayout: grossPayout.toString() });
   } else if (row.swap_tx_hash) {
-    // Resumed after swap — kit.swap was called and persisted, but settle
-    // didn't complete (or didn't get marked). We don't have the kit.swap
-    // amountOut in memory anymore. Use the merchant floor (amount_out_min)
-    // as a conservative grossPayout: settle will pull exactly that, the
-    // surplus stays in the relayer wallet (existing fee-bucket territory).
+    // Resumed after swap — kit.swap was called and persisted. Audit
+    // residual P2 (2026-05-05): the prior approach defaulted grossPayout
+    // to amount_out_min when resuming, which left swap surplus stranded
+    // in the relayer wallet (no protocolFeesAccrued credit). Now we use
+    // the persisted swap_amount_out for an exact resume; legacy rows
+    // written before the column landed fall back to the conservative
+    // floor (one-time during the migration window).
     swapTxHash  = row.swap_tx_hash as Hex;
-    grossPayout = BigInt(row.amount_out_min);
-    log("info", { msg: "swap.skip", reason: "already-swapped", tx: swapTxHash, conservativeGross: grossPayout.toString() });
+    grossPayout = row.swap_amount_out
+      ? BigInt(row.swap_amount_out)
+      : BigInt(row.amount_out_min);
+    log("info", {
+      msg: "swap.skip", reason: "already-swapped",
+      tx: swapTxHash,
+      grossPayout: grossPayout.toString(),
+      source: row.swap_amount_out ? "persisted" : "legacy-floor",
+    });
   } else {
     try {
       const swap = await runSwap(row);
-      await persistSwapTx(row.id, swap.txHash);
-      row.swap_tx_hash = swap.txHash;
       grossPayout = parseHumanAmount(swap.amountOut, 6);
       swapTxHash  = swap.txHash;
+      await persistSwapTx(row.id, swap.txHash, grossPayout);
+      row.swap_tx_hash    = swap.txHash;
+      row.swap_amount_out = grossPayout.toString();
       log("info", { msg: "swap.ok", tx: swap.txHash, amountOut: swap.amountOut });
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);

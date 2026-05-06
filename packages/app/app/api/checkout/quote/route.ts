@@ -4,6 +4,22 @@ import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import { generatePrivateKey } from "viem/accounts";
 import { quoteAmountIn } from "@/lib/checkout/quote-server";
+import { takeToken } from "@/lib/rate/limiter";
+
+/**
+ * Per-IP rate limit protecting the App Kit KIT_KEY quota. Each client IP may
+ * call at most 30 times per 60-second window. Fail-open: if the limiter's
+ * Postgres backend is unreachable, we allow the request rather than blocking
+ * all callers. Audit L7 (2026-05-06).
+ */
+const QUOTE_LIMIT = 30;
+const QUOTE_WINDOW_SECONDS = 60;
+
+function clientIp(req: NextRequest): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0]!.trim();
+  return req.headers.get("x-real-ip") ?? "unknown";
+}
 
 const STABLE_DECIMALS = 6;
 
@@ -69,6 +85,22 @@ function getAdapter() {
 const kit = new AppKit();
 
 export async function POST(req: NextRequest) {
+  // Audit L7: rate-limit per-IP to protect KIT_KEY quota from abuse.
+  const ip = clientIp(req);
+  let allowed = true;
+  try {
+    allowed = await takeToken(`quote:${ip}`, QUOTE_LIMIT, QUOTE_WINDOW_SECONDS);
+  } catch {
+    // Fail-open: limiter outage shouldn't block legitimate traffic.
+    allowed = true;
+  }
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "rate_limited", retryAfterSeconds: QUOTE_WINDOW_SECONDS },
+      { status: 429, headers: { "retry-after": String(QUOTE_WINDOW_SECONDS) } },
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = Q.safeParse(body);
   if (!parsed.success) {

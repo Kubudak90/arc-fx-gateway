@@ -9,9 +9,15 @@ import { encrypt } from "@/lib/crypto/secret";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { randomBytes } from "node:crypto";
 
+// Audit H1 (2026-05-05): merchant must declare which origins may receive
+// customers after a successful payment. We persist `new URL(...).origin`
+// (scheme+host+port only) so /api/invoices can validate successUrl/cancelUrl
+// at create-time and the checkout client can re-check before redirecting.
+// See packages/app/lib/security/safeUrl.ts#assertOriginAllowed.
 const Body = z.object({
   payoutToken: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
   webhookUrl: z.string().url().optional(),
+  allowedOrigins: z.array(z.string().url()).min(1).max(20),
 });
 
 export async function POST(req: NextRequest) {
@@ -39,6 +45,18 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Normalize each allowedOrigin to scheme+host[:port] only — anything
+  // beyond `URL.origin` (path, query, fragment) is meaningless for the
+  // post-payment redirect check and only invites footguns later.
+  let allowedOrigins: string[];
+  try {
+    allowedOrigins = Array.from(
+      new Set(parsed.data.allowedOrigins.map((u) => new URL(u).origin)),
+    );
+  } catch {
+    return NextResponse.json({ error: "bad_body" }, { status: 400 });
+  }
+
   const apiKey = generateApiKey();
   const apiKeyHash = await hashApiKey(apiKey);
   const webhookSecret = "whsec_" + randomBytes(32).toString("hex");
@@ -50,6 +68,7 @@ export async function POST(req: NextRequest) {
     webhookUrl: parsed.data.webhookUrl ?? null,
     apiKeyHash,
     apiKeyPrefix: apiKey.slice(0, PREFIX_LEN),
+    allowedOrigins,
     webhookSecretEnc: ciphertext,
     webhookSecretIv: iv,
   });

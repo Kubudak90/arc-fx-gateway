@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/internal/cron/h4-allowance-check", "schedule": "0 * * * *" }
+  ]
+}

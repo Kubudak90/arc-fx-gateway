@@ -3,6 +3,23 @@ import { z } from "zod";
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import { generatePrivateKey } from "viem/accounts";
+import { quoteAmountIn } from "@/lib/checkout/quote-server";
+
+const STABLE_DECIMALS = 6;
+
+function parseHuman(amount: string, decimals: number): bigint {
+  const [whole = "0", fracRaw = ""] = amount.split(".");
+  const frac = fracRaw.padEnd(decimals, "0").slice(0, decimals);
+  return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(frac || "0");
+}
+
+function humanize(baseUnits: bigint, decimals: number): string {
+  const scale = 10n ** BigInt(decimals);
+  const whole = baseUnits / scale;
+  const frac  = (baseUnits % scale).toString().padStart(decimals, "0");
+  // Always pad to fixed decimals so App Kit gets a deterministic string.
+  return `${whole}.${frac}`;
+}
 
 /**
  * v0.8 quote endpoint. Uses Circle's App Kit Swap to fetch a real RFQ quote
@@ -94,16 +111,21 @@ export async function POST(req: NextRequest) {
       });
       const probeOut = (probe as { estimatedOutput?: { amount: string } }).estimatedOutput?.amount;
       if (!probeOut) throw new Error("probe quote returned no estimatedOutput");
-      // amountIn = targetOutput / rate, where rate = probeOut/1.0
-      const target  = parseFloat(targetOutput);
-      const rate    = parseFloat(probeOut);
+      // amountIn = targetOutput / rate, where rate = probeOut/1.0.
       // Default cushion 250 bps — covers RFQ rate drift between probe and
       // actual execution. (Was 100 bps; bumped after settle reverts under
       // adverse rate movement on testnet.)
-      const buffer  = 1 + (slippageBps ?? 250) / 10_000;
-      // Round up to 6 decimals so we never quote below what's needed.
-      const recommended = Math.ceil((target / rate * buffer) * 1_000_000) / 1_000_000;
-      resolvedAmountIn = recommended.toFixed(6);
+      // Computed via the canonical BigInt helper shared with quote-server.ts
+      // so the HTTP path and the server-side authorize path agree to the
+      // base unit (M11).
+      const recommendedBase = quoteAmountIn({
+        targetBaseUnits: parseHuman(targetOutput, STABLE_DECIMALS),
+        rateScaled1e18:  parseHuman(probeOut, 18),
+        bufferBps:       BigInt(slippageBps ?? 250),
+        payInDecimals:   STABLE_DECIMALS,
+        payoutDecimals:  STABLE_DECIMALS,
+      });
+      resolvedAmountIn = humanize(recommendedBase, STABLE_DECIMALS);
     }
 
     if (!resolvedAmountIn) {

@@ -39,6 +39,47 @@ function parseHuman(amount: string, decimals: number): bigint {
   return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(frac || "0");
 }
 
+/**
+ * Canonical pay-in computation for a given payout target. BigInt-only —
+ * NEVER use floats for money math. Rounded UP so we never under-quote.
+ *
+ * Inputs:
+ *   - `targetBaseUnits`: payout-token amount the merchant wants delivered,
+ *     in payout-token base units (e.g. 1.5 USDC = 1_500_000n at 6dp).
+ *   - `rateScaled1e18`:  payout-per-1.0-pay-in ratio, scaled by 1e18. So
+ *     for a probe quote that returns "1.085000" payout per 1.0 pay-in, this
+ *     is `1085000000000000000n`. (Match the way `parseHuman(probeOut, 18)`
+ *     would scale a stringified ratio.)
+ *   - `bufferBps`:       slippage cushion, e.g. 250n for 2.5%.
+ *   - `payInDecimals`/`payoutDecimals`: token decimals for the two sides.
+ *
+ * Returns the recommended pay-in in pay-in-token base units, rounded up.
+ *
+ * Used by BOTH `lib/checkout/quote-server.ts` (server-side authorize path)
+ * AND `app/api/checkout/quote/route.ts` (HTTP quote endpoint) so callers
+ * cannot disagree by ±1 base unit. Audit M11.
+ */
+export function quoteAmountIn(args: {
+  targetBaseUnits:  bigint;
+  rateScaled1e18:   bigint;
+  bufferBps:        bigint;
+  payInDecimals:    number;
+  payoutDecimals:   number;
+}): bigint {
+  if (args.rateScaled1e18 <= 0n) throw new Error("rateScaled1e18 must be > 0");
+  // recBase = targetBase * 1e18 * 10^payInDec * (10000+buf) / (10^payoutDec * rateScaled * 10000)
+  const num =
+    args.targetBaseUnits *
+    10n ** 18n *
+    10n ** BigInt(args.payInDecimals) *
+    (10_000n + args.bufferBps);
+  const den =
+    10n ** BigInt(args.payoutDecimals) *
+    args.rateScaled1e18 *
+    10_000n;
+  return (num + den - 1n) / den; // ceil
+}
+
 export interface ServerQuoteParams {
   payInToken:           "USDC" | "EURC";
   payoutToken:          "USDC" | "EURC";
@@ -76,12 +117,17 @@ export async function estimateSwapForTarget(params: ServerQuoteParams): Promise<
   const probeOut = (probe as { estimatedOutput?: { amount: string } }).estimatedOutput?.amount;
   if (!probeOut) throw new Error("probe quote returned no estimatedOutput");
 
-  const targetHuman = humanize(params.targetOutputBaseUnits, STABLE_DECIMALS);
-  const target = parseFloat(targetHuman);
-  const rate   = parseFloat(probeOut);
-  const buffer = 1 + (params.slippageBps ?? 250) / 10_000;
-  const recommendedHuman = (target / rate * buffer).toFixed(STABLE_DECIMALS);
-  const recommended = parseHuman(recommendedHuman, STABLE_DECIMALS);
+  // BigInt-only quote rounding. Same helper used by /api/checkout/quote
+  // (HTTP) so the route handler and the authorize path agree to the unit.
+  // Audit M11.
+  const recommended = quoteAmountIn({
+    targetBaseUnits: params.targetOutputBaseUnits,
+    rateScaled1e18:  parseHuman(probeOut, 18),
+    bufferBps:       BigInt(params.slippageBps ?? 250),
+    payInDecimals:   STABLE_DECIMALS,
+    payoutDecimals:  STABLE_DECIMALS,
+  });
+  const recommendedHuman = humanize(recommended, STABLE_DECIMALS);
 
   // Run a second estimate with the resolved amountIn for the estimated output.
   const final = await kit.estimateSwap({

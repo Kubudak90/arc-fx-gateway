@@ -7,9 +7,11 @@ vi.mock("@arcora/sdk", () => {
   const ArcoraMock: any = vi.fn(function(this: any, opts: any) { this.options = opts; });
   ArcoraMock.prototype.createInvoice = vi.fn();
   ArcoraMock.prototype.openCheckout = vi.fn();
+  ArcoraMock.prototype.escrows = vi.fn();
   ArcoraMock.init = vi.fn();
   ArcoraMock.createInvoice = vi.fn();
   ArcoraMock.openCheckout = vi.fn();
+  ArcoraMock.escrows = vi.fn();
   return {
     Arcora: ArcoraMock,
     ArcoraError: class extends Error { code = "TEST"; },
@@ -49,5 +51,25 @@ describe("useCheckout", () => {
     const b = renderHook(() => useCheckout({ apiKey: "ak_B", baseUrl: "http://b" }));
     // useMemo deps include apiKey + baseUrl, so each gets its own Arcora instance
     expect(a.result.current.checkout).not.toBe(b.result.current.checkout);
+  });
+
+  it("refundEndsAt is null before any checkout", () => {
+    const { result } = renderHook(() => useCheckout({ apiKey: "ak_x" }));
+    expect(result.current.refundEndsAt).toBeNull();
+  });
+
+  it("refundEndsAt is a Date when invoice has claimableAt", async () => {
+    const claimableAt = "2026-05-10T00:00:00Z";
+    (Arcora.prototype.createInvoice as any).mockResolvedValue({
+      invoiceId: "0x1",
+      url: "https://x/i/1",
+      claimableAt,
+    });
+    const { result } = renderHook(() => useCheckout({ apiKey: "ak_x" }));
+    await act(async () => {
+      await result.current.checkout({ amountUsdc: 1, payInToken: "EURC", successUrl: "https://m" });
+    });
+    expect(result.current.refundEndsAt).toBeInstanceOf(Date);
+    expect(result.current.refundEndsAt?.toISOString()).toBe(new Date(claimableAt).toISOString());
   });
 });

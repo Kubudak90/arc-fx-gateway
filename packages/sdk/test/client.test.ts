@@ -72,3 +72,21 @@ describe("Arcora.openCheckout", () => {
     expect(setHref).toHaveBeenCalledWith("https://checkout.arcorapay.com/i/0xabc");
   });
 });
+
+describe("new Arcora() — instance pattern", () => {
+  it("two instances do not share apiKey state", () => {
+    const a = new Arcora({ apiKey: "ak_test_A", environment: "testnet" });
+    const b = new Arcora({ apiKey: "ak_test_B", environment: "testnet" });
+    expect(a.options.apiKey).not.toBe(b.options.apiKey);
+  });
+
+  it("createInvoice on instance uses that instance's apiKey", async () => {
+    (globalThis.fetch as any).mockResolvedValue(
+      new Response(JSON.stringify({ invoiceId: "0xabc", url: "https://x" }), { status: 201, headers: { "content-type": "application/json" } })
+    );
+    const a = new Arcora({ apiKey: "ak_instance_A", environment: "testnet" });
+    await a.createInvoice({ amountUsdc: 1, payInToken: "EURC", successUrl: "https://m.test" });
+    const call = (globalThis.fetch as any).mock.calls[0];
+    expect(call[1].headers["X-Arcora-Api-Key"]).toBe("ak_instance_A");
+  });
+});

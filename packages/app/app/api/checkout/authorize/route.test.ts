@@ -15,6 +15,7 @@ vi.mock("drizzle-orm", () => ({
   and: (...args: any[]) => args,
   eq:  (a: any, b: any) => ({ a, b }),
   gt:  (a: any, b: any) => ({ a, b }),
+  isNull: (a: any) => ({ a }),
   desc: (x: any) => x,
 }));
 
@@ -59,7 +60,16 @@ beforeEach(() => {
     }),
   });
   (dbMod.db as any).insert = () => ({
-    values: vi.fn().mockResolvedValue(undefined),
+    values: (row: any) => ({
+      // .returning() shape used by insertOrFetchAuth (M10 idempotent insert)
+      returning: vi.fn().mockResolvedValue([{
+        id: "auth-1",
+        minAmountIn: row?.minAmountIn ?? "0",
+        expiresAt: row?.expiresAt ?? new Date(),
+      }]),
+      onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+      then: (resolve: any) => Promise.resolve(undefined).then(resolve),
+    }),
   });
 });
 
@@ -180,6 +190,84 @@ describe("POST /api/checkout/authorize", () => {
     expect(res.status).toBe(503);
     expect(body.decision).toBe("reject");
     expect(body.code).toBe("PROVIDER_UNAVAILABLE");
+  });
+
+  it("repeat authorize from same payer returns existing unconsumed row (M10 idempotency)", async () => {
+    // Simulate the second insert hitting the partial UNIQUE index
+    // (idx_checkout_auth_active). The route MUST swallow the 23505 and
+    // return the existing unconsumed row's id rather than 5xx-ing the user.
+    let invoiceLookups = 0;
+    (dbMod.db as any).select = () => ({
+      from: () => ({
+        where: () => ({
+          limit: async () => {
+            invoiceLookups++;
+            // First select: invoice. Second-and-on: existing unconsumed auth row.
+            if (invoiceLookups === 1) {
+              return [{
+                id: INV, status: "created", merchantId: "m-1",
+                payInToken:  "0x3600000000000000000000000000000000000000",
+                payoutToken: "0x3600000000000000000000000000000000000000",
+                amountOut:   "100000000",
+              }];
+            }
+            // The fallback fetch in insertOrFetchAuth.
+            return [{
+              id: "auth-existing-1",
+              minAmountIn: "100000000",
+              expiresAt: new Date(Date.now() + 5 * 60_000),
+            }];
+          },
+        }),
+      }),
+    });
+
+    // First insert succeeds; second insert throws 23505. Both flows must
+    // return decision=allow with the same id.
+    const calls: any[] = [];
+    let attempt = 0;
+    (dbMod.db as any).insert = () => ({
+      values: (row: any) => {
+        calls.push(row);
+        return {
+          returning: vi.fn().mockImplementation(async () => {
+            attempt++;
+            if (attempt === 1) {
+              return [{
+                id: "auth-existing-1",
+                minAmountIn: row.minAmountIn,
+                expiresAt: row.expiresAt,
+              }];
+            }
+            const e: any = new Error("duplicate key value violates unique constraint");
+            e.code = "23505";
+            throw e;
+          }),
+          onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+        };
+      },
+    });
+
+    (factoryMod.resolveComplianceProvider as any).mockReturnValue({ name: "noop" });
+    (screenMod.screenWithAudit as any).mockResolvedValue({
+      decision: "allow", risk: "low", ticketId: null, ttlSeconds: 86400,
+      cachedAt: new Date(), reasons: [], providerSnapshot: {}, rowId: "r1", cached: false,
+    });
+
+    const r1 = await POST(req({ invoiceId: INV, address: ADDR }));
+    const b1 = await r1.json();
+    expect(r1.status).toBe(200);
+    expect(b1.decision).toBe("allow");
+
+    // Reset invoice-lookup counter so the second call sees the invoice again.
+    invoiceLookups = 0;
+
+    const r2 = await POST(req({ invoiceId: INV, address: ADDR }));
+    const b2 = await r2.json();
+    expect(r2.status).toBe(200);
+    expect(b2.decision).toBe("allow");
+    // Same minAmountIn surfaces both times (idempotent).
+    expect(b2.minAmountIn).toBe(b1.minAmountIn);
   });
 
   it("fails open when COMPLIANCE_FAIL_OPEN_FOR_PAY=true", async () => {

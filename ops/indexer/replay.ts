@@ -104,13 +104,14 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
         const url = mr.rows[0]?.webhook_url;
         if (url) {
           await pool.query(
-            `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
-             values ($1, $2, $3::jsonb, 0, now())`,
+            `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+             values ($1, $2, $3::jsonb, 0, now(), $4)
+             on conflict (invoice_id, event_type) do nothing`,
             [id, url, JSON.stringify({
               event_id: randomUUID(), type: "invoice.paid",
               invoice_id: id, paid_by: payer, tx_hash: log.transactionHash,
               replay: true,
-            })],
+            }), "invoice.paid"],
           );
           counts.webhooksQueued++;
         }
@@ -143,13 +144,14 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
         const url = mr.rows[0]?.webhook_url;
         if (url) {
           await pool.query(
-            `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
-             values ($1, $2, $3::jsonb, 0, now())`,
+            `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+             values ($1, $2, $3::jsonb, 0, now(), $4)
+             on conflict (invoice_id, event_type) do nothing`,
             [id, url, JSON.stringify({
               event_id: randomUUID(), type: "invoice.refunded",
               invoice_id: id, refunded_to: refundedTo, tx_hash: log.transactionHash,
               replay: true,
-            })],
+            }), "invoice.refunded"],
           );
           counts.webhooksQueued++;
         }

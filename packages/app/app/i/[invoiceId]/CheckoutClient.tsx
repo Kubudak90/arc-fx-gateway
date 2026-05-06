@@ -24,6 +24,10 @@ interface CheckoutClientProps {
   amountOut: string;
   successUrl: string;
   cancelUrl?: string;
+  /** Merchant-declared allowlist of origins that may receive customers post-
+   *  payment. Defense-in-depth in the browser; server already enforces the
+   *  same list at invoice-create. Audit H1 (2026-05-05). */
+  allowedOrigins: readonly string[];
   /** v6 = legacy on-chain swap path; v8 + v9 = relayer-driven Permit2 path
    *  (UI shape identical, the relayer dispatches to the right gateway based
    *  on invoice.gatewayAddress). */
@@ -51,8 +55,8 @@ export default function CheckoutClient(props: CheckoutClientProps) {
     return () => clearInterval(t);
   }, [status, props.invoiceId]);
 
-  if (status === "paid") return <SuccessScreen successUrl={props.successUrl} />;
-  if (status === "expired" || status === "failed") return <ExpiredScreen cancelUrl={props.cancelUrl} />;
+  if (status === "paid") return <SuccessScreen successUrl={props.successUrl} allowedOrigins={props.allowedOrigins} />;
+  if (status === "expired" || status === "failed") return <ExpiredScreen cancelUrl={props.cancelUrl} allowedOrigins={props.allowedOrigins} />;
 
   if (showQR) {
     return <MobileWalletQR url={typeof window !== "undefined" ? window.location.href : ""} onBack={() => setShowQR(false)} />;
@@ -114,11 +118,21 @@ export default function CheckoutClient(props: CheckoutClientProps) {
         </button>
       </div>
 
-      {props.cancelUrl && (
-        <div className="text-center pt-2">
-          <a href={props.cancelUrl} className="text-sm text-muted-foreground hover:underline">Cancel</a>
-        </div>
-      )}
+      {props.cancelUrl && (() => {
+        // Audit H1 (2026-05-05): only render the cancel link when the merchant's
+        // allowlist still contains its origin. Stale invoices keep the original
+        // cancelUrl, so a merchant who later removes that origin shouldn't see
+        // it remain clickable from the live checkout.
+        try {
+          const origin = new URL(props.cancelUrl).origin;
+          if (!props.allowedOrigins.includes(origin)) return null;
+        } catch { return null; }
+        return (
+          <div className="text-center pt-2">
+            <a href={props.cancelUrl} className="text-sm text-muted-foreground hover:underline">Cancel</a>
+          </div>
+        );
+      })()}
     </div>
   );
 }

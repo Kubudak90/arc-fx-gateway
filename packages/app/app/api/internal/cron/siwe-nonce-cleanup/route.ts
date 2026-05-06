@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+
+/**
+ * Daily housekeeping for the SIWE/rate-limit tables introduced in M9
+ * (2026-05-06). Without this, both tables grow unbounded:
+ *
+ *   - `siwe_nonces`         — issued nonces stay forever (5-min TTL is
+ *                              advisory; the verify route checks expires_at
+ *                              but never deletes consumed/expired rows).
+ *   - `rate_limit_counters` — fixed-window counters from past windows are
+ *                              dead weight. Anything older than 1h is junk.
+ *
+ * Auth: shared CRON_SECRET (matches the H4 cron pattern).
+ */
+
+export async function GET(req: NextRequest) {
+  const provided = req.headers.get("authorization") ?? req.headers.get("x-cron-secret") ?? "";
+  const expected = process.env.CRON_SECRET ?? "";
+  if (!expected || !(provided === `Bearer ${expected}` || provided === expected)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // Delete expired SIWE nonces (5-min TTL but rows can outlive that without
+  // verify ever consuming them).
+  const noncesDeleted = await db.execute(sql`
+    DELETE FROM siwe_nonces WHERE expires_at < now()
+  `);
+  // Delete rate-limit counters older than 1h. (Windows are 60s; 1h is a
+  // generous safety margin in case anything ever uses a longer window.)
+  const countersDeleted = await db.execute(sql`
+    DELETE FROM rate_limit_counters WHERE window_start < now() - interval '1 hour'
+  `);
+
+  // pg returns rowCount on the result; drizzle's wrap exposes it on
+  // result.rowCount. Reach for both shapes defensively.
+  const noncesCount = Number(
+    (noncesDeleted as { rowCount?: number; rows?: unknown[] }).rowCount ?? 0,
+  );
+  const countersCount = Number(
+    (countersDeleted as { rowCount?: number; rows?: unknown[] }).rowCount ?? 0,
+  );
+
+  return NextResponse.json({
+    ok: true,
+    nonces_deleted:   noncesCount,
+    counters_deleted: countersCount,
+  });
+}

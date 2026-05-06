@@ -12,6 +12,10 @@ const GATEWAY      = need("GATEWAY_ADDRESS").toLowerCase() as Address;
 // V9 also emits `SettlementSource` (new in v0.9, Plan 9) which the decoder
 // silently ignores — we read payoutSource from storage when needed. As soon
 // as the V8 in-flight cohort drains we can drop V8 from the list.
+// Optional V6 cohort: legacy `GATEWAY_ADDRESS` already covers our pre-V8
+// indexing path, but the explicit env makes operator intent obvious and lets
+// us drop V6 cleanly once that in-flight cohort drains. Audit M6 (2026-05-05).
+const GATEWAY_V6   = (process.env.GATEWAY_ADDRESS_V6 ?? "").toLowerCase() as Address;
 const GATEWAY_V8   = (process.env.GATEWAY_ADDRESS_V8 ?? "").toLowerCase() as Address;
 const GATEWAY_V9   = (process.env.GATEWAY_ADDRESS_V9 ?? "").toLowerCase() as Address;
 const PG_URL       = need("POSTGRES_URL_NON_POOLING");
@@ -19,7 +23,7 @@ const REORG_BUFFER = BigInt(process.env.INDEXER_REORG_BUFFER_BLOCKS ?? "5");
 const TICK_MS      = Number(process.env.INDEXER_TICK_MS ?? "30000");
 const MAX_RANGE    = 9_000n; // Arc testnet eth_getLogs cap
 
-const GATEWAYS: Address[] = [GATEWAY, GATEWAY_V8, GATEWAY_V9].filter(
+const GATEWAYS: Address[] = [GATEWAY, GATEWAY_V6, GATEWAY_V8, GATEWAY_V9].filter(
   (a): a is Address => Boolean(a) && a.startsWith("0x"),
 ) as Address[];
 
@@ -128,7 +132,8 @@ async function tick(): Promise<{
       const engineForGateway: "v6" | "v8" | "v9" =
         emittingGateway === GATEWAY_V9 ? "v9" :
         emittingGateway === GATEWAY_V8 ? "v8" :
-        "v6";
+        emittingGateway === GATEWAY_V6 ? "v6" :
+        "v6"; // default for legacy GATEWAY_ADDRESS
       await pool.query(
         `insert into invoices
            (id, merchant_invoice_id, merchant_id, pay_in_token, payout_token,
@@ -183,8 +188,9 @@ async function tick(): Promise<{
       const url = mr.rows[0]?.webhook_url;
       if (url) {
         await pool.query(
-          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
-           values ($1, $2, $3::jsonb, 0, now())`,
+          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+           values ($1, $2, $3::jsonb, 0, now(), $4)
+           on conflict (invoice_id, event_type) do nothing`,
           [
             id, url,
             JSON.stringify({
@@ -194,6 +200,7 @@ async function tick(): Promise<{
               paid_by:    payer,
               tx_hash:    log.transactionHash,
             }),
+            "invoice.paid",
           ],
         );
       }
@@ -205,10 +212,14 @@ async function tick(): Promise<{
       const id         = d.args.globalId as Hex;
       const refundedTo = d.args.refundedTo as string;
 
+      // Status guard widened to include 'created' so an out-of-order
+      // InvoiceRefunded (landing before InvoicePaid) still flips the row to
+      // refunded — without this, the row sticks in 'created' forever despite
+      // the customer being made whole on-chain. Audit H5 (2026-05-05).
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
            set status = 'refunded', refund_tx = $2, refunded_at = now()
-         where id = $1 and status = 'paid'
+         where id = $1 and status in ('created', 'paid')
          returning id, merchant_id`,
         [id, log.transactionHash],
       );
@@ -221,8 +232,9 @@ async function tick(): Promise<{
       const url = mr.rows[0]?.webhook_url;
       if (url) {
         await pool.query(
-          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
-           values ($1, $2, $3::jsonb, 0, now())`,
+          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+           values ($1, $2, $3::jsonb, 0, now(), $4)
+           on conflict (invoice_id, event_type) do nothing`,
           [
             id, url,
             JSON.stringify({
@@ -232,6 +244,7 @@ async function tick(): Promise<{
               refunded_to: refundedTo,
               tx_hash:     log.transactionHash,
             }),
+            "invoice.refunded",
           ],
         );
       }
@@ -248,11 +261,19 @@ async function tick(): Promise<{
       // pay-in back off-chain, and emitted this event so the indexer flips
       // the row to `failed`. webhooks fire so the merchant's app sees a
       // terminal "this won't pay" state.
+      //
+      // Status guard widened to include 'paid' so an out-of-order PayerRefunded
+      // (landing after a stray InvoicePaid for the same globalId) still flips
+      // the row to 'failed' — the customer got their money back, the merchant
+      // must not see this as a successful sale. PayerRefunded is the v0.8
+      // "settle did not happen" signal, NOT a refund of a paid invoice
+      // (that's InvoiceRefunded), so the literal stays 'failed'. Audit H5
+      // (2026-05-05).
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
            set status   = 'failed',
                metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb
-         where id = $1 and status = 'created'
+         where id = $1 and status in ('created', 'paid')
          returning id, merchant_id`,
         [
           id,
@@ -273,8 +294,9 @@ async function tick(): Promise<{
       const url = mr.rows[0]?.webhook_url;
       if (url) {
         await pool.query(
-          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
-           values ($1, $2, $3::jsonb, 0, now())`,
+          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+           values ($1, $2, $3::jsonb, 0, now(), $4)
+           on conflict (invoice_id, event_type) do nothing`,
           [
             id, url,
             JSON.stringify({
@@ -285,6 +307,7 @@ async function tick(): Promise<{
               amount,
               tx_hash:     log.transactionHash,
             }),
+            "invoice.failed",
           ],
         );
       }

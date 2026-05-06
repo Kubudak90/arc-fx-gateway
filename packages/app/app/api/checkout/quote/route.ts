@@ -3,6 +3,39 @@ import { z } from "zod";
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import { generatePrivateKey } from "viem/accounts";
+import { quoteAmountIn } from "@/lib/checkout/quote-server";
+import { takeToken } from "@/lib/rate/limiter";
+
+/**
+ * Per-IP rate limit protecting the App Kit KIT_KEY quota. Each client IP may
+ * call at most 30 times per 60-second window. Fail-open: if the limiter's
+ * Postgres backend is unreachable, we allow the request rather than blocking
+ * all callers. Audit L7 (2026-05-06).
+ */
+const QUOTE_LIMIT = 30;
+const QUOTE_WINDOW_SECONDS = 60;
+
+function clientIp(req: NextRequest): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0]!.trim();
+  return req.headers.get("x-real-ip") ?? "unknown";
+}
+
+const STABLE_DECIMALS = 6;
+
+function parseHuman(amount: string, decimals: number): bigint {
+  const [whole = "0", fracRaw = ""] = amount.split(".");
+  const frac = fracRaw.padEnd(decimals, "0").slice(0, decimals);
+  return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(frac || "0");
+}
+
+function humanize(baseUnits: bigint, decimals: number): string {
+  const scale = 10n ** BigInt(decimals);
+  const whole = baseUnits / scale;
+  const frac  = (baseUnits % scale).toString().padStart(decimals, "0");
+  // Always pad to fixed decimals so App Kit gets a deterministic string.
+  return `${whole}.${frac}`;
+}
 
 /**
  * v0.8 quote endpoint. Uses Circle's App Kit Swap to fetch a real RFQ quote
@@ -52,6 +85,22 @@ function getAdapter() {
 const kit = new AppKit();
 
 export async function POST(req: NextRequest) {
+  // Audit L7: rate-limit per-IP to protect KIT_KEY quota from abuse.
+  const ip = clientIp(req);
+  let allowed = true;
+  try {
+    allowed = await takeToken(`quote:${ip}`, QUOTE_LIMIT, QUOTE_WINDOW_SECONDS);
+  } catch {
+    // Fail-open: limiter outage shouldn't block legitimate traffic.
+    allowed = true;
+  }
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "rate_limited", retryAfterSeconds: QUOTE_WINDOW_SECONDS },
+      { status: 429, headers: { "retry-after": String(QUOTE_WINDOW_SECONDS) } },
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = Q.safeParse(body);
   if (!parsed.success) {
@@ -94,16 +143,21 @@ export async function POST(req: NextRequest) {
       });
       const probeOut = (probe as { estimatedOutput?: { amount: string } }).estimatedOutput?.amount;
       if (!probeOut) throw new Error("probe quote returned no estimatedOutput");
-      // amountIn = targetOutput / rate, where rate = probeOut/1.0
-      const target  = parseFloat(targetOutput);
-      const rate    = parseFloat(probeOut);
+      // amountIn = targetOutput / rate, where rate = probeOut/1.0.
       // Default cushion 250 bps — covers RFQ rate drift between probe and
       // actual execution. (Was 100 bps; bumped after settle reverts under
       // adverse rate movement on testnet.)
-      const buffer  = 1 + (slippageBps ?? 250) / 10_000;
-      // Round up to 6 decimals so we never quote below what's needed.
-      const recommended = Math.ceil((target / rate * buffer) * 1_000_000) / 1_000_000;
-      resolvedAmountIn = recommended.toFixed(6);
+      // Computed via the canonical BigInt helper shared with quote-server.ts
+      // so the HTTP path and the server-side authorize path agree to the
+      // base unit (M11).
+      const recommendedBase = quoteAmountIn({
+        targetBaseUnits: parseHuman(targetOutput, STABLE_DECIMALS),
+        rateScaled1e18:  parseHuman(probeOut, 18),
+        bufferBps:       BigInt(slippageBps ?? 250),
+        payInDecimals:   STABLE_DECIMALS,
+        payoutDecimals:  STABLE_DECIMALS,
+      });
+      resolvedAmountIn = humanize(recommendedBase, STABLE_DECIMALS);
     }
 
     if (!resolvedAmountIn) {

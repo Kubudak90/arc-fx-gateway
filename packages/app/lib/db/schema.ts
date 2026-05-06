@@ -1,6 +1,7 @@
 import {
   pgTable, text, uuid, timestamp, integer, numeric, jsonb, customType, boolean, pgEnum, index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm/sql";
 
 const bytea = customType<{ data: Buffer; default: false }>({
   dataType() { return "bytea"; },
@@ -22,6 +23,11 @@ export const merchants = pgTable("merchants", {
   payoutToken: text("payout_token").notNull(),
   webhookUrl: text("webhook_url"),
   apiKeyHash: text("api_key_hash").notNull(),
+  // First 12 chars of the raw API key (e.g. "ak_live_AB12"). Used as a
+  // fast-path lookup index so we don't bcrypt-compare every merchant row
+  // on each authenticated request. Audit H2 (2026-05-05).
+  apiKeyPrefix: text("api_key_prefix").notNull().default(""),
+  allowedOrigins: text("allowed_origins").array().notNull().default(sql`'{}'::text[]`),
   webhookSecretEnc: bytea("webhook_secret_enc").notNull(),
   webhookSecretIv: bytea("webhook_secret_iv").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -52,6 +58,10 @@ export const invoices = pgTable("invoices", {
   metadata: jsonb("metadata"),
   successUrl: text("success_url").notNull(),
   cancelUrl: text("cancel_url"),
+  // Short-lived bearer token issued at /api/checkout/submit; required for the
+  // status route to reveal anything beyond { status }. 30-min TTL. Audit M12.
+  statusToken: text("status_token"),
+  statusTokenExpiresAt: timestamp("status_token_expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -64,6 +74,15 @@ export const webhookAttempts = pgTable("webhook_attempts", {
   nextAttempt: timestamp("next_attempt", { withTimezone: true }).notNull(),
   succeededAt: timestamp("succeeded_at", { withTimezone: true }),
   lastError: text("last_error"),
+  // Dedupe key: paired with `invoiceId` in a unique index so out-of-order or
+  // replayed events ("invoice.paid", "invoice.refunded", "invoice.failed")
+  // can't double-enqueue webhooks for the same invoice. Audit H5 (2026-05-05).
+  eventType: text("event_type").notNull(),
+  // Audit M5 (2026-05-06): once a 4xx response causes permanent termination
+  // of this attempt row, `terminalReason` is set to a short code (e.g.
+  // "http_404") and `nextAttempt` is set to NULL so fetchDue never picks it
+  // up again. NULL means "still retryable".
+  terminalReason: text("terminal_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -86,6 +105,15 @@ export const siweNonces = pgTable("siwe_nonces", {
   nonce: text("nonce").primaryKey(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   used: boolean("used").notNull().default(false),
+});
+
+// Generic fixed-window rate-limit counters. PK is (bucket, window_start).
+// Used by /api/auth/siwe/nonce — keyed by `siwe-nonce:<ip>` per 60s window.
+// Cleanup runs daily via /api/internal/cron/siwe-nonce-cleanup. Audit M9.
+export const rateLimitCounters = pgTable("rate_limit_counters", {
+  bucket: text("bucket").notNull(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull().default(0),
 });
 
 // Compliance screening audit log. One row per provider call (or cache hit

@@ -3,7 +3,10 @@ import { cookies } from "next/headers";
 
 export interface SessionData {
   merchantAddress?: string;
-  apiKey?: string; // shown once at generation; held in session for dashboard convenience
+  // apiKey removed (Audit L9, 2026-05-06): storing a live API credential in
+  // the server-side session cookie is unnecessary weight. The key is returned
+  // in the response body at bootstrap / rotation (single-use reveal); the
+  // caller is responsible for persisting it client-side if needed.
 }
 
 export const sessionOptions: SessionOptions = {

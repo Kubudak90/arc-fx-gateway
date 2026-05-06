@@ -1,6 +1,22 @@
 import dns from "node:dns/promises";
 
 /**
+ * Audit M7 (2026-05-06): dns.lookup has no native timeout. Wrap it in a
+ * Promise.race against a 3-second rejection so a stalled resolver doesn't
+ * block the caller indefinitely.
+ */
+async function dnsLookupWithTimeout(
+  hostname: string,
+  timeoutMs = 3000,
+): Promise<{ address: string; family: number }[]> {
+  const lookup = dns.lookup(hostname, { all: true });
+  const timer = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("dns_timeout")), timeoutMs),
+  );
+  return Promise.race([lookup, timer]);
+}
+
+/**
  * Check whether a destination URL is safe to fetch from a server-side
  * worker. The intent: prevent SSRF when a merchant configures their
  * webhook URL — without these guards, a merchant could point us at
@@ -36,14 +52,38 @@ export async function assertSafePublicUrl(url: string): Promise<void> {
     throw new Error("https_required");
   }
 
-  const records = await dns.lookup(parsed.hostname, { all: true }).catch(() => {
-    throw new Error("dns_lookup_failed");
+  const records = await dnsLookupWithTimeout(parsed.hostname).catch((e: Error) => {
+    throw new Error(e.message === "dns_timeout" ? "dns_timeout" : "dns_lookup_failed");
   });
 
   for (const record of records) {
     if (isPrivateAddress(record.address)) {
       throw new Error(`private_address_blocked:${record.address}`);
     }
+  }
+}
+
+/**
+ * Throws unless `candidate` URL's origin is in the merchant's allowlist.
+ * Allowlist entries must already be normalized to `new URL(...).origin`
+ * (scheme + host + port — no path, query, fragment). Caller is responsible
+ * for pairing this with `assertSafePublicUrl` for SSRF protection — this
+ * helper only checks the origin string, not the resolved IP.
+ *
+ * Audit H1 (2026-05-05): merchant-supplied successUrl/cancelUrl on
+ * /api/invoices was previously accepted as any well-formed URL, allowing
+ * the hosted checkout page to redirect customers to attacker-controlled
+ * domains (open redirect / phishing).
+ */
+export function assertOriginAllowed(candidate: string, allowed: readonly string[]): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error("invalid_url");
+  }
+  if (!allowed.includes(parsed.origin)) {
+    throw new Error(`origin_not_allowed:${parsed.origin}`);
   }
 }
 

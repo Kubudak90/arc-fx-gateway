@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isPrivateAddress, assertSafePublicUrl } from "./safeUrl";
+import { isPrivateAddress, assertSafePublicUrl, assertOriginAllowed } from "./safeUrl";
 
 // Mock DNS so tests don't depend on network state.
 vi.mock("node:dns/promises", () => {
@@ -104,5 +104,62 @@ describe("assertSafePublicUrl", () => {
   it("rejects when DNS lookup fails", async () => {
     lookupMock.mockRejectedValue(new Error("ENOTFOUND"));
     await expect(assertSafePublicUrl("https://nope.example/")).rejects.toThrow(/dns_lookup_failed/);
+  });
+
+  it("rejects with dns_timeout when DNS lookup never resolves (M7)", async () => {
+    // Simulate a resolver that hangs forever; the 3s timeout should fire.
+    // Use vi.useFakeTimers so the test doesn't actually wait 3 seconds.
+    vi.useFakeTimers();
+    lookupMock.mockImplementation(() => new Promise(() => {})); // never resolves
+    const p = assertSafePublicUrl("https://slow-resolver.example/");
+    // Advance past the 3-second DNS timeout
+    vi.advanceTimersByTime(3500);
+    await expect(p).rejects.toThrow(/dns_timeout/);
+    vi.useRealTimers();
+  });
+});
+
+describe("assertOriginAllowed", () => {
+  it("accepts a URL whose origin matches the allowlist", () => {
+    expect(() => assertOriginAllowed(
+      "https://shop.example.com/checkout/success?x=1",
+      ["https://shop.example.com"],
+    )).not.toThrow();
+  });
+
+  it("rejects when origin is not in the allowlist", () => {
+    expect(() => assertOriginAllowed(
+      "https://attacker.example.com/?x=1",
+      ["https://shop.example.com"],
+    )).toThrow(/origin_not_allowed/);
+  });
+
+  it("treats different schemes as different origins", () => {
+    // https://shop and http://shop differ — http NOT allowed unless declared.
+    expect(() => assertOriginAllowed(
+      "http://shop.example.com/ok",
+      ["https://shop.example.com"],
+    )).toThrow(/origin_not_allowed/);
+  });
+
+  it("treats different ports as different origins", () => {
+    expect(() => assertOriginAllowed(
+      "https://shop.example.com:8443/ok",
+      ["https://shop.example.com"],
+    )).toThrow(/origin_not_allowed/);
+  });
+
+  it("rejects malformed URLs with invalid_url", () => {
+    expect(() => assertOriginAllowed(
+      "not a url",
+      ["https://shop.example.com"],
+    )).toThrow(/invalid_url/);
+  });
+
+  it("rejects when allowlist is empty (no origins configured)", () => {
+    expect(() => assertOriginAllowed(
+      "https://shop.example.com/ok",
+      [],
+    )).toThrow(/origin_not_allowed/);
   });
 });

@@ -8,16 +8,15 @@ import { MerchantV9ActivationCard } from "@/components/merchant/MerchantV9Activa
 interface DashboardData {
   merchant: { address: string; payoutToken: string; webhookUrl: string | null } | null;
   invoices: InvoiceRow[];
-  apiKey: string | null;
 }
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData>({ merchant: null, invoices: [], apiKey: null });
+  const [data, setData] = useState<DashboardData>({ merchant: null, invoices: [] });
 
   async function refresh() {
     const res = await fetch("/api/merchant");
     const json = await res.json();
-    setData({ merchant: json.merchant, invoices: json.invoices, apiKey: json.apiKey ?? null });
+    setData({ merchant: json.merchant, invoices: json.invoices });
   }
   useEffect(() => { void refresh(); }, []);
 
@@ -36,7 +35,7 @@ export default function DashboardPage() {
     <main className="px-6 py-10 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="font-[family-name:var(--font-display)] text-[36px]">Invoices</h1>
-        <CreateInvoiceDialog apiKey={data.apiKey} onCreated={refresh} />
+        <CreateInvoiceDialog apiKey={null} onCreated={refresh} />
       </div>
       <MerchantV9ActivationCard
         payoutAddress={data.merchant.address}

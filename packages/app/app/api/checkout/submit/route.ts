@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Address, Hex } from "viem";
 import { db } from "@/lib/db/client";
 import { invoices, relayerQueue, checkoutAuthorizations } from "@/lib/db/schema";
+
+/** Status token TTL — long enough for the customer to walk away and come
+ *  back, short enough that a leaked token from a logging proxy doesn't
+ *  reveal post-settle details indefinitely. Audit M12. */
+const STATUS_TOKEN_TTL_MS = 30 * 60_000;
 import { expectedWitnessHash, PERMIT2_WITNESS_TYPE_STRING } from "@/lib/checkout/witness";
 import { verifyPermit2Signature, ARC_TESTNET_CHAIN_ID } from "@/lib/checkout/permit2-verify";
 
@@ -210,9 +216,25 @@ export async function POST(req: NextRequest) {
     throw e;
   }
 
+  // Issue a status token bound to this invoice. Audit M12.
+  // Without this token, /api/checkout/status/[id] returns only { status } —
+  // no lastError, no tx hashes, no internal state.
+  const statusToken = randomBytes(24).toString("hex");
+  const statusTokenExpiresAt = new Date(Date.now() + STATUS_TOKEN_TTL_MS);
+  try {
+    await db.update(invoices)
+      .set({ statusToken, statusTokenExpiresAt })
+      .where(eq(invoices.id, invoiceId));
+  } catch {
+    // Token persistence failure isn't fatal — status route degrades to
+    // public-minimum mode for everyone, which is the safe default.
+  }
+
   return NextResponse.json({
     submissionId: inserted[0]!.id,
     invoiceId,
     statusUrl:    `/api/checkout/status/${inserted[0]!.id}`,
+    statusToken,
+    statusTokenExpiresAt: statusTokenExpiresAt.toISOString(),
   }, { status: 202 });
 }

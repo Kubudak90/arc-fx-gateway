@@ -10,7 +10,7 @@ export async function GET() {
 
   const rows = await db.select().from(merchants).where(eq(merchants.address, session.merchantAddress)).limit(1);
   if (rows.length === 0) {
-    return NextResponse.json({ merchant: null, invoices: [], apiKey: session.apiKey ?? null });
+    return NextResponse.json({ merchant: null, invoices: [] });
   }
   const m = rows[0]!;
   const invs = await db.select().from(invoices)
@@ -18,7 +18,15 @@ export async function GET() {
     .orderBy(desc(invoices.createdAt))
     .limit(50);
   return NextResponse.json({
-    merchant: { address: m.address, payoutToken: m.payoutToken, webhookUrl: m.webhookUrl },
+    merchant: {
+      address: m.address,
+      payoutToken: m.payoutToken,
+      webhookUrl: m.webhookUrl,
+      // Audit H1 (2026-05-05): exposed so AllowedOriginsCard can show /
+      // edit the current list. Not a secret — it's an allowlist of
+      // post-payment redirect targets.
+      allowedOrigins: m.allowedOrigins ?? [],
+    },
     invoices: invs.map(i => ({
       id: i.id,
       payInToken: i.payInToken,
@@ -28,6 +36,7 @@ export async function GET() {
       gatewayAddress: i.gatewayAddress,
       createdAt: i.createdAt.toISOString(),
     })),
-    apiKey: session.apiKey ?? null,
+    // apiKey removed from GET response (Audit L9): use bootstrap / rotation
+    // response body to retrieve it; it is no longer held in session.
   });
 }

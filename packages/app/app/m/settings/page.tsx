@@ -3,9 +3,15 @@
 import { useEffect, useState } from "react";
 import { ApiKeyCard } from "@/components/merchant/ApiKeyCard";
 import { WebhookSettingsCard } from "@/components/merchant/WebhookSettingsCard";
+import { AllowedOriginsCard } from "@/components/merchant/AllowedOriginsCard";
 import { DelegateAuthCard } from "@/components/merchant/DelegateAuthCard";
 
-interface MerchantInfo { address: string; payoutToken: string; webhookUrl: string | null; }
+interface MerchantInfo {
+  address: string;
+  payoutToken: string;
+  webhookUrl: string | null;
+  allowedOrigins?: string[];
+}
 
 export default function SettingsPage() {
   const [merchant, setMerchant] = useState<MerchantInfo | null>(null);
@@ -23,6 +29,7 @@ export default function SettingsPage() {
     <main className="px-6 py-10 max-w-3xl mx-auto space-y-6">
       <h1 className="font-[family-name:var(--font-display)] text-[36px]">Settings</h1>
       <ApiKeyCard hasMerchant={!!merchant} onBootstrap={refresh} />
+      {merchant && <AllowedOriginsCard initialOrigins={merchant.allowedOrigins ?? []} />}
       {merchant && <WebhookSettingsCard initialUrl={merchant.webhookUrl} />}
       <DelegateAuthCard serverWalletAddress={serverWallet} />
     </main>

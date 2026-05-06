@@ -28,17 +28,16 @@ import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import pg from "pg";
 
-const RPC          = need("ARC_TESTNET_RPC");
-const PG_URL       = need("POSTGRES_URL_NON_POOLING");
-const PRIVATE_KEY  = need("RELAYER_PRIVATE_KEY") as Hex;
-const KIT_KEY      = need("KIT_KEY");
-const GATEWAY      = need("GATEWAY_ADDRESS").toLowerCase() as Address;
-const PERMIT2      = (process.env.PERMIT2_ADDRESS ?? "0x000000000022D473030F116dDEE9F6B43aC78BA3").toLowerCase() as Address;
+const RPC           = need("ARC_TESTNET_RPC");
+const PG_URL        = need("POSTGRES_URL_NON_POOLING");
+const KIT_KEY       = need("KIT_KEY");
+const GATEWAY       = need("GATEWAY_ADDRESS").toLowerCase() as Address;
+const PERMIT2       = (process.env.PERMIT2_ADDRESS ?? "0x000000000022D473030F116dDEE9F6B43aC78BA3").toLowerCase() as Address;
 const FEE_RECIPIENT = need("CUSTOM_FEE_RECIPIENT") as Address;
 const CUSTOM_FEE_BPS = Number(process.env.CUSTOM_FEE_BPS ?? "100"); // 1% default
-const SLIPPAGE_BPS = Number(process.env.SLIPPAGE_BPS ?? "100");     // 1% default
-const TICK_MS      = Number(process.env.RELAYER_TICK_MS ?? "5000");
-const MAX_ATTEMPTS = Number(process.env.RELAYER_MAX_ATTEMPTS ?? "3");
+const SLIPPAGE_BPS  = Number(process.env.SLIPPAGE_BPS ?? "100");    // 1% default
+const TICK_MS       = Number(process.env.RELAYER_TICK_MS ?? "5000");
+const MAX_ATTEMPTS  = Number(process.env.RELAYER_MAX_ATTEMPTS ?? "3");
 // A row stuck in `processing` beyond this window is treated as crashed mid-
 // flight (prev daemon died after permit2 pull / between swap + settle, etc.)
 // and reclaimed by the next claimNext call. Set generously above worst-case
@@ -73,11 +72,28 @@ const PERMIT2_ABI = parseAbi([
   "function permitWitnessTransferFrom(PermitTransferFrom permit, SignatureTransferDetails transferDetails, address owner, bytes32 witness, string witnessTypeString, bytes signature)",
 ]);
 
-const chain  = createPublicClient({ transport: http(RPC) });
-const wallet = createWalletClient({ account: privateKeyToAccount(PRIVATE_KEY), transport: http(RPC) });
-const kit    = new AppKit();
-const adapter = createViemAdapterFromPrivateKey({ privateKey: PRIVATE_KEY });
-const RELAYER_ADDR = privateKeyToAccount(PRIVATE_KEY).address;
+// Audit M1 (2026-05-06): scope the raw private-key string to an IIFE so it
+// leaves the module-level binding scope immediately after privateKeyToAccount
+// and createViemAdapterFromPrivateKey consume it. The `account` object and the
+// viem adapter keep internal references to key material for signing, but the
+// module-scope `PRIVATE_KEY: Hex` string is dropped, narrowing the blast radius
+// of any future inadvertent logging of module globals.
+//
+// Note: viem's `account` and `adapter` still hold key material internally —
+// this mitigation is defence-in-depth, not a complete key-erasure guarantee.
+// A V10 improvement would move to an HSM or encrypted-keystore model.
+const { wallet, adapter, RELAYER_ADDR } = (() => {
+  const pk = need("RELAYER_PRIVATE_KEY") as Hex;
+  const account = privateKeyToAccount(pk);
+  return {
+    wallet:       createWalletClient({ account, transport: http(RPC) }),
+    adapter:      createViemAdapterFromPrivateKey({ privateKey: pk }),
+    RELAYER_ADDR: account.address,
+  };
+})();
+
+const chain = createPublicClient({ transport: http(RPC) });
+const kit   = new AppKit();
 
 const pool = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
 

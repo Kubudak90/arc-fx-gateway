@@ -21,6 +21,11 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
       payoutToken: invoices.payoutToken,
       metadata: invoices.metadata,
       merchantAddress: merchants.address,
+      // Audit H1 (2026-05-05): server-rendered checkout passes the merchant's
+      // current allowlist into the client so the SuccessScreen can re-check
+      // before window.location.href = successUrl. The list is intentionally
+      // not a secret — it's an allowlist of acceptable redirect targets.
+      merchantAllowedOrigins: merchants.allowedOrigins,
     })
     .from(invoices)
     .innerJoin(merchants, eq(merchants.id, invoices.merchantId))
@@ -58,6 +63,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
           amountOut={inv.amountOut}
           successUrl={inv.successUrl}
           cancelUrl={inv.cancelUrl ?? undefined}
+          allowedOrigins={inv.merchantAllowedOrigins ?? []}
           engine={engine}
         />
       </div>

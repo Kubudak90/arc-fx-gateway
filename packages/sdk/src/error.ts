@@ -4,6 +4,7 @@ export type ArcoraErrorCode =
   | "SERVER_ERROR"
   | "INVALID_URL"
   | "TIMEOUT"
+  | "NO_SECURE_RANDOM"
   | "UNKNOWN";
 
 export interface ArcoraErrorOptions {

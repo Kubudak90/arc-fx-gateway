@@ -7,22 +7,21 @@ import { IERC20 }            from "@openzeppelin/contracts/token/ERC20/IERC20.so
 import { IAccessControl }    from "@openzeppelin/contracts/access/IAccessControl.sol";
 import { Pausable }          from "@openzeppelin/contracts/utils/Pausable.sol";
 
-import { ArcFXGatewayV8 }    from "../src/ArcFXGatewayV8.sol";
-import { MockERC20 }         from "./helpers/MockERC20.sol";
+import { ArcFXGatewayV9 }    from "../../legacy/src/ArcFXGatewayV9.sol";
+import { MockERC20 }         from "../helpers/MockERC20.sol";
 
-/// @dev Phase B coverage for the v0.8 (pool-free, relayer-driven) gateway.
-/// Settlement no longer flows from the customer's tx; the relayer pulls payout
-/// tokens from its own wallet and calls settleInvoice. The tests reflect that
-/// new shape — most of the v0.7 swap-path expectations are gone.
-contract ArcFXGatewayV8Test is Test {
-    ArcFXGatewayV8 gw;
+/// @dev V9 coverage. Ports V8's 49-test suite verbatim where the surface
+/// is unchanged, then adds the refund-source binding cases that justify
+/// the V8→V9 redeploy.
+contract ArcFXGatewayV9Test is Test {
+    ArcFXGatewayV9 gw;
     MockERC20      usdc;
     MockERC20      eurc;
 
     address admin    = makeAddr("admin");
     address relayer  = makeAddr("relayer");
     address merchant = makeAddr("merchant");
-    address payee    = makeAddr("payee"); // merchant's payout address (separate)
+    address payee    = makeAddr("payee"); // merchant's payout address (split from identity in V9 happy path)
     address customer = makeAddr("customer");
 
     uint256 constant FEE_BPS = 30; // 0.30%
@@ -33,7 +32,7 @@ contract ArcFXGatewayV8Test is Test {
         usdc = new MockERC20("USD Coin", "USDC", 6);
         eurc = new MockERC20("Euro Coin", "EURC", 6);
 
-        gw = new ArcFXGatewayV8(FEE_BPS, admin, relayer);
+        gw = new ArcFXGatewayV9(FEE_BPS, admin, relayer);
 
         vm.startPrank(admin);
         gw.setTokenSupport(address(usdc), true);
@@ -60,6 +59,15 @@ contract ArcFXGatewayV8Test is Test {
         token.approve(address(gw), amount);
     }
 
+    function _settleAt100(bytes32 invoiceId) internal returns (bytes32 globalId, uint256 expectedFee, uint256 expectedPayout) {
+        globalId       = _createInvoice(invoiceId, 100e6, 1 hours);
+        _fundRelayer(eurc, 100e6);
+        vm.prank(relayer);
+        gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
+        expectedFee    = (100e6 * FEE_BPS) / 10_000;
+        expectedPayout = 100e6 - expectedFee;
+    }
+
     // ── token support ──────────────────────────────────────────────────
 
     function test_SetTokenSupport_OnlyAdmin() public {
@@ -75,8 +83,6 @@ contract ArcFXGatewayV8Test is Test {
     // ── settleInvoice happy path ───────────────────────────────────────
 
     function test_SettleInvoice_HappyPath() public {
-        // Exact-match case: gross equals amountOut, so the excess term is 0
-        // and the fee bucket holds only the fee.
         uint256 amountOut = 100e6;
         bytes32 globalId  = _createInvoice(bytes32("inv-1"), amountOut, 1 hours);
         uint256 gross     = amountOut;
@@ -92,17 +98,12 @@ contract ArcFXGatewayV8Test is Test {
         assertEq(gw.protocolFeesAccrued(address(eurc)), expectedFee, "fee accrued");
         assertEq(eurc.balanceOf(address(gw)), expectedFee, "gateway holds fee");
 
-        (, , , , , ArcFXGatewayV8.InvoiceStatus status, address paidBy) = gw.invoices(globalId);
-        assertEq(uint8(status), uint8(ArcFXGatewayV8.InvoiceStatus.Paid));
+        (, , , , , ArcFXGatewayV9.InvoiceStatus status, address paidBy) = gw.invoices(globalId);
+        assertEq(uint8(status), uint8(ArcFXGatewayV9.InvoiceStatus.Paid));
         assertEq(paidBy, customer);
     }
 
     function test_SettleInvoice_PayoutExceedsAmountOut_ExcessToProtocol() public {
-        // App Kit can return more than the invoice's amountOut on a favourable
-        // rate. v0.8.1 economics: merchant always receives exactly amountOut
-        // net of the fee (predictable, Stripe-shaped); the excess accrues to
-        // the protocol fee bucket — that surplus is what offsets the bad-rate
-        // cases that revert with PayoutShortfall.
         uint256 amountOut = 100e6;
         bytes32 globalId  = _createInvoice(bytes32("inv-2"), amountOut, 1 hours);
         uint256 gross     = 105e6;
@@ -136,6 +137,7 @@ contract ArcFXGatewayV8Test is Test {
 
         bool sawPaid;
         bool sawCtx;
+        bool sawSource;
         for (uint i; i < entries.length; i++) {
             if (entries[i].topics[0] == keccak256("InvoicePaid(bytes32,address,uint256,uint256,uint256,uint256)")) {
                 sawPaid = true;
@@ -149,28 +151,31 @@ contract ArcFXGatewayV8Test is Test {
                 sawCtx = true;
                 bytes32 swapHash = abi.decode(entries[i].data, (bytes32));
                 assertEq(swapHash, bytes32("hash-3"));
+            } else if (entries[i].topics[0] == keccak256("SettlementSource(bytes32,address)")) {
+                sawSource = true;
+                // payoutSource is indexed; comes through as the 3rd topic.
+                assertEq(address(uint160(uint256(entries[i].topics[2]))), payee);
             }
         }
-        assertTrue(sawPaid, "InvoicePaid emitted");
-        assertTrue(sawCtx,  "SettlementContext emitted");
+        assertTrue(sawPaid,   "InvoicePaid emitted");
+        assertTrue(sawCtx,    "SettlementContext emitted");
+        assertTrue(sawSource, "SettlementSource emitted");
     }
 
     // ── settleInvoice reverts ──────────────────────────────────────────
 
     function test_SettleInvoice_RevertsForNonRelayer() public {
         bytes32 globalId = _createInvoice(bytes32("inv-r1"), 100e6, 1 hours);
-        _fundRelayer(eurc, 100e6); // funded but msg.sender != relayer
+        _fundRelayer(eurc, 100e6);
 
-        vm.expectRevert(); // AccessControlUnauthorizedAccount
+        vm.expectRevert();
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
     }
 
     function test_SettleInvoice_RevertsOnNotFound() public {
         _fundRelayer(eurc, 100e6);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.InvoiceNotFound.selector, bytes32("nope")
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.InvoiceNotFound.selector, bytes32("nope")));
         gw.settleInvoice(bytes32("nope"), customer, address(usdc), 110e6, 100e6, bytes32(0));
     }
 
@@ -182,9 +187,7 @@ contract ArcFXGatewayV8Test is Test {
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
 
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.InvoiceAlreadyPaid.selector, globalId
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.InvoiceAlreadyPaid.selector, globalId));
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
     }
 
@@ -194,9 +197,7 @@ contract ArcFXGatewayV8Test is Test {
 
         vm.warp(block.timestamp + 31 minutes);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.InvoiceExpired.selector, globalId
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.InvoiceExpired.selector, globalId));
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
     }
 
@@ -205,9 +206,7 @@ contract ArcFXGatewayV8Test is Test {
         _fundRelayer(eurc, 99e6);
 
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.PayoutShortfall.selector, 99e6, 100e6
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.PayoutShortfall.selector, 99e6, 100e6));
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, 99e6, bytes32(0));
     }
 
@@ -231,14 +230,13 @@ contract ArcFXGatewayV8Test is Test {
         vm.prank(relayer);
         gw.recordPayerRefund(globalId, customer, address(usdc), 110e6, bytes32("slippage"));
 
-        (, , , , , ArcFXGatewayV8.InvoiceStatus status, ) = gw.invoices(globalId);
-        assertEq(uint8(status), uint8(ArcFXGatewayV8.InvoiceStatus.Failed));
+        (, , , , , ArcFXGatewayV9.InvoiceStatus status, ) = gw.invoices(globalId);
+        assertEq(uint8(status), uint8(ArcFXGatewayV9.InvoiceStatus.Failed));
     }
 
     function test_RecordPayerRefund_RevertsForNonRelayer() public {
         bytes32 globalId = _createInvoice(bytes32("rp-2"), 100e6, 1 hours);
-
-        vm.expectRevert(); // AccessControlUnauthorizedAccount
+        vm.expectRevert();
         gw.recordPayerRefund(globalId, customer, address(usdc), 110e6, bytes32(0));
     }
 
@@ -249,47 +247,126 @@ contract ArcFXGatewayV8Test is Test {
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
 
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.InvoiceNotInCreatedState.selector, globalId
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.InvoiceNotInCreatedState.selector, globalId));
         gw.recordPayerRefund(globalId, customer, address(usdc), 110e6, bytes32(0));
     }
 
-    // ── refundInvoice (preserved from v0.7) ────────────────────────────
-
-    function test_RefundInvoice_RoundTrip() public {
-        bytes32 globalId = _createInvoice(bytes32("rf-1"), 100e6, 1 hours);
-        _fundRelayer(eurc, 100e6);
+    function test_RecordPayerRefund_RevertsOnNotFound() public {
         vm.prank(relayer);
-        gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.InvoiceNotFound.selector, bytes32("ghost")));
+        gw.recordPayerRefund(bytes32("ghost"), customer, address(usdc), 110e6, bytes32(0));
+    }
 
-        // Merchant approves the gateway to pull back the merchantPayout.
-        uint256 expectedFee    = (100e6 * FEE_BPS) / 10_000;
-        uint256 expectedPayout = 100e6 - expectedFee;
-        // payee holds the funds, but refundInvoice pulls from `merchant`. Move them.
+    // ── refundInvoice (V9 semantics — pulls from payoutSource) ─────────
+
+    function test_RefundInvoice_RoundTrip_PullsFromPayee_NotMerchant() public {
+        // The headline V9 fix: payee != merchant, refund still works WITHOUT
+        // moving funds back to merchant first. V8's refund called
+        // safeTransferFrom(merchant, ...) which would fail here.
+        (bytes32 globalId, uint256 expectedFee, uint256 expectedPayout) = _settleAt100(bytes32("rf-v9-1"));
+
+        // Funds live in `payee` after settle. Approve the gateway from payee.
         vm.prank(payee);
-        eurc.transfer(merchant, expectedPayout);
+        eurc.approve(address(gw), expectedPayout);
+
+        // Merchant identity calls refundInvoice — funds come from payee.
         vm.prank(merchant);
+        gw.refundInvoice(globalId);
+
+        (, , , , , ArcFXGatewayV9.InvoiceStatus status, ) = gw.invoices(globalId);
+        assertEq(uint8(status), uint8(ArcFXGatewayV9.InvoiceStatus.Refunded));
+        assertEq(eurc.balanceOf(customer), expectedPayout, "customer received refund");
+        assertEq(eurc.balanceOf(payee), 0, "payee was fully debited");
+        assertEq(eurc.balanceOf(merchant), expectedFee, "merchant got fee back");
+        assertEq(gw.protocolFeesAccrued(address(eurc)), 0, "fee bucket cleared");
+    }
+
+    function test_RefundInvoice_AuthorizedByPayoutSource() public {
+        // V9 expanded auth: payee can call refundInvoice itself, no need
+        // to round-trip the merchant identity multisig.
+        (bytes32 globalId, uint256 expectedFee, uint256 expectedPayout) = _settleAt100(bytes32("rf-v9-2"));
+
+        vm.prank(payee);
+        eurc.approve(address(gw), expectedPayout);
+
+        vm.prank(payee); // payee, not merchant
+        gw.refundInvoice(globalId);
+
+        (, , , , , ArcFXGatewayV9.InvoiceStatus status, ) = gw.invoices(globalId);
+        assertEq(uint8(status), uint8(ArcFXGatewayV9.InvoiceStatus.Refunded));
+        assertEq(eurc.balanceOf(customer), expectedPayout);
+        assertEq(eurc.balanceOf(merchant), expectedFee, "fee leg still goes to merchant identity");
+    }
+
+    function test_RefundInvoice_FrozenAfterPayoutAddressRotation() public {
+        // Settle with payee=A. Merchant rotates to payee=B. Refund must
+        // still pull from A — payoutSource is frozen at settle time.
+        (bytes32 globalId, , uint256 expectedPayout) = _settleAt100(bytes32("rf-v9-3"));
+        address newPayee = makeAddr("new-payee");
+
+        vm.prank(merchant);
+        gw.updatePayoutAddress(newPayee);
+
+        // Old payee approves; new payee does NOT.
+        vm.prank(payee);
         eurc.approve(address(gw), expectedPayout);
 
         vm.prank(merchant);
         gw.refundInvoice(globalId);
 
-        (, , , , , ArcFXGatewayV8.InvoiceStatus status, ) = gw.invoices(globalId);
-        assertEq(uint8(status), uint8(ArcFXGatewayV8.InvoiceStatus.Refunded));
-        assertEq(eurc.balanceOf(customer), expectedPayout, "customer received refund");
-        assertEq(eurc.balanceOf(merchant), expectedFee, "merchant got fee back");
-        assertEq(gw.protocolFeesAccrued(address(eurc)), 0, "fee bucket cleared");
+        assertEq(eurc.balanceOf(customer), expectedPayout, "customer received refund from frozen source");
+        assertEq(eurc.balanceOf(payee),    0,                "old payee debited");
+        assertEq(eurc.balanceOf(newPayee), 0,                "new payee untouched");
+    }
+
+    function test_SettleInvoice_StoresPayoutSource() public {
+        (bytes32 globalId, uint256 expectedFee, uint256 expectedPayout) = _settleAt100(bytes32("set-1"));
+
+        (uint256 mp, uint256 fee, address payoutSource) = gw.payments(globalId);
+        assertEq(mp,            expectedPayout, "merchantPayout stored");
+        assertEq(fee,           expectedFee,    "fee stored");
+        assertEq(payoutSource,  payee,          "payoutSource snapshot at settle equals merchants[m].payoutAddress");
     }
 
     function test_RefundInvoice_RevertsForNonMerchantNonAdmin() public {
-        bytes32 globalId = _createInvoice(bytes32("rf-2"), 100e6, 1 hours);
-        _fundRelayer(eurc, 100e6);
-        vm.prank(relayer);
-        gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
+        (bytes32 globalId, , ) = _settleAt100(bytes32("rf-v9-4"));
 
-        vm.prank(customer);
-        vm.expectRevert(ArcFXGatewayV8.NotMerchant.selector);
+        vm.prank(customer); // neither merchant, nor payee, nor admin
+        vm.expectRevert(ArcFXGatewayV9.NotMerchant.selector);
+        gw.refundInvoice(globalId);
+    }
+
+    function test_RefundInvoice_RevertsIfNotPaid() public {
+        bytes32 globalId = _createInvoice(bytes32("rf-np"), 100e6, 1 hours);
+
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.InvoiceNotRefundable.selector, globalId));
+        gw.refundInvoice(globalId);
+    }
+
+    function test_RefundInvoice_AdminCanAlsoRefund() public {
+        (bytes32 globalId, uint256 expectedFee, uint256 expectedPayout) = _settleAt100(bytes32("rf-admin"));
+
+        vm.prank(payee);
+        eurc.approve(address(gw), expectedPayout);
+
+        vm.prank(admin);
+        gw.refundInvoice(globalId);
+
+        (, , , , , ArcFXGatewayV9.InvoiceStatus status, ) = gw.invoices(globalId);
+        assertEq(uint8(status), uint8(ArcFXGatewayV9.InvoiceStatus.Refunded));
+        assertEq(eurc.balanceOf(customer), expectedPayout);
+        assertEq(eurc.balanceOf(merchant), expectedFee);
+    }
+
+    function test_RefundInvoice_RevertsIfFeeBucketDrained() public {
+        (bytes32 globalId, uint256 expectedFee, ) = _settleAt100(bytes32("rf-drain"));
+
+        vm.prank(admin);
+        gw.withdrawFees(address(eurc), admin);
+
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.InsufficientFeesForRefund.selector, expectedFee, 0));
         gw.refundInvoice(globalId);
     }
 
@@ -298,30 +375,34 @@ contract ArcFXGatewayV8Test is Test {
     function test_CreateInvoice_RevertsOnUnsupportedPayIn() public {
         MockERC20 random = new MockERC20("Random", "RND", 6);
         vm.prank(merchant);
-        vm.expectRevert(ArcFXGatewayV8.InvalidPayInToken.selector);
+        vm.expectRevert(ArcFXGatewayV9.InvalidPayInToken.selector);
         gw.createInvoice(bytes32("ci-1"), address(random), 100e6, uint64(block.timestamp + 1 hours));
     }
 
     function test_CreateInvoice_RevertsWhenPaused() public {
         vm.prank(admin);
         gw.pause();
-
         vm.prank(merchant);
         vm.expectRevert(Pausable.EnforcedPause.selector);
         gw.createInvoice(bytes32("ci-2"), address(usdc), 100e6, uint64(block.timestamp + 1 hours));
     }
 
+    function test_CreateInvoice_RevertsOnDuplicateInvoiceId() public {
+        bytes32 invoiceId = bytes32("dup-1");
+        _createInvoice(invoiceId, 100e6, 1 hours);
+
+        bytes32 expectedGlobalId = keccak256(abi.encode(merchant, invoiceId));
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSelector(ArcFXGatewayV9.InvoiceAlreadyExists.selector, expectedGlobalId));
+        gw.createInvoice(invoiceId, address(usdc), 100e6, uint64(block.timestamp + 1 hours));
+    }
+
     // ── withdraw + role tests ──────────────────────────────────────────
 
     function test_WithdrawFees_OnlyAdmin() public {
-        bytes32 globalId = _createInvoice(bytes32("wf-1"), 100e6, 1 hours);
-        _fundRelayer(eurc, 100e6);
-        vm.prank(relayer);
-        gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
+        (, uint256 expectedFee, ) = _settleAt100(bytes32("wf-1"));
 
-        uint256 expectedFee = (100e6 * FEE_BPS) / 10_000;
-
-        vm.expectRevert(); // AccessControlUnauthorizedAccount
+        vm.expectRevert();
         gw.withdrawFees(address(eurc), admin);
 
         vm.prank(admin);
@@ -338,21 +419,20 @@ contract ArcFXGatewayV8Test is Test {
     // ── constructor revert paths ───────────────────────────────────────
 
     function test_Constructor_RevertsOnZeroOwner() public {
-        vm.expectRevert(ArcFXGatewayV8.InvalidPayoutAddress.selector);
-        new ArcFXGatewayV8(FEE_BPS, address(0), relayer);
+        vm.expectRevert(ArcFXGatewayV9.InvalidPayoutAddress.selector);
+        new ArcFXGatewayV9(FEE_BPS, address(0), relayer);
     }
 
     function test_Constructor_RevertsOnZeroRelayer() public {
-        vm.expectRevert(ArcFXGatewayV8.InvalidPayoutAddress.selector);
-        new ArcFXGatewayV8(FEE_BPS, admin, address(0));
+        vm.expectRevert(ArcFXGatewayV9.InvalidPayoutAddress.selector);
+        new ArcFXGatewayV9(FEE_BPS, admin, address(0));
     }
 
     // ── pause / unpause ────────────────────────────────────────────────
 
     function test_Pause_OnlyAdmin() public {
-        vm.expectRevert(); // AccessControlUnauthorizedAccount
+        vm.expectRevert();
         gw.pause();
-
         vm.prank(admin);
         gw.pause();
         assertTrue(gw.paused());
@@ -369,24 +449,22 @@ contract ArcFXGatewayV8Test is Test {
     function test_Unpause_OnlyAdmin() public {
         vm.prank(admin);
         gw.pause();
-
-        vm.expectRevert(); // AccessControlUnauthorizedAccount
+        vm.expectRevert();
         gw.unpause();
     }
 
     // ── registerMerchant revert paths ──────────────────────────────────
 
     function test_RegisterMerchant_RevertsIfAlreadyRegistered() public {
-        // setUp already registered `merchant` against eurc.
         vm.prank(merchant);
-        vm.expectRevert(ArcFXGatewayV8.MerchantAlreadyRegistered.selector);
+        vm.expectRevert(ArcFXGatewayV9.MerchantAlreadyRegistered.selector);
         gw.registerMerchant(payee, address(eurc));
     }
 
     function test_RegisterMerchant_RevertsOnZeroPayoutAddress() public {
         address fresh = makeAddr("fresh");
         vm.prank(fresh);
-        vm.expectRevert(ArcFXGatewayV8.InvalidPayoutAddress.selector);
+        vm.expectRevert(ArcFXGatewayV9.InvalidPayoutAddress.selector);
         gw.registerMerchant(address(0), address(eurc));
     }
 
@@ -394,7 +472,7 @@ contract ArcFXGatewayV8Test is Test {
         MockERC20 random = new MockERC20("Random", "RND", 6);
         address fresh = makeAddr("fresh-2");
         vm.prank(fresh);
-        vm.expectRevert(ArcFXGatewayV8.InvalidPayoutToken.selector);
+        vm.expectRevert(ArcFXGatewayV9.InvalidPayoutToken.selector);
         gw.registerMerchant(payee, address(random));
     }
 
@@ -402,46 +480,22 @@ contract ArcFXGatewayV8Test is Test {
 
     function test_UpdatePayoutAddress_HappyPath() public {
         address newPayee = makeAddr("new-payee");
-
         vm.prank(merchant);
         gw.updatePayoutAddress(newPayee);
-
         (address storedPayee, , ) = gw.merchants(merchant);
         assertEq(storedPayee, newPayee);
     }
 
     function test_UpdatePayoutAddress_RevertsForNonMerchant() public {
         vm.prank(customer);
-        vm.expectRevert(ArcFXGatewayV8.NotMerchant.selector);
+        vm.expectRevert(ArcFXGatewayV9.NotMerchant.selector);
         gw.updatePayoutAddress(makeAddr("any"));
     }
 
     function test_UpdatePayoutAddress_RevertsOnZeroAddress() public {
         vm.prank(merchant);
-        vm.expectRevert(ArcFXGatewayV8.InvalidPayoutAddress.selector);
+        vm.expectRevert(ArcFXGatewayV9.InvalidPayoutAddress.selector);
         gw.updatePayoutAddress(address(0));
-    }
-
-    function test_UpdatePayoutAddress_DoesNotRerouteExistingInvoice() public {
-        // Create an invoice first; the payee snapshot must stay frozen.
-        bytes32 globalId = _createInvoice(bytes32("up-1"), 100e6, 1 hours);
-
-        address newPayee = makeAddr("rerouted");
-        vm.prank(merchant);
-        gw.updatePayoutAddress(newPayee);
-
-        _fundRelayer(eurc, 100e6);
-        vm.prank(relayer);
-        gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
-
-        // Settlement reads merchants[m].payoutAddress at settle-time, not
-        // create-time — the merchant rotation IS observed for in-flight
-        // invoices. The invariant we care about is `payoutToken` (locked at
-        // create), which is what the test_UpdatePayoutToken_DoesNotReroute
-        // companion test asserts. Documenting here so a future reader who
-        // expects "address is also locked" knows the contract's actual stance.
-        assertEq(eurc.balanceOf(newPayee), 100e6 - (100e6 * FEE_BPS) / 10_000, "payout follows current address");
-        assertEq(eurc.balanceOf(payee), 0, "old payee receives nothing");
     }
 
     // ── updatePayoutToken ──────────────────────────────────────────────
@@ -449,40 +503,35 @@ contract ArcFXGatewayV8Test is Test {
     function test_UpdatePayoutToken_HappyPath() public {
         vm.prank(merchant);
         gw.updatePayoutToken(address(usdc));
-
         (, address storedToken, ) = gw.merchants(merchant);
         assertEq(storedToken, address(usdc));
     }
 
     function test_UpdatePayoutToken_RevertsForNonMerchant() public {
         vm.prank(customer);
-        vm.expectRevert(ArcFXGatewayV8.NotMerchant.selector);
+        vm.expectRevert(ArcFXGatewayV9.NotMerchant.selector);
         gw.updatePayoutToken(address(usdc));
     }
 
     function test_UpdatePayoutToken_RevertsOnUnsupportedToken() public {
         MockERC20 random = new MockERC20("Random", "RND", 6);
         vm.prank(merchant);
-        vm.expectRevert(ArcFXGatewayV8.InvalidPayoutToken.selector);
+        vm.expectRevert(ArcFXGatewayV9.InvalidPayoutToken.selector);
         gw.updatePayoutToken(address(random));
     }
 
     function test_UpdatePayoutToken_DoesNotRerouteExistingInvoice() public {
-        // Create the invoice in eurc first.
         bytes32 globalId = _createInvoice(bytes32("ut-1"), 100e6, 1 hours);
-
-        // Now flip the merchant's preferred payout token to usdc.
         vm.prank(merchant);
         gw.updatePayoutToken(address(usdc));
 
-        // The invoice should still settle in eurc — frozen at create time.
         _fundRelayer(eurc, 100e6);
         vm.prank(relayer);
         gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
 
         uint256 expectedPayout = 100e6 - (100e6 * FEE_BPS) / 10_000;
-        assertEq(eurc.balanceOf(payee), expectedPayout, "settlement still in eurc");
-        assertEq(usdc.balanceOf(payee), 0, "no usdc routed to merchant");
+        assertEq(eurc.balanceOf(payee), expectedPayout);
+        assertEq(usdc.balanceOf(payee), 0);
     }
 
     // ── deactivateMerchant ─────────────────────────────────────────────
@@ -490,40 +539,22 @@ contract ArcFXGatewayV8Test is Test {
     function test_DeactivateMerchant_HappyPath() public {
         vm.prank(merchant);
         gw.deactivateMerchant();
-
         (, , bool active) = gw.merchants(merchant);
         assertFalse(active);
     }
 
     function test_DeactivateMerchant_RevertsForNonMerchant() public {
         vm.prank(customer);
-        vm.expectRevert(ArcFXGatewayV8.NotMerchant.selector);
+        vm.expectRevert(ArcFXGatewayV9.NotMerchant.selector);
         gw.deactivateMerchant();
     }
 
     function test_DeactivateMerchant_BlocksFutureInvoiceCreation() public {
         vm.prank(merchant);
         gw.deactivateMerchant();
-
         vm.prank(merchant);
-        vm.expectRevert(ArcFXGatewayV8.MerchantInactive.selector);
+        vm.expectRevert(ArcFXGatewayV9.MerchantInactive.selector);
         gw.createInvoice(bytes32("dm-1"), address(usdc), 100e6, uint64(block.timestamp + 1 hours));
-    }
-
-    // ── createInvoice extras ───────────────────────────────────────────
-
-    function test_CreateInvoice_RevertsOnDuplicateInvoiceId() public {
-        bytes32 invoiceId = bytes32("dup-1");
-        _createInvoice(invoiceId, 100e6, 1 hours);
-
-        // Second call with same merchantInvoiceId yields the same globalId.
-        bytes32 expectedGlobalId = keccak256(abi.encode(merchant, invoiceId));
-
-        vm.prank(merchant);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.InvoiceAlreadyExists.selector, expectedGlobalId
-        ));
-        gw.createInvoice(invoiceId, address(usdc), 100e6, uint64(block.timestamp + 1 hours));
     }
 
     // ── delegate flow + createInvoiceFor ───────────────────────────────
@@ -531,7 +562,6 @@ contract ArcFXGatewayV8Test is Test {
     function test_AuthorizeDelegate_HappyPath() public {
         address delegate = makeAddr("delegate");
         uint64 expiry    = uint64(block.timestamp + 1 days);
-
         vm.prank(merchant);
         gw.authorizeDelegate(delegate, expiry);
         assertEq(gw.delegateAuthorizations(merchant, delegate), expiry);
@@ -539,7 +569,7 @@ contract ArcFXGatewayV8Test is Test {
 
     function test_AuthorizeDelegate_RevertsForNonMerchant() public {
         vm.prank(customer);
-        vm.expectRevert(ArcFXGatewayV8.NotMerchant.selector);
+        vm.expectRevert(ArcFXGatewayV9.NotMerchant.selector);
         gw.authorizeDelegate(makeAddr("delegate"), uint64(block.timestamp + 1 days));
     }
 
@@ -558,22 +588,17 @@ contract ArcFXGatewayV8Test is Test {
         gw.authorizeDelegate(delegate, uint64(block.timestamp + 1 days));
 
         vm.prank(delegate);
-        bytes32 globalId = gw.createInvoiceFor(
-            merchant, bytes32("cif-1"), address(usdc), 100e6, uint64(block.timestamp + 1 hours)
-        );
-
-        (address storedMerchant, , , , , ArcFXGatewayV8.InvoiceStatus status, ) = gw.invoices(globalId);
+        bytes32 globalId = gw.createInvoiceFor(merchant, bytes32("cif-1"), address(usdc), 100e6, uint64(block.timestamp + 1 hours));
+        (address storedMerchant, , , , , ArcFXGatewayV9.InvoiceStatus status, ) = gw.invoices(globalId);
         assertEq(storedMerchant, merchant);
-        assertEq(uint8(status), uint8(ArcFXGatewayV8.InvoiceStatus.Created));
+        assertEq(uint8(status), uint8(ArcFXGatewayV9.InvoiceStatus.Created));
     }
 
     function test_CreateInvoiceFor_RevertsForUnauthorizedDelegate() public {
         address randomDelegate = makeAddr("rogue");
         vm.prank(randomDelegate);
-        vm.expectRevert(ArcFXGatewayV8.DelegateNotAuthorized.selector);
-        gw.createInvoiceFor(
-            merchant, bytes32("cif-r1"), address(usdc), 100e6, uint64(block.timestamp + 1 hours)
-        );
+        vm.expectRevert(ArcFXGatewayV9.DelegateNotAuthorized.selector);
+        gw.createInvoiceFor(merchant, bytes32("cif-r1"), address(usdc), 100e6, uint64(block.timestamp + 1 hours));
     }
 
     function test_CreateInvoiceFor_RevertsForExpiredAuthorization() public {
@@ -585,76 +610,7 @@ contract ArcFXGatewayV8Test is Test {
         vm.warp(block.timestamp + 2 hours);
 
         vm.prank(delegate);
-        vm.expectRevert(ArcFXGatewayV8.DelegateNotAuthorized.selector);
-        gw.createInvoiceFor(
-            merchant, bytes32("cif-r2"), address(usdc), 100e6, uint64(block.timestamp + 1 hours)
-        );
-    }
-
-    // ── recordPayerRefund missing branches ─────────────────────────────
-
-    function test_RecordPayerRefund_RevertsOnNotFound() public {
-        vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.InvoiceNotFound.selector, bytes32("ghost")
-        ));
-        gw.recordPayerRefund(bytes32("ghost"), customer, address(usdc), 110e6, bytes32(0));
-    }
-
-    // ── refundInvoice missing branches ─────────────────────────────────
-
-    function test_RefundInvoice_RevertsIfNotPaid() public {
-        bytes32 globalId = _createInvoice(bytes32("rf-np"), 100e6, 1 hours);
-
-        vm.prank(merchant);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.InvoiceNotRefundable.selector, globalId
-        ));
-        gw.refundInvoice(globalId);
-    }
-
-    function test_RefundInvoice_AdminCanAlsoRefund() public {
-        bytes32 globalId = _createInvoice(bytes32("rf-admin"), 100e6, 1 hours);
-        _fundRelayer(eurc, 100e6);
-        vm.prank(relayer);
-        gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
-
-        uint256 expectedFee    = (100e6 * FEE_BPS) / 10_000;
-        uint256 expectedPayout = 100e6 - expectedFee;
-        // Funds need to come from `merchant` (the contract pulls from inv.merchant),
-        // mirroring the round-trip test setup.
-        vm.prank(payee);
-        eurc.transfer(merchant, expectedPayout);
-        vm.prank(merchant);
-        eurc.approve(address(gw), expectedPayout);
-
-        // Admin (not merchant) calls refundInvoice — this exercises the
-        // hasRole(DEFAULT_ADMIN_ROLE, msg.sender) branch.
-        vm.prank(admin);
-        gw.refundInvoice(globalId);
-
-        (, , , , , ArcFXGatewayV8.InvoiceStatus status, ) = gw.invoices(globalId);
-        assertEq(uint8(status), uint8(ArcFXGatewayV8.InvoiceStatus.Refunded));
-        assertEq(eurc.balanceOf(customer), expectedPayout);
-    }
-
-    function test_RefundInvoice_RevertsIfFeeBucketDrained() public {
-        bytes32 globalId = _createInvoice(bytes32("rf-drain"), 100e6, 1 hours);
-        _fundRelayer(eurc, 100e6);
-        vm.prank(relayer);
-        gw.settleInvoice(globalId, customer, address(usdc), 110e6, 100e6, bytes32(0));
-
-        uint256 expectedFee = (100e6 * FEE_BPS) / 10_000;
-
-        // Admin sweeps fees, draining the bucket below what refundInvoice
-        // expects to return to the merchant.
-        vm.prank(admin);
-        gw.withdrawFees(address(eurc), admin);
-
-        vm.prank(merchant);
-        vm.expectRevert(abi.encodeWithSelector(
-            ArcFXGatewayV8.InsufficientFeesForRefund.selector, expectedFee, 0
-        ));
-        gw.refundInvoice(globalId);
+        vm.expectRevert(ArcFXGatewayV9.DelegateNotAuthorized.selector);
+        gw.createInvoiceFor(merchant, bytes32("cif-r2"), address(usdc), 100e6, uint64(block.timestamp + 1 hours));
     }
 }

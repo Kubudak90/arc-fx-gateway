@@ -1,6 +1,7 @@
 import {
   pgTable, text, uuid, timestamp, integer, numeric, jsonb, customType, boolean, pgEnum, index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const bytea = customType<{ data: Buffer; default: false }>({
   dataType() { return "bytea"; },
@@ -22,6 +23,11 @@ export const merchants = pgTable("merchants", {
   payoutToken: text("payout_token").notNull(),
   webhookUrl: text("webhook_url"),
   apiKeyHash: text("api_key_hash").notNull(),
+  // First 12 chars of the raw API key (e.g. "ak_live_AB12"). Used as a
+  // fast-path lookup index so we don't bcrypt-compare every merchant row
+  // on each authenticated request. Audit H2 (2026-05-05).
+  apiKeyPrefix: text("api_key_prefix").notNull().default(""),
+  allowedOrigins: text("allowed_origins").array().notNull().default(sql`'{}'::text[]`),
   webhookSecretEnc: bytea("webhook_secret_enc").notNull(),
   webhookSecretIv: bytea("webhook_secret_iv").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

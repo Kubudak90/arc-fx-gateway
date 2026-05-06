@@ -10,4 +10,8 @@ describe("schema", () => {
   it("invoices table is defined with status enum column", () => {
     expect(invoices.status).toBeDefined();
   });
+  it("merchants table exposes apiKeyPrefix and allowedOrigins", () => {
+    expect(merchants.apiKeyPrefix.name).toBe("api_key_prefix");
+    expect(merchants.allowedOrigins.name).toBe("allowed_origins");
+  });
 });

@@ -373,4 +373,43 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
             emit InvoiceClaimed(globalId, inv.merchant, payoutAddress, e.payoutToken, toMerchant, fee);
         }
     }
+
+    // =========================================================================
+    // Task 10: Admin recovery for abandoned escrow
+    // =========================================================================
+
+    error InvoiceNotRecoverable(bytes32 globalId);
+    error MerchantStillActive(address merchant);
+    error RecoveryTooEarly(bytes32 globalId, uint64 recoverableAt);
+
+    event EscrowRecovered(
+        bytes32 indexed globalId,
+        address indexed merchant,
+        address payoutToken,
+        uint256 amount,
+        address to
+    );
+
+    function adminRecoverEscrow(bytes32[] calldata globalIds, address to)
+        external nonReentrant onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (to == address(0)) revert InvalidPayoutAddress();
+        for (uint256 i = 0; i < globalIds.length; ++i) {
+            bytes32 globalId = globalIds[i];
+            Invoice storage inv = invoices[globalId];
+            Escrow memory e = escrows[globalId];
+
+            if (inv.status != InvoiceStatus.Paid)        revert InvoiceNotRecoverable(globalId);
+            if (merchants[inv.merchant].active)          revert MerchantStillActive(inv.merchant);
+            uint64 recoverableAt = e.claimableAt + ADMIN_RECOVERY_DELAY;
+            if (block.timestamp < recoverableAt)         revert RecoveryTooEarly(globalId, recoverableAt);
+
+            inv.status = InvoiceStatus.Recovered;
+            delete escrows[globalId];
+
+            IERC20(e.payoutToken).safeTransfer(to, e.amount);
+
+            emit EscrowRecovered(globalId, inv.merchant, e.payoutToken, e.amount, to);
+        }
+    }
 }

@@ -2,6 +2,14 @@
 
 Run on every gateway deploy. Verified bytecode + source on the explorer is the cheapest signal we can give external reviewers and bounty hunters.
 
+## ⚠ vercel.json location is not portable
+
+`packages/app/vercel.json` is the SOURCE OF TRUTH for cron registration. The
+Vercel project root is set to `packages/app/`; relocating the project root
+will silently stop registering all crons. If the monorepo layout is ever
+reorganized, coordinate the `vercel.json` move at the same time and verify
+crons still register via `vercel crons ls`.
+
 ## 1. Pre-deploy
 
 - [ ] All audit-prep gates green on the branch you're deploying from:

@@ -59,14 +59,14 @@ positives in this codebase (H3, M2). 1 skipped as a false positive on review
 | L9 | `session.apiKey` was stored on session for "dashboard convenience" | Removed; bootstrap/rotation responses still return `apiKey` in body | 7 |
 | L10 | `packages/shop/lib/cart.tsx` used `JSON.parse(raw) as CartItem[]` | Zod-validated parse with `[]` fallback | 7 |
 
-## Deferred to V10
+## Deferred to V10 — CLOSED 2026-05-06 (Plan 10)
 
-| Finding | Plan |
-|--------|------|
-| H4 (refund custody) | V10 custody model — eliminates allowance dependency entirely |
-| M3 (fee bound) | V10 in-constructor `require(protocolFeeBps <= 1000)` |
-| M4 (reactivate semantics) | V10 explicit `reactivateMerchant` with operator-only gating |
-| L2 (`nonReentrant` on `recordPayerRefund`) | V10 redeploy will pick up the modifier (V9 immutable) |
+| Finding | Resolution |
+|--------|------------|
+| H4 (refund custody) | V10 custody model deployed at `0x<V10>`. Allowance dependency eliminated. |
+| M3 (fee bound) | V10 constructor enforces `protocolFeeBps <= 1000`. |
+| M4 (reactivate semantics) | V10 admin-only `reactivateMerchant`; `registerMerchant` rejects deactivated overwrite. |
+| L2 (`nonReentrant` on `recordPayerRefund`) | Modifier added in V10. |
 
 ## Operational gotchas worth carrying into V10 plan
 

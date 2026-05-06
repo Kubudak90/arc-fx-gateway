@@ -1,4 +1,10 @@
 /**
+ * DEV-ONLY smoke test. Requires PRIVATE_KEY (raw hex) for the AppKit adapter
+ * and RELAYER_ADAPTER_KEY equivalent. In V10, the main daemon signs via Vault
+ * (VAULT_URL/VAULT_ROLE_ID/VAULT_SECRET_ID/VAULT_KEY_NAME); this script
+ * retains the raw PRIVATE_KEY path because AppKit does not support custom
+ * signers. Do not use on mainnet without KMS.
+ *
  * Phase A smoke test: confirm App Kit Swap is alive on Arc Testnet
  * before we commit to building the relayer daemon.
  *

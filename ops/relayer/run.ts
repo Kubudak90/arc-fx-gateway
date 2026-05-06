@@ -23,10 +23,10 @@ import {
   createPublicClient, createWalletClient, http, parseAbi,
   type Address, type Hex,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import pg from "pg";
+import { vaultSigner } from "./vault-signer";
 
 const RPC           = need("ARC_TESTNET_RPC");
 const PG_URL        = need("POSTGRES_URL_NON_POOLING");
@@ -72,25 +72,23 @@ const PERMIT2_ABI = parseAbi([
   "function permitWitnessTransferFrom(PermitTransferFrom permit, SignatureTransferDetails transferDetails, address owner, bytes32 witness, string witnessTypeString, bytes signature)",
 ]);
 
-// Audit M1 (2026-05-06): scope the raw private-key string to an IIFE so it
-// leaves the module-level binding scope immediately after privateKeyToAccount
-// and createViemAdapterFromPrivateKey consume it. The `account` object and the
-// viem adapter keep internal references to key material for signing, but the
-// module-scope `PRIVATE_KEY: Hex` string is dropped, narrowing the blast radius
-// of any future inadvertent logging of module globals.
-//
-// Note: viem's `account` and `adapter` still hold key material internally —
-// this mitigation is defence-in-depth, not a complete key-erasure guarantee.
-// A V10 improvement would move to an HSM or encrypted-keystore model.
-const { wallet, adapter, RELAYER_ADDR } = (() => {
-  const pk = need("RELAYER_PRIVATE_KEY") as Hex;
-  const account = privateKeyToAccount(pk);
-  return {
-    wallet:       createWalletClient({ account, transport: http(RPC) }),
-    adapter:      createViemAdapterFromPrivateKey({ privateKey: pk }),
-    RELAYER_ADDR: account.address,
-  };
-})();
+// V10 (audit M1): relayer key is isolated in HashiCorp Vault transit engine.
+// The private key never leaves Vault — authentication is via AppRole, and
+// signing is delegated to the transit/sign endpoint. See ops/vault/README.md.
+const account = await vaultSigner({
+  vaultUrl:  need("VAULT_URL"),
+  roleId:    need("VAULT_ROLE_ID"),
+  secretId:  need("VAULT_SECRET_ID"),
+  keyName:   need("VAULT_KEY_NAME"),
+});
+const RELAYER_ADDR = account.address;
+const wallet = createWalletClient({ account, transport: http(RPC) });
+// FIXME(V10): kit.swap's createViemAdapterFromPrivateKey still requires a raw
+// private key. In V10 the relayer no longer holds pay-in tokens in its wallet
+// (custody goes to the gateway escrow). Replacing the adapter with a Vault-
+// backed equivalent is tracked as a follow-up once AppKit supports custom
+// signers. For now, this env var is retained only for the adapter construction.
+const adapter = createViemAdapterFromPrivateKey({ privateKey: need("RELAYER_ADAPTER_KEY") as Hex });
 
 const chain = createPublicClient({ transport: http(RPC) });
 const kit   = new AppKit();

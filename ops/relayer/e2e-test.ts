@@ -1,4 +1,11 @@
 /**
+ * DEV-ONLY single-wallet E2E test. Requires RELAYER_PRIVATE_KEY (raw hex).
+ * In V10, the daemon signs via Vault (VAULT_* env vars); this script uses a
+ * raw private key because the customer and relayer are the same wallet for
+ * test convenience. Vault's single-key model doesn't map to this multi-role
+ * setup without a full test Vault instance. Update or delete this script
+ * before any production E2E suite.
+ *
  * Manual E2E test for the v0.8 stack. Bypasses the SDK and the /api/checkout
  * routes — talks directly to the chain (gateway, Permit2, ERC20) and the DB
  * (`relayer_queue`). Lets us validate the daemon-side pipeline before any UI

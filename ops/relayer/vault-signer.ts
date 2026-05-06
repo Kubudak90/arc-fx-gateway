@@ -1,13 +1,13 @@
-import { toAccount } from "viem/accounts";
+import { toAccount, publicKeyToAddress } from "viem/accounts";
 import {
   type Hex,
   type SignableMessage,
   type TypedDataDefinition,
+  type LocalAccount,
   hashMessage,
   hashTypedData,
   keccak256,
   serializeTransaction,
-  publicKeyToAddress,
 } from "viem";
 
 export interface VaultSignerOpts {
@@ -19,7 +19,7 @@ export interface VaultSignerOpts {
 
 interface Session { token: string; expiresAt: number }
 
-export async function vaultSigner(opts: VaultSignerOpts) {
+export async function vaultSigner(opts: VaultSignerOpts): Promise<LocalAccount> {
   let session = await login(opts);
 
   async function ensureSession() {
@@ -38,19 +38,20 @@ export async function vaultSigner(opts: VaultSignerOpts) {
       return await signDigest(opts, session.token, hashMessage(message));
     },
 
-    async signTransaction(tx: any) {
+    async signTransaction(tx: Parameters<LocalAccount["signTransaction"]>[0]) {
       await ensureSession();
-      const serialized = serializeTransaction(tx);
+      const serialized = serializeTransaction(tx as Parameters<typeof serializeTransaction>[0]);
       const digest = keccak256(serialized);
       const signature = await signDigest(opts, session.token, digest);
-      return serializeTransaction(tx, parseSignature(signature));
+      return serializeTransaction(tx as Parameters<typeof serializeTransaction>[0], parseSignature(signature)) as `0x${string}`;
     },
 
-    async signTypedData(typedData: TypedDataDefinition) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async signTypedData(typedData: any) {
       await ensureSession();
       return await signDigest(opts, session.token, hashTypedData(typedData));
     },
-  });
+  }) as LocalAccount;
 }
 
 async function login(opts: VaultSignerOpts): Promise<Session> {

@@ -51,7 +51,9 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
     struct DelegateAuth { uint64 expiresAt; uint8 rights; }
     mapping(address merchant => mapping(address delegate => DelegateAuth)) public delegates;
 
-    // Events / errors / functions filled in by subsequent tasks.
+    error InvalidPayoutAddress();
+    error InvalidWindow();
+    error ProtocolFeeTooHigh(uint256 supplied);
 
     constructor(
         uint256 protocolFeeBps,
@@ -60,10 +62,231 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
         address initialOwner,
         address initialRelayer
     ) {
+        if (initialOwner   == address(0)) revert InvalidPayoutAddress();
+        if (initialRelayer == address(0)) revert InvalidPayoutAddress();
+        if (protocolFeeBps > 1_000)       revert ProtocolFeeTooHigh(protocolFeeBps);
+        if (refundWindow == 0)            revert InvalidWindow();
+        if (adminRecoveryDelay == 0)      revert InvalidWindow();
+
         PROTOCOL_FEE_BPS     = protocolFeeBps;
         REFUND_WINDOW        = refundWindow;
         ADMIN_RECOVERY_DELAY = adminRecoveryDelay;
+
         _grantRole(DEFAULT_ADMIN_ROLE, initialOwner);
         _grantRole(RELAYER_ROLE,       initialRelayer);
+    }
+
+    // =========================================================================
+    // Task 4: Token whitelist + pause
+    // =========================================================================
+
+    event TokenSupportUpdated(address indexed token, bool active);
+
+    function setTokenSupport(address token, bool active) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        supportedTokens[token] = active;
+        emit TokenSupportUpdated(token, active);
+    }
+
+    function pause()   external onlyRole(DEFAULT_ADMIN_ROLE) { _pause(); }
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) { _unpause(); }
+
+    // =========================================================================
+    // Task 5: Merchant lifecycle
+    // =========================================================================
+
+    error NotMerchant();
+    error MerchantAlreadyRegistered();
+    error MerchantAlreadyActive();
+    error MerchantInactive();
+    error InvalidPayoutToken();
+
+    event MerchantRegistered(address indexed merchant, address payoutAddress, address payoutToken);
+    event MerchantPayoutAddressUpdated(address indexed merchant, address oldAddress, address newAddress);
+    event MerchantPayoutTokenUpdated(address indexed merchant, address oldToken, address newToken);
+    event MerchantDeactivated(address indexed merchant);
+    event MerchantReactivated(address indexed merchant);
+
+    function registerMerchant(address payoutAddress, address payoutToken) external {
+        // M4: reject any pre-existing row, active or not. Reactivation is admin-gated.
+        if (merchants[msg.sender].payoutAddress != address(0)) revert MerchantAlreadyRegistered();
+        if (payoutAddress == address(0))                       revert InvalidPayoutAddress();
+        if (!supportedTokens[payoutToken])                     revert InvalidPayoutToken();
+        merchants[msg.sender] = Merchant({
+            payoutAddress: payoutAddress,
+            payoutToken:   payoutToken,
+            active:        true
+        });
+        emit MerchantRegistered(msg.sender, payoutAddress, payoutToken);
+    }
+
+    function updatePayoutAddress(address newPayoutAddress) external {
+        Merchant storage m = merchants[msg.sender];
+        if (!m.active)                       revert NotMerchant();
+        if (newPayoutAddress == address(0))  revert InvalidPayoutAddress();
+        address old = m.payoutAddress;
+        m.payoutAddress = newPayoutAddress;
+        emit MerchantPayoutAddressUpdated(msg.sender, old, newPayoutAddress);
+    }
+
+    function updatePayoutToken(address newPayoutToken) external {
+        Merchant storage m = merchants[msg.sender];
+        if (!m.active)                          revert NotMerchant();
+        if (!supportedTokens[newPayoutToken])   revert InvalidPayoutToken();
+        address old = m.payoutToken;
+        m.payoutToken = newPayoutToken;
+        emit MerchantPayoutTokenUpdated(msg.sender, old, newPayoutToken);
+    }
+
+    function deactivateMerchant() external {
+        Merchant storage m = merchants[msg.sender];
+        if (!m.active) revert NotMerchant();
+        m.active = false;
+        emit MerchantDeactivated(msg.sender);
+    }
+
+    /// @notice Admin-only reactivation (audit M4). Preserves payoutAddress/Token.
+    function reactivateMerchant(address merchantAddr) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        Merchant storage m = merchants[merchantAddr];
+        if (m.payoutAddress == address(0)) revert NotMerchant();
+        if (m.active)                       revert MerchantAlreadyActive();
+        m.active = true;
+        emit MerchantReactivated(merchantAddr);
+    }
+
+    // =========================================================================
+    // Task 6: Invoice creation + delegate scope
+    // =========================================================================
+
+    error InvalidPayInToken();
+    error InvoiceAlreadyExists(bytes32 globalId);
+    error DelegateNotAuthorized();
+    error InvalidDelegateRights(uint8 rights);
+
+    event InvoiceCreated(
+        bytes32 indexed globalId,
+        address indexed merchant,
+        bytes32 indexed merchantInvoiceId,
+        address payIn,
+        address payoutToken,
+        uint256 amountOut,
+        uint64 expiresAt
+    );
+    event DelegateAuthorized(address indexed merchant, address indexed delegate, uint64 expiresAt, uint8 rights);
+    event DelegateRevoked(address indexed merchant, address indexed delegate);
+
+    function createInvoice(
+        bytes32 merchantInvoiceId,
+        address payIn,
+        uint256 amountOut,
+        uint64  expiresAt
+    ) external returns (bytes32) {
+        return _createInvoice(msg.sender, merchantInvoiceId, payIn, amountOut, expiresAt);
+    }
+
+    function createInvoiceFor(
+        address merchant_,
+        bytes32 merchantInvoiceId,
+        address payIn,
+        uint256 amountOut,
+        uint64  expiresAt
+    ) external returns (bytes32) {
+        DelegateAuth memory d = delegates[merchant_][msg.sender];
+        if (d.expiresAt < block.timestamp)               revert DelegateNotAuthorized();
+        if ((d.rights & RIGHT_CREATE_INVOICE) == 0)      revert DelegateNotAuthorized();
+        return _createInvoice(merchant_, merchantInvoiceId, payIn, amountOut, expiresAt);
+    }
+
+    function _createInvoice(
+        address merchant_,
+        bytes32 merchantInvoiceId,
+        address payIn,
+        uint256 amountOut,
+        uint64  expiresAt
+    ) internal whenNotPaused returns (bytes32 globalId) {
+        Merchant memory m = merchants[merchant_];
+        if (!m.active)                revert MerchantInactive();
+        if (!supportedTokens[payIn])  revert InvalidPayInToken();
+
+        globalId = keccak256(abi.encode(merchant_, merchantInvoiceId));
+        if (invoices[globalId].status != InvoiceStatus.None) revert InvoiceAlreadyExists(globalId);
+
+        invoices[globalId] = Invoice({
+            merchant:    merchant_,
+            payIn:       payIn,
+            payoutToken: m.payoutToken,
+            amountOut:   amountOut,
+            expiresAt:   expiresAt,
+            status:      InvoiceStatus.Created,
+            paidBy:      address(0)
+        });
+        emit InvoiceCreated(globalId, merchant_, merchantInvoiceId, payIn, m.payoutToken, amountOut, expiresAt);
+    }
+
+    function authorizeDelegate(address delegate, uint64 expiresAt, uint8 rights) external {
+        if (!merchants[msg.sender].active) revert NotMerchant();
+        uint8 validMask = RIGHT_CREATE_INVOICE | RIGHT_REFUND;
+        if ((rights & ~validMask) != 0)    revert InvalidDelegateRights(rights);
+        delegates[msg.sender][delegate] = DelegateAuth({ expiresAt: expiresAt, rights: rights });
+        emit DelegateAuthorized(msg.sender, delegate, expiresAt, rights);
+    }
+
+    function revokeDelegate(address delegate) external {
+        delete delegates[msg.sender][delegate];
+        emit DelegateRevoked(msg.sender, delegate);
+    }
+
+    // =========================================================================
+    // Task 7: Settle invoice → custody escrow
+    // =========================================================================
+
+    error InvoiceAlreadyPaid(bytes32 globalId);
+    error InvoiceExpired(bytes32 globalId);
+    error InvoiceNotFound(bytes32 globalId);
+    error InvoiceNotInCreatedState(bytes32 globalId);
+    error PayoutShortfall(uint256 supplied, uint256 required);
+
+    event InvoicePaid(
+        bytes32 indexed globalId,
+        address indexed payer,
+        uint256 amountIn,
+        uint256 grossReceived,
+        uint256 merchantPayout,
+        uint256 fee
+    );
+    event SettlementContext(bytes32 indexed globalId, address indexed payInToken, bytes32 swapTxHash);
+    event EscrowCreated(bytes32 indexed globalId, address indexed payoutToken, uint256 amount, uint64 claimableAt);
+
+    function settleInvoice(
+        bytes32 globalId,
+        address payer,
+        address payInToken,
+        uint256 amountIn,
+        uint256 grossPayout,
+        bytes32 swapTxHash
+    ) external nonReentrant whenNotPaused onlyRole(RELAYER_ROLE) {
+        Invoice storage inv = invoices[globalId];
+        if (inv.status == InvoiceStatus.None)        revert InvoiceNotFound(globalId);
+        if (inv.status != InvoiceStatus.Created)     revert InvoiceAlreadyPaid(globalId);
+        if (block.timestamp > inv.expiresAt)         revert InvoiceExpired(globalId);
+        if (grossPayout < inv.amountOut)             revert PayoutShortfall(grossPayout, inv.amountOut);
+
+        address payoutToken = inv.payoutToken;
+        IERC20(payoutToken).safeTransferFrom(msg.sender, address(this), grossPayout);
+
+        uint256 excess = grossPayout - inv.amountOut;
+        protocolFeesAccrued[payoutToken] += excess;
+
+        escrows[globalId] = Escrow({
+            amount:      inv.amountOut,
+            payoutToken: payoutToken,
+            claimableAt: uint64(block.timestamp) + REFUND_WINDOW
+        });
+
+        inv.status = InvoiceStatus.Paid;
+        inv.paidBy = payer;
+
+        emit InvoicePaid(globalId, payer, amountIn, grossPayout, inv.amountOut, /*fee=*/0);
+        emit SettlementContext(globalId, payInToken, swapTxHash);
+        emit EscrowCreated(globalId, payoutToken, inv.amountOut, escrows[globalId].claimableAt);
     }
 }

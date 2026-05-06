@@ -260,14 +260,19 @@ async function tick(): Promise<{
         { payer: payer.toLowerCase(), amount }, log.transactionHash);
     }
 
-    // EscrowCreated → set claimable_at on the invoice row
+    // EscrowCreated → set claimable_at on the invoice row.
+    // Guard: only update rows still in 'paid' state with no claimable_at set.
+    // This makes the handler idempotent on replay and protects against
+    // out-of-order events overwriting a row that has already progressed to
+    // claimed/refunded/recovered (first sighting wins).
     for (const log of escrowCreatedLogs) {
       const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
       if (d.eventName !== "EscrowCreated") continue;
       const id          = d.args.globalId as Hex;
       const claimableAt = d.args.claimableAt as bigint;
       await pool.query(
-        `update invoices set claimable_at = to_timestamp($2) where id = $1`,
+        `update invoices set claimable_at = to_timestamp($2)
+           where id = $1 and status = 'paid' and claimable_at is null`,
         [id, Number(claimableAt)],
       );
     }
@@ -320,7 +325,13 @@ async function tick(): Promise<{
         {}, log.transactionHash);
     }
 
-    // MerchantReactivated → clear deactivated_at
+    // MerchantReactivated → clear deactivated_at.
+    // Note: this is intentionally NOT guarded by a prior-state check. The
+    // operator explicitly issued a reactivation on-chain, so clearing
+    // deactivated_at is always correct. On replay, if a later deactivation
+    // event also replays, it will re-set the column — the final DB state
+    // will converge to whatever the most-recently-processed event dictates,
+    // which is the correct observable on-chain state.
     for (const log of merchantReactivatedLogs) {
       const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
       if (d.eventName !== "MerchantReactivated") continue;

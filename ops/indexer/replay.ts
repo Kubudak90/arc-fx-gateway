@@ -153,7 +153,10 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
       }
     }
 
-    // EscrowCreated → set claimable_at (replay: idempotent update)
+    // EscrowCreated → set claimable_at.
+    // Guard: only update rows still in 'paid' state with no claimable_at set
+    // (first sighting wins). On replay, already-claimed/refunded/recovered
+    // rows are left untouched, preventing spurious overwrites of terminal state.
     for (const log of escrowCreatedLogs) {
       const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
       if (d.eventName !== "EscrowCreated") continue;
@@ -165,7 +168,8 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
         continue;
       }
       await pool.query(
-        `update invoices set claimable_at = to_timestamp($2) where id = $1`,
+        `update invoices set claimable_at = to_timestamp($2)
+           where id = $1 and status = 'paid' and claimable_at is null`,
         [id, Number(claimableAt)],
       );
     }
@@ -256,7 +260,11 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
       }
     }
 
-    // MerchantReactivated → clear deactivated_at
+    // MerchantReactivated → clear deactivated_at.
+    // Trade-off: no prior-state guard. On replay, spurious clears are
+    // acceptable because the correct on-chain state is the most recent
+    // event; if a deactivation replays after this, it will re-set the
+    // column and converge to the correct value.
     for (const log of merchantReactivatedLogs) {
       const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
       if (d.eventName !== "MerchantReactivated") continue;

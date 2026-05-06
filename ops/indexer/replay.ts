@@ -10,10 +10,9 @@
  *
  *   pnpm tsx replay.ts replay --from <A> --to <B> [--dry-run]
  *     Walks blocks [A, B] in 9k-block chunks, writes any missing paid /
- *     refunded rows, and DOES NOT touch indexer_state. Use this when you
- *     want a one-off catch-up without disturbing the daemon's cursor —
- *     for example, to backfill events emitted before the daemon was
- *     listening to v0.6.
+ *     refunded / claimed / recovered rows, and DOES NOT touch indexer_state.
+ *     Use this when you want a one-off catch-up without disturbing the
+ *     daemon's cursor.
  *
  * The script shares the daemon's RPC + DB env (.env at the same path) and
  * uses the same chunk size + ABI to stay byte-identical with run.ts.
@@ -29,10 +28,11 @@ import {
 import pg from "pg";
 import { randomUUID } from "node:crypto";
 
-const RPC          = need("ARC_TESTNET_RPC");
-const GATEWAY      = need("GATEWAY_ADDRESS").toLowerCase() as Address;
-const PG_URL       = need("POSTGRES_URL_NON_POOLING");
-const MAX_RANGE    = 9_000n;
+const RPC         = need("ARC_TESTNET_RPC");
+const GATEWAY_V10 = (process.env.GATEWAY_ADDRESS_V10 ?? "").toLowerCase() as Address;
+if (!GATEWAY_V10) throw new Error("GATEWAY_ADDRESS_V10 must be set");
+const PG_URL      = need("POSTGRES_URL_NON_POOLING");
+const MAX_RANGE   = 9_000n;
 
 function need(k: string): string {
   const v = process.env[k];
@@ -43,24 +43,62 @@ function need(k: string): string {
 const ABI = parseAbi([
   "event InvoiceCreated(bytes32 indexed globalId, address indexed merchant, bytes32 indexed merchantInvoiceId, address payIn, address payoutToken, uint256 amountOut, uint64 expiresAt)",
   "event InvoicePaid(bytes32 indexed globalId, address indexed payer, uint256 amountIn, uint256 grossReceived, uint256 merchantPayout, uint256 fee)",
+  "event SettlementContext(bytes32 indexed globalId, address indexed payInToken, bytes32 swapTxHash)",
+  "event EscrowCreated(bytes32 indexed globalId, address indexed payoutToken, uint256 amount, uint64 claimableAt)",
+  "event PayerRefunded(bytes32 indexed globalId, address indexed payer, address payInToken, uint256 amount, bytes32 reasonHash)",
   "event InvoiceRefunded(bytes32 indexed globalId, address indexed refundedTo, address indexed payoutToken, uint256 merchantPayout, uint256 protocolFeeReturned)",
+  "event InvoiceClaimed(bytes32 indexed globalId, address indexed merchant, address payoutAddress, address payoutToken, uint256 toMerchant, uint256 fee)",
+  "event EscrowRecovered(bytes32 indexed globalId, address indexed merchant, address payoutToken, uint256 amount, address to)",
+  "event MerchantReactivated(address indexed merchant)",
 ]);
-const InvoiceCreated  = ABI[0];
-const InvoicePaid     = ABI[1];
-const InvoiceRefunded = ABI[2];
+const InvoicePaid         = ABI[1];
+const EscrowCreated       = ABI[3];
+const InvoiceRefunded     = ABI[5];
+const InvoiceClaimed      = ABI[6];
+const EscrowRecovered     = ABI[7];
+const MerchantReactivated = ABI[8];
 
 const chain = createPublicClient({ transport: http(RPC) });
 const pool  = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
 
+async function enqueueWebhook(
+  invoiceId: string,
+  merchantId: string,
+  eventType: string,
+  extra: Record<string, unknown>,
+  txHash: string | null,
+): Promise<void> {
+  const mr = await pool.query<{ webhook_url: string | null }>(
+    "select webhook_url from merchants where id = $1", [merchantId],
+  );
+  const url = mr.rows[0]?.webhook_url;
+  if (!url) return;
+  await pool.query(
+    `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+     values ($1, $2, $3::jsonb, 0, now(), $4)
+     on conflict (invoice_id, event_type) do nothing`,
+    [
+      invoiceId, url,
+      JSON.stringify({ event_id: randomUUID(), type: eventType, invoice_id: invoiceId, tx_hash: txHash, replay: true, ...extra }),
+      eventType,
+    ],
+  );
+}
+
 interface ReplayCounts {
-  scannedChunks: number;
-  paidUpdated:   number;
-  refundedUpdated: number;
-  webhooksQueued: number;
+  scannedChunks:    number;
+  paidUpdated:      number;
+  refundedUpdated:  number;
+  claimedUpdated:   number;
+  recoveredUpdated: number;
+  webhooksQueued:   number;
 }
 
 async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<ReplayCounts> {
-  const counts: ReplayCounts = { scannedChunks: 0, paidUpdated: 0, refundedUpdated: 0, webhooksQueued: 0 };
+  const counts: ReplayCounts = {
+    scannedChunks: 0, paidUpdated: 0, refundedUpdated: 0,
+    claimedUpdated: 0, recoveredUpdated: 0, webhooksQueued: 0,
+  };
   let cursor = from;
 
   while (cursor <= to) {
@@ -69,9 +107,20 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
     counts.scannedChunks++;
     console.log(`[replay] chunk ${cursor}..${end}`);
 
-    const [paidLogs, refundedLogs] = await Promise.all([
-      chain.getLogs({ address: GATEWAY, event: InvoicePaid,     fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY, event: InvoiceRefunded, fromBlock: cursor, toBlock: end }),
+    const [
+      paidLogs,
+      escrowCreatedLogs,
+      refundedLogs,
+      claimedLogs,
+      escrowRecoveredLogs,
+      merchantReactivatedLogs,
+    ] = await Promise.all([
+      chain.getLogs({ address: GATEWAY_V10, event: InvoicePaid,         fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: GATEWAY_V10, event: EscrowCreated,       fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: GATEWAY_V10, event: InvoiceRefunded,     fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: GATEWAY_V10, event: InvoiceClaimed,      fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: GATEWAY_V10, event: EscrowRecovered,     fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: GATEWAY_V10, event: MerchantReactivated, fromBlock: cursor, toBlock: end }),
     ]);
 
     for (const log of paidLogs) {
@@ -98,24 +147,27 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
       );
       if (upd.rowCount && upd.rowCount > 0) {
         counts.paidUpdated++;
-        const mr = await pool.query<{ webhook_url: string | null }>(
-          "select webhook_url from merchants where id = $1", [upd.rows[0]!.merchant_id],
-        );
-        const url = mr.rows[0]?.webhook_url;
-        if (url) {
-          await pool.query(
-            `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
-             values ($1, $2, $3::jsonb, 0, now(), $4)
-             on conflict (invoice_id, event_type) do nothing`,
-            [id, url, JSON.stringify({
-              event_id: randomUUID(), type: "invoice.paid",
-              invoice_id: id, paid_by: payer, tx_hash: log.transactionHash,
-              replay: true,
-            }), "invoice.paid"],
-          );
-          counts.webhooksQueued++;
-        }
+        await enqueueWebhook(id, upd.rows[0]!.merchant_id, "invoice.paid",
+          { paid_by: payer }, log.transactionHash);
+        counts.webhooksQueued++;
       }
+    }
+
+    // EscrowCreated → set claimable_at (replay: idempotent update)
+    for (const log of escrowCreatedLogs) {
+      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+      if (d.eventName !== "EscrowCreated") continue;
+      const id          = d.args.globalId as Hex;
+      const claimableAt = d.args.claimableAt as bigint;
+
+      if (dryRun) {
+        console.log(`  [dry] would set claimable_at for escrow: ${id}`);
+        continue;
+      }
+      await pool.query(
+        `update invoices set claimable_at = to_timestamp($2) where id = $1`,
+        [id, Number(claimableAt)],
+      );
     }
 
     for (const log of refundedLogs) {
@@ -132,30 +184,92 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
             set status = 'refunded', refund_tx = $2, refunded_at = now()
-          where id = $1 and status = 'paid'
+          where id = $1 and status in ('created', 'paid')
           returning id, merchant_id`,
         [id, log.transactionHash],
       );
       if (upd.rowCount && upd.rowCount > 0) {
         counts.refundedUpdated++;
-        const mr = await pool.query<{ webhook_url: string | null }>(
-          "select webhook_url from merchants where id = $1", [upd.rows[0]!.merchant_id],
-        );
-        const url = mr.rows[0]?.webhook_url;
-        if (url) {
-          await pool.query(
-            `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
-             values ($1, $2, $3::jsonb, 0, now(), $4)
-             on conflict (invoice_id, event_type) do nothing`,
-            [id, url, JSON.stringify({
-              event_id: randomUUID(), type: "invoice.refunded",
-              invoice_id: id, refunded_to: refundedTo, tx_hash: log.transactionHash,
-              replay: true,
-            }), "invoice.refunded"],
-          );
-          counts.webhooksQueued++;
-        }
+        await enqueueWebhook(id, upd.rows[0]!.merchant_id, "invoice.refunded",
+          { refunded_to: refundedTo }, log.transactionHash);
+        counts.webhooksQueued++;
       }
+    }
+
+    // InvoiceClaimed → flip status to 'claimed'
+    for (const log of claimedLogs) {
+      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+      if (d.eventName !== "InvoiceClaimed") continue;
+      const id         = d.args.globalId as Hex;
+      const fee        = (d.args.fee        as bigint).toString();
+      const toMerchant = (d.args.toMerchant as bigint).toString();
+
+      if (dryRun) {
+        console.log(`  [dry] would mark claimed: ${id} (tx ${log.transactionHash})`);
+        continue;
+      }
+
+      const upd = await pool.query<{ id: string; merchant_id: string }>(
+        `update invoices
+            set status          = 'claimed',
+                claimed_at      = now(),
+                claim_tx        = $2,
+                protocol_fee    = $3,
+                merchant_payout = $4
+          where id = $1 and status = 'paid'
+          returning id, merchant_id`,
+        [id, log.transactionHash, fee, toMerchant],
+      );
+      if (upd.rowCount && upd.rowCount > 0) {
+        counts.claimedUpdated++;
+        await enqueueWebhook(id, upd.rows[0]!.merchant_id, "invoice.claimed",
+          { fee, to_merchant: toMerchant }, log.transactionHash);
+        counts.webhooksQueued++;
+      }
+    }
+
+    // EscrowRecovered → flip status to 'recovered'
+    for (const log of escrowRecoveredLogs) {
+      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+      if (d.eventName !== "EscrowRecovered") continue;
+      const id = d.args.globalId as Hex;
+
+      if (dryRun) {
+        console.log(`  [dry] would mark recovered: ${id} (tx ${log.transactionHash})`);
+        continue;
+      }
+
+      const upd = await pool.query<{ id: string; merchant_id: string }>(
+        `update invoices
+            set status       = 'recovered',
+                recovered_at = now(),
+                recovery_tx  = $2
+          where id = $1 and status = 'paid'
+          returning id, merchant_id`,
+        [id, log.transactionHash],
+      );
+      if (upd.rowCount && upd.rowCount > 0) {
+        counts.recoveredUpdated++;
+        await enqueueWebhook(id, upd.rows[0]!.merchant_id, "invoice.recovered",
+          {}, log.transactionHash);
+        counts.webhooksQueued++;
+      }
+    }
+
+    // MerchantReactivated → clear deactivated_at
+    for (const log of merchantReactivatedLogs) {
+      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+      if (d.eventName !== "MerchantReactivated") continue;
+      const merchant = (d.args.merchant as string).toLowerCase();
+
+      if (dryRun) {
+        console.log(`  [dry] would clear deactivated_at for merchant: ${merchant}`);
+        continue;
+      }
+      await pool.query(
+        `update merchants set deactivated_at = null where lower(address) = $1`,
+        [merchant],
+      );
     }
 
     cursor = end + 1n;

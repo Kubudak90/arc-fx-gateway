@@ -22,7 +22,7 @@ interface ActivityRow {
   payInToken: string;
   amountOut: string;
   merchantPayout: string | null;
-  status: "paid" | "refunded";
+  status: "paid" | "refunded" | "claimed" | "recovered";
   eventAt: string | null;
   txHash: string | null;
 }
@@ -348,17 +348,35 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
   );
 }
 
+const STATUS_LABEL: Record<ActivityRow["status"], string> = {
+  paid:      "Payment",
+  refunded:  "Refund",
+  claimed:   "Claimed",
+  recovered: "Recovered",
+};
+const STATUS_COLOR: Record<ActivityRow["status"], string> = {
+  paid:      "text-emerald-700",
+  refunded:  "text-sky-700",
+  claimed:   "text-violet-700",
+  recovered: "text-orange-700",
+};
+const SIGN_FOR: Record<ActivityRow["status"], string> = {
+  paid:      "+",
+  refunded:  "−",
+  claimed:   "+",
+  recovered: "+",
+};
+
 function ActivityItem({ a }: { a: ActivityRow }) {
-  const isRefund = a.status === "refunded";
   const amount = a.merchantPayout ?? a.amountOut;
-  const sign = isRefund ? "−" : "+";
-  const color = isRefund ? "text-sky-700" : "text-emerald-700";
+  const sign = SIGN_FOR[a.status] ?? "+";
+  const color = STATUS_COLOR[a.status] ?? "text-emerald-700";
   return (
     <li className="px-5 py-4 flex items-center gap-4 hover:bg-arcora-gray/40 transition-colors">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 text-sm">
-          <span className={`font-semibold ${isRefund ? "text-sky-700" : "text-emerald-700"}`}>
-            {isRefund ? "Refund" : "Payment"}
+          <span className={`font-semibold ${color}`}>
+            {STATUS_LABEL[a.status] ?? a.status}
           </span>
           <span className="text-muted-foreground">·</span>
           <span className="text-muted-foreground">{symbolForAddress(a.payInToken)} → {symbolForAddress(a.payoutToken)}</span>

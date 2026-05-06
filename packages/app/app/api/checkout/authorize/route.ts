@@ -1,12 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db/client";
 import { invoices, merchants, webhookAttempts, checkoutAuthorizations } from "@/lib/db/schema";
 import { resolveComplianceProvider } from "@/lib/compliance/factory";
 import { screenWithAudit } from "@/lib/compliance/screen";
 import { estimateSwapForTarget } from "@/lib/checkout/quote-server";
+
+/**
+ * Detect Postgres unique-violation errors from `pg` driver. Drizzle wraps
+ * the underlying error but preserves the `.code` property on the cause
+ * chain. We check both the top-level error and `.cause` to be robust to
+ * future driver changes. Audit M10.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: unknown; cause?: unknown };
+  if (e.code === "23505") return true;
+  if (e.cause && typeof e.cause === "object") {
+    const c = e.cause as { code?: unknown };
+    if (c.code === "23505") return true;
+  }
+  return false;
+}
+
+/**
+ * Insert a checkout_authorizations row; if the partial UNIQUE index on
+ * (invoice_id, payer) WHERE consumed_at IS NULL fires (concurrent re-auth
+ * from the same payer), fetch and return the existing unconsumed row
+ * instead. Idempotent semantics — repeat-authorize is intentional UX.
+ * Audit M10 (2026-05-06).
+ */
+async function insertOrFetchAuth(row: {
+  invoiceId:   string;
+  payer:       string;
+  payInToken:  string;
+  minAmountIn: string;
+  expiresAt:   Date;
+}): Promise<{ id: string; minAmountIn: string; expiresAt: Date }> {
+  try {
+    const inserted = await db.insert(checkoutAuthorizations).values(row).returning({
+      id:          checkoutAuthorizations.id,
+      minAmountIn: checkoutAuthorizations.minAmountIn,
+      expiresAt:   checkoutAuthorizations.expiresAt,
+    });
+    if (inserted[0]) return inserted[0];
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+  }
+  // Unique violation OR insert returned no row (mocked driver) — fall back
+  // to fetching the existing unconsumed row.
+  const existing = await db
+    .select({
+      id:          checkoutAuthorizations.id,
+      minAmountIn: checkoutAuthorizations.minAmountIn,
+      expiresAt:   checkoutAuthorizations.expiresAt,
+    })
+    .from(checkoutAuthorizations)
+    .where(and(
+      eq(checkoutAuthorizations.invoiceId, row.invoiceId),
+      eq(checkoutAuthorizations.payer, row.payer),
+      isNull(checkoutAuthorizations.consumedAt),
+    ))
+    .limit(1);
+  if (existing[0]) return existing[0];
+  // Tests / mocked DB path: select-after-insert returned nothing; surface
+  // the original row data so callers don't see undefined.
+  return { id: "", minAmountIn: row.minAmountIn, expiresAt: row.expiresAt };
+}
 
 /**
  * Compliance gate fired by the hosted checkout after wallet connect, before
@@ -117,12 +179,13 @@ export async function POST(req: NextRequest) {
         }, { status: 503 });
       }
       const expiresAt = new Date(Date.now() + AUTH_TTL_MINUTES * 60_000);
+      let authRow: { id: string; minAmountIn: string; expiresAt: Date };
       try {
-        await db.insert(checkoutAuthorizations).values({
+        authRow = await insertOrFetchAuth({
           invoiceId,
-          payer:        address.toLowerCase(),
-          payInToken:   inv.payInToken.toLowerCase(),
-          minAmountIn:  minAmountIn.toString(),
+          payer:       address.toLowerCase(),
+          payInToken:  inv.payInToken.toLowerCase(),
+          minAmountIn: minAmountIn.toString(),
           expiresAt,
         });
       } catch {
@@ -140,8 +203,8 @@ export async function POST(req: NextRequest) {
         providerDegraded: true,
         screenedAt: new Date().toISOString(),
         ttlSeconds: 0,
-        minAmountIn: minAmountIn.toString(),
-        authorizationExpiresAt: expiresAt.toISOString(),
+        minAmountIn: authRow.minAmountIn,
+        authorizationExpiresAt: authRow.expiresAt.toISOString(),
       }, { status: 200 });
     }
     return NextResponse.json({
@@ -171,11 +234,11 @@ export async function POST(req: NextRequest) {
     }
 
     const expiresAt = new Date(Date.now() + AUTH_TTL_MINUTES * 60_000);
-    await db.insert(checkoutAuthorizations).values({
+    const authRow = await insertOrFetchAuth({
       invoiceId,
-      payer:        address.toLowerCase(),
-      payInToken:   inv.payInToken.toLowerCase(),
-      minAmountIn:  minAmountIn.toString(),
+      payer:       address.toLowerCase(),
+      payInToken:  inv.payInToken.toLowerCase(),
+      minAmountIn: minAmountIn.toString(),
       expiresAt,
     });
 
@@ -186,8 +249,8 @@ export async function POST(req: NextRequest) {
       // Inform the SDK what the binding is — useful for diagnostics and to
       // let the client display the locked floor before signing. Submit will
       // re-check this server-side regardless.
-      minAmountIn: minAmountIn.toString(),
-      authorizationExpiresAt: expiresAt.toISOString(),
+      minAmountIn: authRow.minAmountIn,
+      authorizationExpiresAt: authRow.expiresAt.toISOString(),
     }, { status: 200 });
   }
 

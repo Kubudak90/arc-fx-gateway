@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { relayerQueue } from "@/lib/db/schema";
+import { invoices, relayerQueue } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { timingSafeEqual } from "node:crypto";
 
 /**
  * Polled by the SDK / hosted checkout while the customer waits for the
@@ -13,10 +14,27 @@ import { eq } from "drizzle-orm";
  *   refunded    swap failed and the relayer auto-refunded the customer
  *   failed      terminal — relayer couldn't settle and couldn't refund;
  *               operator intervention required
+ *
+ * Audit M12 (2026-05-06): without a valid status token (issued at submit
+ * time, 30-min TTL), this endpoint returns ONLY the bare status. With a
+ * matching token, it returns the full detail (lastError, tx hashes, etc.).
+ * The token comes back in the submit response and is forwarded by the
+ * hosted checkout poller as `?token=` or `x-status-token`.
  */
 
+function tokensEqual(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  // Constant-time compare to avoid leaking token prefix length on guessing.
+  try {
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
@@ -38,6 +56,40 @@ export async function GET(
 
   const row = rows[0];
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // Status token gate (audit M12). Without a valid token, return only the
+  // bare status. The hosted checkout poller forwards the token from the
+  // submit response on each poll; SDK consumers do the same.
+  const presented =
+    req.nextUrl.searchParams.get("token") ??
+    req.headers.get("x-status-token") ??
+    null;
+
+  let tokenOk = false;
+  if (presented) {
+    const inv = (await db
+      .select({
+        statusToken:          invoices.statusToken,
+        statusTokenExpiresAt: invoices.statusTokenExpiresAt,
+      })
+      .from(invoices)
+      .where(eq(invoices.id, row.invoiceId))
+      .limit(1))[0];
+    if (inv?.statusToken &&
+        inv.statusTokenExpiresAt &&
+        inv.statusTokenExpiresAt.getTime() > Date.now() &&
+        tokensEqual(inv.statusToken, presented)) {
+      tokenOk = true;
+    }
+  }
+
+  if (!tokenOk) {
+    // Public minimum: status only. Even submissionId/invoiceId are arguably
+    // a leak, but a polling client already knows the submissionId (it was
+    // returned from submit), and the invoiceId is in the on-chain hosted
+    // checkout URL. Hide everything else.
+    return NextResponse.json({ status: row.status });
+  }
 
   return NextResponse.json({
     submissionId: id,

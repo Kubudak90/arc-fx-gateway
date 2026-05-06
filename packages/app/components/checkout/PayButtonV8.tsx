@@ -100,7 +100,7 @@ export function PayButtonV8(props: PayButtonV8Props) {
     await new Promise(r => setTimeout(r, 600));
   }
 
-  async function signAndSubmit(): Promise<string> {
+  async function signAndSubmit(): Promise<{ statusUrl: string; statusToken: string | null }> {
     const nonce    = randomNonce();
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 5 * 60); // 5 min sig TTL
 
@@ -144,13 +144,23 @@ export function PayButtonV8(props: PayButtonV8Props) {
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error ?? `submit failed: ${res.status}`);
-    return body.statusUrl as string;
+    return {
+      statusUrl:   body.statusUrl as string,
+      // Audit M12: status detail (lastError, tx hashes) is now gated behind
+      // a per-submission token. Forward it on every poll so this checkout
+      // page keeps seeing the rich detail it needs to show settle/refund/fail.
+      statusToken: (body.statusToken as string) ?? null,
+    };
   }
 
-  async function pollUntilTerminal(url: string): Promise<{ status: string; settleTxHash?: string; error?: string }> {
+  async function pollUntilTerminal(
+    url: string,
+    token: string | null,
+  ): Promise<{ status: string; settleTxHash?: string; error?: string }> {
     const max = 24; // 24 × 5s = 2 min
+    const headers: Record<string, string> = token ? { "x-status-token": token } : {};
     for (let i = 0; i < max; i++) {
-      const r = await fetch(url);
+      const r = await fetch(url, { headers });
       const data = await r.json();
       if (["settled", "refunded", "failed"].includes(data.status)) {
         return data;
@@ -181,10 +191,10 @@ export function PayButtonV8(props: PayButtonV8Props) {
 
     try {
       await ensurePermit2Allowance();
-      const url = await signAndSubmit();
+      const { statusUrl: url, statusToken } = await signAndSubmit();
       setStatusUrl(url);
       setState("settling");
-      const terminal = await pollUntilTerminal(url);
+      const terminal = await pollUntilTerminal(url, statusToken);
       if (terminal.status === "settled" && terminal.settleTxHash) {
         setSettleTx(terminal.settleTxHash as Hex);
         setState("success");

@@ -58,6 +58,10 @@ export const invoices = pgTable("invoices", {
   metadata: jsonb("metadata"),
   successUrl: text("success_url").notNull(),
   cancelUrl: text("cancel_url"),
+  // Short-lived bearer token issued at /api/checkout/submit; required for the
+  // status route to reveal anything beyond { status }. 30-min TTL. Audit M12.
+  statusToken: text("status_token"),
+  statusTokenExpiresAt: timestamp("status_token_expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

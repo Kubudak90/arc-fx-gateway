@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const SUBMISSION_ID = "11111111-2222-3333-4444-555555555555";
 let queueRows: unknown[] = [];
+let invoiceRows: unknown[] = [];
+let selectCallCount = 0;
 
 vi.mock("@/lib/db/client", () => {
   const builder = {
@@ -13,9 +15,18 @@ vi.mock("@/lib/db/client", () => {
   builder.select.mockImplementation(() => builder);
   builder.from.mockImplementation(() => builder);
   builder.where.mockImplementation(() => builder);
-  builder.limit.mockImplementation(async () => queueRows);
+  builder.limit.mockImplementation(async () => {
+    selectCallCount++;
+    // First select = relayer_queue lookup, second = invoices for token check.
+    if (selectCallCount === 1) return queueRows;
+    return invoiceRows;
+  });
   return { db: builder };
 });
+
+vi.mock("drizzle-orm", () => ({
+  eq: (a: any, b: any) => ({ a, b }),
+}));
 
 import { GET } from "./route";
 
@@ -31,13 +42,28 @@ const baseRow = {
   updatedAt:    new Date("2026-05-01T10:00:05Z"),
 };
 
-beforeEach(() => { queueRows = []; });
+const VALID_TOKEN = "valid-token-".padEnd(48, "0");
+const VALID_INVOICE = {
+  statusToken: VALID_TOKEN,
+  statusTokenExpiresAt: new Date(Date.now() + 30 * 60_000),
+};
 
-function call() {
-  return GET(
-    new Request(`http://localhost/api/checkout/status/${SUBMISSION_ID}`) as never,
-    { params: Promise.resolve({ id: SUBMISSION_ID }) },
-  );
+beforeEach(() => {
+  queueRows = [];
+  invoiceRows = [];
+  selectCallCount = 0;
+});
+
+function call(qs = "", headers: Record<string, string> = {}) {
+  // Build a NextRequest-shape stub. We use Request + spy on nextUrl.searchParams.
+  const url = `http://localhost/api/checkout/status/${SUBMISSION_ID}${qs}`;
+  const req: any = new Request(url, { headers });
+  // Simulate Next's NextRequest.nextUrl.
+  Object.defineProperty(req, "nextUrl", {
+    value: new URL(url),
+    configurable: true,
+  });
+  return GET(req as never, { params: Promise.resolve({ id: SUBMISSION_ID }) });
 }
 
 describe("GET /api/checkout/status/[id]", () => {
@@ -46,9 +72,23 @@ describe("GET /api/checkout/status/[id]", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns settled state with both tx hashes", async () => {
+  it("WITHOUT token: returns ONLY { status } (M12 minimum)", async () => {
     queueRows = [baseRow];
     const res = await call();
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.status).toBe("settled");
+    // No detail leak — no tx hashes, no error string, no timestamps.
+    expect(body.swapTxHash).toBeUndefined();
+    expect(body.settleTxHash).toBeUndefined();
+    expect(body.error).toBeUndefined();
+    expect(body.invoiceId).toBeUndefined();
+  });
+
+  it("WITH valid token: returns full detail (settled state, both tx hashes)", async () => {
+    queueRows = [baseRow];
+    invoiceRows = [VALID_INVOICE];
+    const res = await call(`?token=${encodeURIComponent(VALID_TOKEN)}`);
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.status).toBe("settled");
@@ -57,15 +97,38 @@ describe("GET /api/checkout/status/[id]", () => {
     expect(body.error).toBeNull();
   });
 
-  it("surfaces lastError only when status is failed", async () => {
+  it("WITH valid token via header: surfaces lastError only when status is failed", async () => {
     queueRows = [{ ...baseRow, status: "failed", lastError: "kit.swap timed out" }];
-    const res = await call();
+    invoiceRows = [VALID_INVOICE];
+    const res = await call("", { "x-status-token": VALID_TOKEN });
     expect((await res.json()).error).toBe("kit.swap timed out");
   });
 
-  it("hides lastError on transient processing rows", async () => {
+  it("WITH valid token: hides lastError on transient processing rows", async () => {
     queueRows = [{ ...baseRow, status: "processing", lastError: "transient rpc blip" }];
-    const res = await call();
+    invoiceRows = [VALID_INVOICE];
+    const res = await call(`?token=${encodeURIComponent(VALID_TOKEN)}`);
     expect((await res.json()).error).toBeNull();
+  });
+
+  it("expired token treated as missing — falls back to bare status", async () => {
+    queueRows = [baseRow];
+    invoiceRows = [{
+      statusToken: VALID_TOKEN,
+      statusTokenExpiresAt: new Date(Date.now() - 1000), // already expired
+    }];
+    const res = await call(`?token=${encodeURIComponent(VALID_TOKEN)}`);
+    const body = await res.json();
+    expect(body.status).toBe("settled");
+    expect(body.swapTxHash).toBeUndefined();
+  });
+
+  it("wrong token rejected — falls back to bare status", async () => {
+    queueRows = [baseRow];
+    invoiceRows = [VALID_INVOICE];
+    const res = await call(`?token=${encodeURIComponent("not-the-real-token")}`);
+    const body = await res.json();
+    expect(body.status).toBe("settled");
+    expect(body.swapTxHash).toBeUndefined();
   });
 });

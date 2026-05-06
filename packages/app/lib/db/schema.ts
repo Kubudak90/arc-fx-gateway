@@ -1,7 +1,7 @@
 import {
   pgTable, text, uuid, timestamp, integer, numeric, jsonb, customType, boolean, pgEnum, index,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
+import { sql } from "drizzle-orm/sql";
 
 const bytea = customType<{ data: Buffer; default: false }>({
   dataType() { return "bytea"; },

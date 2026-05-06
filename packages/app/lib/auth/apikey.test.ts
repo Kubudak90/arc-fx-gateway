@@ -34,6 +34,7 @@ describe("api key", () => {
       address: "0x" + "a".repeat(40),
       payoutToken: "0x" + "b".repeat(40),
       apiKeyHash: hash,
+      apiKeyPrefix: k.slice(0, 12),
       webhookSecretEnc: Buffer.alloc(48),
       webhookSecretIv: Buffer.alloc(12),
     });
@@ -44,5 +45,20 @@ describe("api key", () => {
 
   it("lookupMerchantByApiKey returns null on bad key", async () => {
     expect(await lookupMerchantByApiKey("ak_live_nonexistent")).toBeNull();
+  });
+
+  it("only bcrypt-compares rows whose api_key_prefix matches", async () => {
+    const target = generateApiKey();
+    const decoy = generateApiKey();
+    await db.insert(merchants).values([
+      { address: "0x" + "1".repeat(40), payoutToken: "USDC", apiKeyHash: await hashApiKey(target), apiKeyPrefix: target.slice(0, 12), webhookSecretEnc: Buffer.alloc(48), webhookSecretIv: Buffer.alloc(12) },
+      { address: "0x" + "2".repeat(40), payoutToken: "USDC", apiKeyHash: await hashApiKey(decoy),  apiKeyPrefix: decoy.slice(0, 12),  webhookSecretEnc: Buffer.alloc(48), webhookSecretIv: Buffer.alloc(12) },
+    ]);
+    const got = await lookupMerchantByApiKey(target);
+    expect(got?.address).toBe("0x" + "1".repeat(40));
+
+    // Wrong-prefix random key: should still return null fast.
+    const bogus = "ak_live_ZZZZZZZZZZZZZZZZ" + "A".repeat(40);
+    expect(await lookupMerchantByApiKey(bogus)).toBeNull();
   });
 });

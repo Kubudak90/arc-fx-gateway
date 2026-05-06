@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { generateApiKey, hashApiKey } from "@/lib/auth/apikey";
+import { generateApiKey, hashApiKey, PREFIX_LEN } from "@/lib/auth/apikey";
 import { encrypt } from "@/lib/crypto/secret";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { randomBytes } from "node:crypto";
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     payoutToken: parsed.data.payoutToken,
     webhookUrl: parsed.data.webhookUrl ?? null,
     apiKeyHash,
+    apiKeyPrefix: apiKey.slice(0, PREFIX_LEN),
     webhookSecretEnc: ciphertext,
     webhookSecretIv: iv,
   });

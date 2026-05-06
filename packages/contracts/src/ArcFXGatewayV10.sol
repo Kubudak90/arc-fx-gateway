@@ -328,4 +328,49 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
 
         emit InvoiceRefunded(globalId, refundTo, e.payoutToken, e.amount, /*protocolFeeReturned=*/0);
     }
+
+    // =========================================================================
+    // Task 9: Claim — permissionless, fee accrual at claim time
+    // =========================================================================
+
+    error InvoiceNotClaimable(bytes32 globalId);
+    error ClaimTooEarly(bytes32 globalId, uint64 claimableAt);
+    error PayoutAddressUnset(address merchant);
+
+    event InvoiceClaimed(
+        bytes32 indexed globalId,
+        address indexed merchant,
+        address payoutAddress,
+        address payoutToken,
+        uint256 toMerchant,
+        uint256 fee
+    );
+
+    /// @notice Permissionless. Funds always route to the current
+    /// merchants[merchant].payoutAddress (rotation-safe).
+    /// Atomic batch — any failure reverts the entire call.
+    function claim(bytes32[] calldata globalIds) external nonReentrant {
+        for (uint256 i = 0; i < globalIds.length; ++i) {
+            bytes32 globalId = globalIds[i];
+            Invoice storage inv = invoices[globalId];
+            Escrow memory e = escrows[globalId];
+
+            if (inv.status != InvoiceStatus.Paid)         revert InvoiceNotClaimable(globalId);
+            if (block.timestamp < e.claimableAt)          revert ClaimTooEarly(globalId, e.claimableAt);
+
+            address payoutAddress = merchants[inv.merchant].payoutAddress;
+            if (payoutAddress == address(0))              revert PayoutAddressUnset(inv.merchant);
+
+            uint256 fee        = (e.amount * PROTOCOL_FEE_BPS) / 10_000;
+            uint256 toMerchant = e.amount - fee;
+
+            inv.status = InvoiceStatus.Claimed;
+            delete escrows[globalId];
+            protocolFeesAccrued[e.payoutToken] += fee;
+
+            IERC20(e.payoutToken).safeTransfer(payoutAddress, toMerchant);
+
+            emit InvoiceClaimed(globalId, inv.merchant, payoutAddress, e.payoutToken, toMerchant, fee);
+        }
+    }
 }

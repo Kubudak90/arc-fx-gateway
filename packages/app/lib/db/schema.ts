@@ -70,6 +70,10 @@ export const webhookAttempts = pgTable("webhook_attempts", {
   nextAttempt: timestamp("next_attempt", { withTimezone: true }).notNull(),
   succeededAt: timestamp("succeeded_at", { withTimezone: true }),
   lastError: text("last_error"),
+  // Dedupe key: paired with `invoiceId` in a unique index so out-of-order or
+  // replayed events ("invoice.paid", "invoice.refunded", "invoice.failed")
+  // can't double-enqueue webhooks for the same invoice. Audit H5 (2026-05-05).
+  eventType: text("event_type").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

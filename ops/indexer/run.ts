@@ -183,8 +183,9 @@ async function tick(): Promise<{
       const url = mr.rows[0]?.webhook_url;
       if (url) {
         await pool.query(
-          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
-           values ($1, $2, $3::jsonb, 0, now())`,
+          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+           values ($1, $2, $3::jsonb, 0, now(), $4)
+           on conflict (invoice_id, event_type) do nothing`,
           [
             id, url,
             JSON.stringify({
@@ -194,6 +195,7 @@ async function tick(): Promise<{
               paid_by:    payer,
               tx_hash:    log.transactionHash,
             }),
+            "invoice.paid",
           ],
         );
       }
@@ -205,10 +207,14 @@ async function tick(): Promise<{
       const id         = d.args.globalId as Hex;
       const refundedTo = d.args.refundedTo as string;
 
+      // Status guard widened to include 'created' so an out-of-order
+      // InvoiceRefunded (landing before InvoicePaid) still flips the row to
+      // refunded — without this, the row sticks in 'created' forever despite
+      // the customer being made whole on-chain. Audit H5 (2026-05-05).
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
            set status = 'refunded', refund_tx = $2, refunded_at = now()
-         where id = $1 and status = 'paid'
+         where id = $1 and status in ('created', 'paid')
          returning id, merchant_id`,
         [id, log.transactionHash],
       );
@@ -221,8 +227,9 @@ async function tick(): Promise<{
       const url = mr.rows[0]?.webhook_url;
       if (url) {
         await pool.query(
-          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
-           values ($1, $2, $3::jsonb, 0, now())`,
+          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+           values ($1, $2, $3::jsonb, 0, now(), $4)
+           on conflict (invoice_id, event_type) do nothing`,
           [
             id, url,
             JSON.stringify({
@@ -232,6 +239,7 @@ async function tick(): Promise<{
               refunded_to: refundedTo,
               tx_hash:     log.transactionHash,
             }),
+            "invoice.refunded",
           ],
         );
       }
@@ -248,11 +256,19 @@ async function tick(): Promise<{
       // pay-in back off-chain, and emitted this event so the indexer flips
       // the row to `failed`. webhooks fire so the merchant's app sees a
       // terminal "this won't pay" state.
+      //
+      // Status guard widened to include 'paid' so an out-of-order PayerRefunded
+      // (landing after a stray InvoicePaid for the same globalId) still flips
+      // the row to 'failed' — the customer got their money back, the merchant
+      // must not see this as a successful sale. PayerRefunded is the v0.8
+      // "settle did not happen" signal, NOT a refund of a paid invoice
+      // (that's InvoiceRefunded), so the literal stays 'failed'. Audit H5
+      // (2026-05-05).
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
            set status   = 'failed',
                metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb
-         where id = $1 and status = 'created'
+         where id = $1 and status in ('created', 'paid')
          returning id, merchant_id`,
         [
           id,
@@ -273,8 +289,9 @@ async function tick(): Promise<{
       const url = mr.rows[0]?.webhook_url;
       if (url) {
         await pool.query(
-          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt)
-           values ($1, $2, $3::jsonb, 0, now())`,
+          `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
+           values ($1, $2, $3::jsonb, 0, now(), $4)
+           on conflict (invoice_id, event_type) do nothing`,
           [
             id, url,
             JSON.stringify({
@@ -285,6 +302,7 @@ async function tick(): Promise<{
               amount,
               tx_hash:     log.transactionHash,
             }),
+            "invoice.failed",
           ],
         );
       }

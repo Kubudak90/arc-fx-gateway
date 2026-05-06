@@ -202,6 +202,9 @@ export async function POST(req: NextRequest) {
         .where(eq(merchants.id, rows[0].merchantId))
         .limit(1))[0];
       if (merchantRow?.webhookUrl) {
+        // `eventType` is required (audit H5, 2026-05-05) and pairs with
+        // invoiceId in a unique index. compliance.review_queued is one-shot
+        // per (invoice, payer) decision, so a duplicate is a no-op.
         await db.insert(webhookAttempts).values({
           invoiceId,
           url: merchantRow.webhookUrl,
@@ -214,6 +217,9 @@ export async function POST(req: NextRequest) {
           },
           attempts: 0,
           nextAttempt: new Date(),
+          eventType: "compliance.review_queued",
+        }).onConflictDoNothing({
+          target: [webhookAttempts.invoiceId, webhookAttempts.eventType],
         });
       }
     } catch {

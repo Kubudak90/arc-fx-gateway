@@ -18,7 +18,15 @@ export async function GET() {
     .orderBy(desc(invoices.createdAt))
     .limit(50);
   return NextResponse.json({
-    merchant: { address: m.address, payoutToken: m.payoutToken, webhookUrl: m.webhookUrl },
+    merchant: {
+      address: m.address,
+      payoutToken: m.payoutToken,
+      webhookUrl: m.webhookUrl,
+      // Audit H1 (2026-05-05): exposed so AllowedOriginsCard can show /
+      // edit the current list. Not a secret — it's an allowlist of
+      // post-payment redirect targets.
+      allowedOrigins: m.allowedOrigins ?? [],
+    },
     invoices: invs.map(i => ({
       id: i.id,
       payInToken: i.payInToken,

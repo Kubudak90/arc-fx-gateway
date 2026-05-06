@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { getSession } from "@/lib/auth/session";
+import { db } from "@/lib/db/client";
+import { merchants } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+
+// Audit H1 (2026-05-05): post-bootstrap merchants update their redirect
+// allowlist via this endpoint. Bootstrap collects the initial set; this
+// is the parallel "edit" path used by AllowedOriginsCard in /m/settings.
+//
+// We mirror the WebhookSettingsCard PATCH /api/merchant/webhook shape:
+// session-auth, zod-validate, normalize to origin, update the row.
+const Body = z.object({
+  allowedOrigins: z.array(z.string().url()).min(1).max(20),
+});
+
+export async function PATCH(req: NextRequest) {
+  const session = await getSession();
+  if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const parsed = Body.safeParse(await req.json());
+  if (!parsed.success) return NextResponse.json({ error: "bad_body" }, { status: 400 });
+
+  // Normalize each entry to scheme+host[:port] only — anything beyond
+  // URL.origin (path/query/fragment) is meaningless for the allowlist
+  // check and only invites mismatch confusion later.
+  let normalized: string[];
+  try {
+    normalized = Array.from(
+      new Set(parsed.data.allowedOrigins.map((u) => new URL(u).origin)),
+    );
+  } catch {
+    return NextResponse.json({ error: "bad_body" }, { status: 400 });
+  }
+
+  await db.update(merchants)
+    .set({ allowedOrigins: normalized })
+    .where(eq(merchants.address, session.merchantAddress));
+
+  return NextResponse.json({ ok: true, allowedOrigins: normalized });
+}

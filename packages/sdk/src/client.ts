@@ -86,7 +86,9 @@ export class Arcora {
   /** @deprecated Use `new Arcora({ apiKey })` — singleton is unsafe in multi-tenant apps. */
   static init(opts: InitOptions): void {
     Arcora._opts = opts;
-    if (typeof process !== "undefined" && process.env?.NODE_ENV !== "production") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const proc = (typeof globalThis !== "undefined" && (globalThis as any).process) || undefined;
+    if (proc?.env?.NODE_ENV !== "production") {
       // eslint-disable-next-line no-console
       console.warn("[arcora] Arcora.init is deprecated; use `new Arcora(opts)`. Removed in next major.");
     }

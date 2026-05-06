@@ -35,6 +35,13 @@ contract DeployV9 is Script {
             new address[](0)
         );
 
+        // Audit M3 (2026-05-06): guard against misconfigured fee bps.
+        // V9's constructor has no upper-bound check (immutable on-chain);
+        // this script-level require is the deploy-time safety net until V10
+        // adds the in-constructor cap. 1000 bps = 10% — a generous ceiling
+        // that prevents accidental "fee = 100%" deploys.
+        require(feeBps <= 1000, "DeployV9: fee bps too high (max 1000 = 10%)");
+
         vm.startBroadcast(pk);
         gw = new ArcFXGatewayV9(feeBps, owner, relayer_);
 

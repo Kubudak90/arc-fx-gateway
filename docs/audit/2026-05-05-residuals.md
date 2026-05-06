@@ -13,5 +13,5 @@ when V10 ships.
 | Finding | Plan | Status |
 |--------|------|--------|
 | H4 (refund custody) | V10 custody model | Workaround shipped (allowance check + monitoring) — see `docs/runbooks/h4-refund-approval.md` |
-| M3 (fee bound) | V10 in-constructor cap | Off-chain deploy guard pending Phase 6 — TBD |
-| M4 (reactivate semantics) | V10 explicit `reactivateMerchant` | NatSpec correction pending Phase 6 — TBD |
+| M3 (fee bound) | V10 in-constructor cap | Off-chain: NatSpec WARNING on V9 constructor + `require(feeBps <= 1000)` in `DeployV9.s.sol` — shipped Phase 6a (2026-05-06) |
+| M4 (reactivate semantics) | V10 explicit `reactivateMerchant` | Off-chain: NatSpec corrected on `deactivateMerchant` — shipped Phase 6a (2026-05-06) |

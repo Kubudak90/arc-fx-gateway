@@ -157,6 +157,13 @@ contract ArcFXGatewayV9 is AccessControl, ReentrancyGuard, Pausable {
     /// @param protocolFeeBps fee in basis points (1 = 0.01%) charged on every settled invoice's gross payout
     /// @param initialOwner   address granted `DEFAULT_ADMIN_ROLE` (manages tokens, pause, withdraw fees, role rotation)
     /// @param initialRelayer address granted `RELAYER_ROLE` (calls `settleInvoice` and `recordPayerRefund`)
+    ///
+    /// @dev WARNING (audit M3, 2026-05-06): This constructor does NOT enforce an upper bound on
+    ///      `protocolFeeBps`. A misconfigured deploy with feeBps > 10000 (100%) would allow the
+    ///      fee to exceed or equal the gross payout, leading to a payout of zero or an underflow.
+    ///      V9 is immutable on-chain; the in-constructor cap will be added to V10.
+    ///      Off-chain mitigation: `DeployV9.s.sol` enforces `require(feeBps <= 1000)` before
+    ///      `vm.startBroadcast`. Do NOT bypass this guard when deploying additional V9 instances.
     constructor(
         uint256 protocolFeeBps,
         address initialOwner,

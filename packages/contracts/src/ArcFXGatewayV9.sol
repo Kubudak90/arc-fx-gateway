@@ -221,6 +221,14 @@ contract ArcFXGatewayV9 is AccessControl, ReentrancyGuard, Pausable {
         emit MerchantPayoutTokenUpdated(msg.sender, old, newPayoutToken);
     }
 
+    /// @notice Mark the caller's merchant account as inactive.
+    /// @dev Audit M4 (2026-05-06): deactivation sets `active = false` but does
+    ///      NOT permanently ban re-registration. A deactivated merchant may call
+    ///      `registerMerchant` again, which checks only `merchants[msg.sender].active`
+    ///      and will succeed, overwriting the previous Merchant struct with the new
+    ///      payout address and token. If permanent offboarding is required, use an
+    ///      admin-level blocklist (planned for V10's `reactivateMerchant` / explicit
+    ///      re-register flow). Callers should NOT assume deactivation is irrevocable.
     function deactivateMerchant() external {
         Merchant storage m = merchants[msg.sender];
         if (!m.active) revert NotMerchant();

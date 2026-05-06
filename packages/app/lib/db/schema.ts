@@ -107,6 +107,15 @@ export const siweNonces = pgTable("siwe_nonces", {
   used: boolean("used").notNull().default(false),
 });
 
+// Generic fixed-window rate-limit counters. PK is (bucket, window_start).
+// Used by /api/auth/siwe/nonce — keyed by `siwe-nonce:<ip>` per 60s window.
+// Cleanup runs daily via /api/internal/cron/siwe-nonce-cleanup. Audit M9.
+export const rateLimitCounters = pgTable("rate_limit_counters", {
+  bucket: text("bucket").notNull(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull().default(0),
+});
+
 // Compliance screening audit log. One row per provider call (or cache hit
 // recorded for replay). `expires_at` drives retention pruning — sanctions
 // hits live 7 years, everything else 13 months. See plan-5 spec.

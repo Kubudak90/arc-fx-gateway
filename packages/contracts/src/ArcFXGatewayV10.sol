@@ -289,4 +289,43 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
         emit SettlementContext(globalId, payInToken, swapTxHash);
         emit EscrowCreated(globalId, payoutToken, inv.amountOut, escrows[globalId].claimableAt);
     }
+
+    // =========================================================================
+    // Task 8: Refund — full amountOut to payer, no fee accrual
+    // =========================================================================
+
+    error NotAuthorized();
+    error InvoiceNotRefundable(bytes32 globalId);
+
+    event InvoiceRefunded(
+        bytes32 indexed globalId,
+        address indexed refundedTo,
+        address indexed payoutToken,
+        uint256 merchantPayout,
+        uint256 protocolFeeReturned
+    );
+
+    /// @dev Intentionally omits whenNotPaused — refunds must remain callable
+    /// during pause (matches V9 design).
+    function refundInvoice(bytes32 globalId) external nonReentrant {
+        Invoice storage inv = invoices[globalId];
+        if (inv.status != InvoiceStatus.Paid) revert InvoiceNotRefundable(globalId);
+
+        address merchant_ = inv.merchant;
+        DelegateAuth memory d = delegates[merchant_][msg.sender];
+        bool isMerchant       = msg.sender == merchant_;
+        bool isAdmin          = hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        bool isRefundDelegate = d.expiresAt >= block.timestamp && (d.rights & RIGHT_REFUND) != 0;
+        if (!isMerchant && !isAdmin && !isRefundDelegate) revert NotAuthorized();
+
+        Escrow memory e = escrows[globalId];
+        address refundTo = inv.paidBy;
+
+        inv.status = InvoiceStatus.Refunded;
+        delete escrows[globalId];
+
+        IERC20(e.payoutToken).safeTransfer(refundTo, e.amount);
+
+        emit InvoiceRefunded(globalId, refundTo, e.payoutToken, e.amount, /*protocolFeeReturned=*/0);
+    }
 }

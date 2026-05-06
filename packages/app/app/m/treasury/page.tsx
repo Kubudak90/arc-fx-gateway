@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatRelativeTime, symbolForAddress, abbreviateAddress } from "@/lib/ui/format";
+import { ClaimAllButton } from "@/components/treasury/ClaimAllButton";
 
 interface TokenTotals {
   token: string;
@@ -45,16 +46,39 @@ interface TreasuryData {
   timeSeries?: TimeSeriesEntry[];
 }
 
+interface EscrowRow {
+  id: string;
+  status: string;
+  claimableAt: string | null;
+}
+
+interface EscrowData {
+  pending: EscrowRow[];
+  matured: EscrowRow[];
+  claimed: EscrowRow[];
+  counts: { pending: number; matured: number; claimed: number };
+}
+
+const EMPTY_ESCROWS: EscrowData = { pending: [], matured: [], claimed: [], counts: { pending: 0, matured: 0, claimed: 0 } };
+
 export default function TreasuryPage() {
   const [data, setData] = useState<TreasuryData>({ merchant: null, totals: [], activity: [] });
+  const [escrows, setEscrows] = useState<EscrowData>(EMPTY_ESCROWS);
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
     setLoading(true);
     try {
-      const res = await fetch("/api/merchant/treasury");
-      const json = await res.json();
-      setData(json);
+      const [treasuryRes, escrowRes] = await Promise.all([
+        fetch("/api/merchant/treasury"),
+        fetch("/api/merchant/escrows"),
+      ]);
+      const treasuryJson = await treasuryRes.json();
+      setData(treasuryJson);
+      if (escrowRes.ok) {
+        const escrowJson = await escrowRes.json();
+        setEscrows(escrowJson);
+      }
     } finally {
       setLoading(false);
     }
@@ -108,6 +132,29 @@ export default function TreasuryPage() {
           ))}
         </div>
       )}
+
+      {/* V10 Claim section — escrows pending/matured */}
+      <section>
+        <h2 className="font-semibold text-arcora-slate mb-4">Claim escrows</h2>
+        <Card className="rounded-2xl">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
+              <span>
+                <span className="font-semibold text-arcora-slate">{escrows.counts.pending}</span> pending
+                {escrows.counts.pending > 0 && " (within 7-day refund window)"}
+              </span>
+              <span>
+                <span className="font-semibold text-arcora-slate">{escrows.counts.matured}</span> matured
+                {escrows.counts.matured > 0 && " (ready to claim)"}
+              </span>
+              <span>
+                <span className="font-semibold text-arcora-slate">{escrows.counts.claimed}</span> claimed
+              </span>
+            </div>
+            <ClaimAllButton globalIds={escrows.matured.map(e => e.id as `0x${string}`)} />
+          </CardContent>
+        </Card>
+      </section>
 
       <section>
         <h2 className="font-semibold text-arcora-slate mb-4">Recent activity</h2>

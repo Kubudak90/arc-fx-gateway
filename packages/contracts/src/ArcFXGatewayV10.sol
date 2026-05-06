@@ -412,4 +412,33 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
             emit EscrowRecovered(globalId, inv.merchant, e.payoutToken, e.amount, to);
         }
     }
+
+    // =========================================================================
+    // Task 11: Failed-swap path (recordPayerRefund) + L2 nonReentrant
+    // =========================================================================
+
+    event PayerRefunded(
+        bytes32 indexed globalId,
+        address indexed payer,
+        address payInToken,
+        uint256 amount,
+        bytes32 reasonHash
+    );
+
+    /// @dev L2: nonReentrant added (defensive — no external call in body
+    /// today, but guards against silent regressions).
+    function recordPayerRefund(
+        bytes32 globalId,
+        address payer,
+        address payInToken,
+        uint256 amount,
+        bytes32 reasonHash
+    ) external nonReentrant whenNotPaused onlyRole(RELAYER_ROLE) {
+        Invoice storage inv = invoices[globalId];
+        if (inv.status == InvoiceStatus.None)        revert InvoiceNotFound(globalId);
+        if (inv.status != InvoiceStatus.Created)     revert InvoiceNotInCreatedState(globalId);
+
+        inv.status = InvoiceStatus.Failed;
+        emit PayerRefunded(globalId, payer, payInToken, amount, reasonHash);
+    }
 }

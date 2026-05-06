@@ -60,3 +60,25 @@ abstract contract V10TestBase is Test {
         gw.settleInvoice(globalId, customer, address(usdc), gross + 10e6, gross, bytes32(0));
     }
 }
+
+contract V10WhitelistAndPause is V10TestBase {
+    function test_SetTokenSupport_OnlyAdmin() public {
+        MockERC20 t = new MockERC20("X", "X", 6);
+        vm.expectRevert();
+        gw.setTokenSupport(address(t), true);
+        vm.prank(admin);
+        gw.setTokenSupport(address(t), true);
+        assertTrue(gw.supportedTokens(address(t)));
+    }
+
+    function test_PauseUnpause_OnlyAdmin() public {
+        vm.expectRevert();
+        gw.pause();
+        vm.prank(admin);
+        gw.pause();
+        assertTrue(gw.paused());
+        vm.prank(admin);
+        gw.unpause();
+        assertFalse(gw.paused());
+    }
+}

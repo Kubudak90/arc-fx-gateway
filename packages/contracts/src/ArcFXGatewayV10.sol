@@ -441,4 +441,17 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
         inv.status = InvoiceStatus.Failed;
         emit PayerRefunded(globalId, payer, payInToken, amount, reasonHash);
     }
+
+    // =========================================================================
+    // Task 12: Pause behavior — withdrawFees (the only missing piece)
+    // =========================================================================
+
+    event FeesWithdrawn(address indexed token, address indexed to, uint256 amount);
+
+    function withdrawFees(address token, address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 amount = protocolFeesAccrued[token];
+        protocolFeesAccrued[token] = 0;
+        IERC20(token).safeTransfer(to, amount);
+        emit FeesWithdrawn(token, to, amount);
+    }
 }

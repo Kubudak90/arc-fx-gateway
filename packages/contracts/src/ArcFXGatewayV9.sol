@@ -337,13 +337,19 @@ contract ArcFXGatewayV9 is AccessControl, ReentrancyGuard, Pausable {
 
     /// @notice Called by the relayer when `kit.swap` failed and the customer
     /// has been refunded their pay-in off-chain.
+    /// @dev `nonReentrant` is defensive hardening (no external call inside this
+    /// function body, so reentrancy is not currently exploitable). Adding it
+    /// costs ~2 300 gas and prevents silent regressions if a future diff
+    /// inadvertently introduces an external call. Audit L2 (2026-05-06).
+    /// Note: V9 is already deployed on-chain as an immutable contract; this
+    /// modifier addition applies to V10+ redeployments only.
     function recordPayerRefund(
         bytes32 globalId,
         address payer,
         address payInToken,
         uint256 amount,
         bytes32 reasonHash
-    ) external whenNotPaused onlyRole(RELAYER_ROLE) {
+    ) external nonReentrant whenNotPaused onlyRole(RELAYER_ROLE) {
         Invoice storage inv = invoices[globalId];
         if (inv.status == InvoiceStatus.None) revert InvoiceNotFound(globalId);
         if (inv.status != InvoiceStatus.Created) revert InvoiceNotInCreatedState(globalId);
@@ -368,6 +374,12 @@ contract ArcFXGatewayV9 is AccessControl, ReentrancyGuard, Pausable {
     /// The protocol fee leg returns to `inv.merchant` — preserving v0.8
     /// semantics where the merchant identity is the protocol-economics
     /// anchor regardless of where the operational payout lives.
+    ///
+    /// @dev Intentionally omits `whenNotPaused`. Refunds must remain
+    /// callable even when the protocol is paused — a pause is an emergency
+    /// measure to halt *new* payments, but it would be punitive to
+    /// simultaneously freeze already-committed customer refunds. Audit L1
+    /// reviewed and accepted this design on 2026-05-06.
     function refundInvoice(bytes32 globalId) external nonReentrant {
         Invoice storage inv = invoices[globalId];
         if (inv.status != InvoiceStatus.Paid) revert InvoiceNotRefundable(globalId);
@@ -404,6 +416,11 @@ contract ArcFXGatewayV9 is AccessControl, ReentrancyGuard, Pausable {
 
     // ── Fees (admin) ───────────────────────────────────────────────────
 
+    /// @notice Withdraw accrued protocol fees for `token` to address `to`.
+    /// @dev Intentionally omits `whenNotPaused`. Admin fee withdrawal must
+    /// remain callable during a pause so the ops team can respond to an
+    /// emergency without being locked out of their own treasury. Audit L1
+    /// reviewed and accepted this design on 2026-05-06.
     function withdrawFees(address token, address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 amount = protocolFeesAccrued[token];
         protocolFeesAccrued[token] = 0;

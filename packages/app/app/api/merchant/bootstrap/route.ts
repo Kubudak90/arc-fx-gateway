@@ -32,6 +32,20 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "bad_body" }, { status: 400 });
 
+  // Audit L5 (2026-05-06): validate payoutToken against the server-side
+  // allowlist. If SUPPORTED_PAYOUT_TOKENS env is set (comma-separated ERC-20
+  // addresses), use that; otherwise default to USDC + EURC. Comparison is
+  // case-insensitive (normalised to lowercase).
+  const supportedTokens: string[] = process.env.SUPPORTED_PAYOUT_TOKENS
+    ? process.env.SUPPORTED_PAYOUT_TOKENS.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean)
+    : [
+        (process.env.USDC_ADDRESS ?? "").toLowerCase(),
+        (process.env.EURC_ADDRESS ?? "").toLowerCase(),
+      ].filter(Boolean);
+  if (supportedTokens.length > 0 && !supportedTokens.includes(parsed.data.payoutToken.toLowerCase())) {
+    return NextResponse.json({ error: "unsupported_payout_token" }, { status: 400 });
+  }
+
   // Audit pass 3 (2026-05-04): bootstrap previously stored any URL that
   // passed `z.string().url()`, including localhost / RFC1918 / link-local
   // addresses. The webhook daemon would later fetch them, exposing internal
@@ -75,7 +89,6 @@ export async function POST(req: NextRequest) {
     webhookSecretIv: iv,
   });
 
-  session.apiKey = apiKey;
   await session.save();
 
   // Audit H4 (2026-05-05): V9 `refundInvoice` pulls funds via

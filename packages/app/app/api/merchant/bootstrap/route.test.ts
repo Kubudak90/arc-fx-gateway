@@ -23,6 +23,12 @@ vi.mock("@/lib/crypto/secret", () => ({
 
 import { POST } from "./route";
 
+// Use the USDC address matching the test env (setup.ts loads .env which has
+// USDC_ADDRESS=0x3600...). Audit L5: only this address (and EURC) passes the
+// payoutToken allowlist check in the bootstrap route.
+const VALID_PAYOUT_TOKEN = "0x3600000000000000000000000000000000000000"; // USDC
+const UNSUPPORTED_TOKEN  = "0x1111111111111111111111111111111111111111";
+
 function makeReq(body: unknown) {
   return new Request("http://localhost/api/merchant/bootstrap", {
     method: "POST",
@@ -33,7 +39,6 @@ function makeReq(body: unknown) {
 
 const SESSION_BASE = {
   merchantAddress: "0xabc",
-  apiKey: undefined as string | undefined,
   save: vi.fn().mockResolvedValue(undefined),
 };
 
@@ -54,13 +59,13 @@ beforeEach(() => {
 
 describe("POST /api/merchant/bootstrap allowed_origins", () => {
   it("rejects when allowedOrigins is missing", async () => {
-    const res = await POST(makeReq({ payoutToken: "0x1111111111111111111111111111111111111111" }));
+    const res = await POST(makeReq({ payoutToken: VALID_PAYOUT_TOKEN }));
     expect(res.status).toBe(400);
   });
 
   it("rejects when allowedOrigins is empty array", async () => {
     const res = await POST(makeReq({
-      payoutToken: "0x1111111111111111111111111111111111111111",
+      payoutToken: VALID_PAYOUT_TOKEN,
       allowedOrigins: [],
     }));
     expect(res.status).toBe(400);
@@ -68,7 +73,7 @@ describe("POST /api/merchant/bootstrap allowed_origins", () => {
 
   it("rejects when allowedOrigins contains a non-URL string", async () => {
     const res = await POST(makeReq({
-      payoutToken: "0x1111111111111111111111111111111111111111",
+      payoutToken: VALID_PAYOUT_TOKEN,
       allowedOrigins: ["not a url"],
     }));
     expect(res.status).toBe(400);
@@ -77,7 +82,7 @@ describe("POST /api/merchant/bootstrap allowed_origins", () => {
   it("persists normalized origins (path stripped) on bootstrap", async () => {
     const dbm = await import("@/lib/db/client");
     const res = await POST(makeReq({
-      payoutToken: "0x1111111111111111111111111111111111111111",
+      payoutToken: VALID_PAYOUT_TOKEN,
       allowedOrigins: ["https://shop.example.com/checkout/return", "https://staging.example.com"],
     }));
     expect(res.status).toBe(201);
@@ -88,5 +93,15 @@ describe("POST /api/merchant/bootstrap allowed_origins", () => {
       "https://shop.example.com",
       "https://staging.example.com",
     ]);
+  });
+
+  it("rejects unsupported payoutToken (Audit L5)", async () => {
+    const res = await POST(makeReq({
+      payoutToken: UNSUPPORTED_TOKEN,
+      allowedOrigins: ["https://shop.example.com"],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("unsupported_payout_token");
   });
 });

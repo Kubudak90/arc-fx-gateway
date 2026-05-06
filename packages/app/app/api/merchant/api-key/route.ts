@@ -17,7 +17,6 @@ export async function POST() {
     .returning();
   if (updated.length === 0) return NextResponse.json({ error: "no_merchant" }, { status: 404 });
 
-  session.apiKey = apiKey;
   await session.save();
-  return NextResponse.json({ apiKey });
+  return NextResponse.json({ apiKey }); // Key returned in body only (Audit L9).
 }

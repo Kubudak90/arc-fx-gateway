@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+import { z } from "zod";
 
 export interface CartItem {
   sku:     string;          // product slug
@@ -25,6 +26,21 @@ interface CartState {
 const STORAGE_KEY = "arcora-shop-cart-v1";
 const Ctx = createContext<CartState | null>(null);
 
+/**
+ * Audit L10 (2026-05-06): validate cart data from localStorage with Zod to
+ * prevent prototype-pollution or malformed-data attacks via injected storage.
+ * Falls back to [] on parse failure — same silent-fail semantics as before.
+ */
+const cartItemSchema = z.object({
+  sku:   z.string(),
+  name:  z.string(),
+  price: z.number().finite().nonnegative(),
+  image: z.string(),
+  qty:   z.number().int().positive(),
+  size:  z.string().optional(),
+});
+const cartSchema = z.array(cartItemSchema);
+
 function keyOf(item: { sku: string; size?: string }): string {
   return `${item.sku}::${item.size ?? ""}`;
 }
@@ -36,11 +52,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as CartItem[];
-        if (Array.isArray(parsed)) setItems(parsed);
-      }
-    } catch { /* corrupt storage — start fresh */ }
+      const parsed = cartSchema.safeParse(JSON.parse(raw ?? "[]"));
+      setItems(parsed.success ? parsed.data : []);
+    } catch { /* corrupt storage or JSON.parse error — start fresh */ }
     setHydrated(true);
   }, []);
 

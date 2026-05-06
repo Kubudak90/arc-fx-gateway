@@ -1,6 +1,22 @@
 import dns from "node:dns/promises";
 
 /**
+ * Audit M7 (2026-05-06): dns.lookup has no native timeout. Wrap it in a
+ * Promise.race against a 3-second rejection so a stalled resolver doesn't
+ * block the caller indefinitely.
+ */
+async function dnsLookupWithTimeout(
+  hostname: string,
+  timeoutMs = 3000,
+): Promise<{ address: string; family: number }[]> {
+  const lookup = dns.lookup(hostname, { all: true });
+  const timer = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("dns_timeout")), timeoutMs),
+  );
+  return Promise.race([lookup, timer]);
+}
+
+/**
  * Check whether a destination URL is safe to fetch from a server-side
  * worker. The intent: prevent SSRF when a merchant configures their
  * webhook URL — without these guards, a merchant could point us at
@@ -36,8 +52,8 @@ export async function assertSafePublicUrl(url: string): Promise<void> {
     throw new Error("https_required");
   }
 
-  const records = await dns.lookup(parsed.hostname, { all: true }).catch(() => {
-    throw new Error("dns_lookup_failed");
+  const records = await dnsLookupWithTimeout(parsed.hostname).catch((e: Error) => {
+    throw new Error(e.message === "dns_timeout" ? "dns_timeout" : "dns_lookup_failed");
   });
 
   for (const record of records) {

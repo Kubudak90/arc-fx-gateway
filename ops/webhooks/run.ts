@@ -130,6 +130,19 @@ function isPrivateAddress(ip: string): boolean {
   return false;
 }
 
+// Audit M7 (2026-05-06): dns.lookup has no native timeout. Wrap in a 3-second
+// race so a stalled resolver doesn't block the daemon loop indefinitely.
+async function dnsLookupWithTimeout(
+  hostname: string,
+  timeoutMs = 3000,
+): Promise<{ address: string; family: number }[]> {
+  const lookup = dns.lookup(hostname, { all: true });
+  const timer = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("dns_timeout")), timeoutMs),
+  );
+  return Promise.race([lookup, timer]);
+}
+
 async function assertSafeAtDelivery(url: string): Promise<void> {
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -138,8 +151,8 @@ async function assertSafeAtDelivery(url: string): Promise<void> {
   if (process.env.NODE_ENV === "production" && parsed.protocol !== "https:") {
     throw new Error("https_required");
   }
-  const records = await dns.lookup(parsed.hostname, { all: true }).catch(() => {
-    throw new Error("dns_lookup_failed");
+  const records = await dnsLookupWithTimeout(parsed.hostname).catch((e: Error) => {
+    throw new Error(e.message === "dns_timeout" ? "dns_timeout" : "dns_lookup_failed");
   });
   for (const r of records) {
     if (isPrivateAddress(r.address)) {

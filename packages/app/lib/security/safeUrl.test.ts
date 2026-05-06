@@ -105,6 +105,18 @@ describe("assertSafePublicUrl", () => {
     lookupMock.mockRejectedValue(new Error("ENOTFOUND"));
     await expect(assertSafePublicUrl("https://nope.example/")).rejects.toThrow(/dns_lookup_failed/);
   });
+
+  it("rejects with dns_timeout when DNS lookup never resolves (M7)", async () => {
+    // Simulate a resolver that hangs forever; the 3s timeout should fire.
+    // Use vi.useFakeTimers so the test doesn't actually wait 3 seconds.
+    vi.useFakeTimers();
+    lookupMock.mockImplementation(() => new Promise(() => {})); // never resolves
+    const p = assertSafePublicUrl("https://slow-resolver.example/");
+    // Advance past the 3-second DNS timeout
+    vi.advanceTimersByTime(3500);
+    await expect(p).rejects.toThrow(/dns_timeout/);
+    vi.useRealTimers();
+  });
 });
 
 describe("assertOriginAllowed", () => {

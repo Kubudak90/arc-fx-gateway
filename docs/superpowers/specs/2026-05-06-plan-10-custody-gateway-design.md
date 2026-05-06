@@ -38,7 +38,7 @@ These were brainstormed and locked before this spec was written:
 |----------|--------|--------|
 | Custody granularity | Per-invoice escrow | Refund safety guaranteed by math; no balance-ledger drain risk |
 | Refund window | 7 days, constructor param | Industry-typical, simple; configurable per-deploy not per-merchant (audit surface minimal) |
-| Refund window === claim delay | Yes | Same 7-day clock; no on-chain refund after claim (off-chain dispute beyond) |
+| Refund window === claim delay | Yes | Refund allowed while escrow exists (i.e. `status == Paid`). The 7-day window is an upper bound only because after it any third party can call `claim`, which deletes the escrow. There is no time-based revert in `refundInvoice` — the spec relies on `claim` racing the merchant past the window. Off-chain dispute beyond. |
 | Fee accrual timing | On claim, not on settle | Refunded invoices earn no fee (fair); avoids unwinding accrued fees on refund |
 | Claim authorization | Permissionless | Funds always go to current `merchants[merchant].payoutAddress`; ops can batch on behalf of lazy merchants |
 | Refund authorization | `merchant OR delegate-with-REFUND_RIGHT OR admin` | V9 delegate concept extended with bit-flag scope; multisig-identity merchants can delegate refund to hot wallet |

@@ -1,3 +1,5 @@
+import { ArcoraError } from "./error";
+
 /**
  * Permit2 typed-data builder for Arcora's v0.8 (relayer-driven) settlement.
  * The customer signs a `PermitWitnessTransferFrom` message authorising a
@@ -139,15 +141,27 @@ export function buildArcoraSwapIntent(params: BuildArcoraSwapIntentParams): {
   };
 }
 
-/** Cryptographically random 256-bit nonce. Browser-safe (uses crypto.getRandomValues). */
+/**
+ * Cryptographically random 256-bit nonce. Browser-safe — requires
+ * `globalThis.crypto.getRandomValues` (any modern browser, Node ≥ 19, Bun,
+ * Deno, Edge runtimes).
+ *
+ * Throws `ArcoraError("NO_SECURE_RANDOM")` if no secure RNG is available.
+ * We deliberately refuse to fall back to `Math.random`: a Permit2 nonce
+ * collision allows signature replay, which (combined with a leaked or
+ * resigned signature) could double-spend funds. Predictable nonces are not
+ * acceptable in any environment that handles real value.
+ */
 export function randomNonce(): bigint {
-  const bytes = new Uint8Array(32);
-  if (typeof globalThis.crypto?.getRandomValues === "function") {
-    globalThis.crypto.getRandomValues(bytes);
-  } else {
-    // Fall back to Math.random — fine for testing, never use in production.
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  const g = globalThis.crypto as Crypto | undefined;
+  if (!g || typeof g.getRandomValues !== "function") {
+    throw new ArcoraError(
+      "NO_SECURE_RANDOM",
+      "Secure random unavailable — refusing to use Math.random for permit2 nonce. Upgrade Node ≥ 19 or polyfill globalThis.crypto.",
+    );
   }
+  const bytes = new Uint8Array(32);
+  g.getRandomValues(bytes);
   let n = 0n;
   for (const b of bytes) n = (n << 8n) | BigInt(b);
   return n;

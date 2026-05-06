@@ -28,3 +28,9 @@ Thumbs.db
 .idea/
 *.swp
 .vercel
+
+# Playwright MCP local session artifacts
+.playwright-mcp/
+
+# TS incremental build info (regenerated; should not be tracked)
+*.tsbuildinfo

@@ -8,6 +8,7 @@ import { db } from "@/lib/db/client";
 import { invoices } from "@/lib/db/schema";
 import { resolveComplianceProvider } from "@/lib/compliance/factory";
 import { screenWithAudit } from "@/lib/compliance/screen";
+import { assertOriginAllowed, assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
 // Per-engine gateway addresses. Plan 9 (2026-05-03) made V9 the canonical
@@ -59,6 +60,45 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return corsResponse({ error: "bad_body", detail: parsed.error.format() }, { status: 400 });
   const { amountUsdc, payInToken, successUrl, cancelUrl, metadata } = parsed.data;
+
+  // Audit H1 (2026-05-05): merchant-supplied successUrl/cancelUrl was
+  // previously accepted as any well-formed URL. After payment we redirect
+  // the customer with `window.location.href = successUrl`, so an attacker
+  // with a stolen API key (or any merchant who turns hostile) could turn
+  // arcorapay.xyz into an open-redirect / phishing launchpad. Two layers:
+  //   1. allowlist — origin must match a value the merchant declared at
+  //      bootstrap (or via PATCH /api/merchant/origins).
+  //   2. SSRF guard — even merchant-declared values can resolve to private
+  //      IPs (cloud metadata, internal admin, RFC1918), which would let a
+  //      hostile merchant exfiltrate via the customer's redirect chain or
+  //      worse if we ever fetched the URL server-side.
+  // Fail-CLOSED for legacy merchants with empty allowlists (pre-Phase-2
+  // rows) — they need to set origins via the dashboard before invoicing.
+  const merchantAllowedOrigins = (merchant as { allowedOrigins?: string[] }).allowedOrigins ?? [];
+  if (merchantAllowedOrigins.length === 0) {
+    return corsResponse({
+      error: "merchant_origins_not_configured",
+      detail: "Set allowed redirect origins in /m/settings before creating invoices.",
+    }, { status: 400 });
+  }
+  try {
+    assertOriginAllowed(successUrl, merchantAllowedOrigins);
+    if (cancelUrl) assertOriginAllowed(cancelUrl, merchantAllowedOrigins);
+  } catch (e) {
+    return corsResponse({
+      error: "origin_not_allowed",
+      detail: e instanceof Error ? e.message : String(e),
+    }, { status: 400 });
+  }
+  try {
+    await assertSafePublicUrl(successUrl);
+    if (cancelUrl) await assertSafePublicUrl(cancelUrl);
+  } catch (e) {
+    return corsResponse({
+      error: "unsafe_redirect_url",
+      detail: e instanceof Error ? e.message : String(e),
+    }, { status: 400 });
+  }
 
   // Engine selection moves up — we need targetGateway to read the on-chain
   // payoutAddress for compliance screening (audit pass 4 #8). Was below;

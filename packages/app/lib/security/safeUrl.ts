@@ -47,6 +47,30 @@ export async function assertSafePublicUrl(url: string): Promise<void> {
   }
 }
 
+/**
+ * Throws unless `candidate` URL's origin is in the merchant's allowlist.
+ * Allowlist entries must already be normalized to `new URL(...).origin`
+ * (scheme + host + port — no path, query, fragment). Caller is responsible
+ * for pairing this with `assertSafePublicUrl` for SSRF protection — this
+ * helper only checks the origin string, not the resolved IP.
+ *
+ * Audit H1 (2026-05-05): merchant-supplied successUrl/cancelUrl on
+ * /api/invoices was previously accepted as any well-formed URL, allowing
+ * the hosted checkout page to redirect customers to attacker-controlled
+ * domains (open redirect / phishing).
+ */
+export function assertOriginAllowed(candidate: string, allowed: readonly string[]): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error("invalid_url");
+  }
+  if (!allowed.includes(parsed.origin)) {
+    throw new Error(`origin_not_allowed:${parsed.origin}`);
+  }
+}
+
 /** True for any IP in a non-public range — RFC1918, loopback, link-local, CGN, etc. */
 export function isPrivateAddress(ip: string): boolean {
   // IPv4

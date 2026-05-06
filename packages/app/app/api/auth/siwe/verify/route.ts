@@ -14,7 +14,12 @@ export async function POST(req: NextRequest) {
     session.merchantAddress = address;
     await session.save();
     return NextResponse.json({ address });
-  } catch (e: any) {
-    return NextResponse.json({ error: "siwe_verify_failed", detail: e?.message }, { status: 401 });
+  } catch (e: unknown) {
+    // Audit M8 (2026-05-06): never leak internal error details to the client.
+    // SIWE verification errors can contain nonce values, domain strings, or
+    // chain IDs that help an attacker enumerate constraints. Log server-side
+    // only and return a generic error code.
+    console.warn("siwe/verify failed:", e instanceof Error ? e.message : String(e));
+    return NextResponse.json({ error: "siwe_verify_failed" }, { status: 401 });
   }
 }

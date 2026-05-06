@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Arcora, type CreateInvoiceParams, type Invoice, type InitOptions } from "@arcora/sdk";
 
 export interface UseCheckoutResult {
@@ -8,7 +8,7 @@ export interface UseCheckoutResult {
 }
 
 export function useCheckout(opts: InitOptions): UseCheckoutResult {
-  Arcora.init(opts);
+  const arcora = useMemo(() => new Arcora(opts), [opts.apiKey, opts.baseUrl]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -16,8 +16,8 @@ export function useCheckout(opts: InitOptions): UseCheckoutResult {
     setLoading(true);
     setError(null);
     try {
-      const inv = await Arcora.createInvoice(params);
-      Arcora.openCheckout(inv);
+      const inv = await arcora.createInvoice(params);
+      arcora.openCheckout(inv);
       return inv;
     } catch (e) {
       setError(e as Error);
@@ -25,7 +25,7 @@ export function useCheckout(opts: InitOptions): UseCheckoutResult {
     } finally {
       setLoading(false);
     }
-  }, [opts.apiKey]);
+  }, [arcora]);
 
   return { checkout, loading, error };
 }

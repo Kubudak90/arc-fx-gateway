@@ -54,6 +54,7 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
     error InvalidPayoutAddress();
     error InvalidWindow();
     error ProtocolFeeTooHigh(uint256 supplied);
+    error NoFeesToWithdraw();
 
     constructor(
         uint256 protocolFeeBps,
@@ -449,7 +450,9 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
     event FeesWithdrawn(address indexed token, address indexed to, uint256 amount);
 
     function withdrawFees(address token, address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (to == address(0)) revert InvalidPayoutAddress();
         uint256 amount = protocolFeesAccrued[token];
+        if (amount == 0)      revert NoFeesToWithdraw();
         protocolFeesAccrued[token] = 0;
         IERC20(token).safeTransfer(to, amount);
         emit FeesWithdrawn(token, to, amount);

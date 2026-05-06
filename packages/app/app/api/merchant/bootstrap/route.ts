@@ -7,8 +7,6 @@ import { eq } from "drizzle-orm";
 import { generateApiKey, hashApiKey, PREFIX_LEN } from "@/lib/auth/apikey";
 import { encrypt } from "@/lib/crypto/secret";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
-import { readAllowance } from "@/lib/chain/erc20";
-import type { Address } from "viem";
 import { randomBytes } from "node:crypto";
 
 // Audit H1 (2026-05-05): merchant must declare which origins may receive
@@ -91,30 +89,8 @@ export async function POST(req: NextRequest) {
 
   await session.save();
 
-  // Audit H4 (2026-05-05): V9 `refundInvoice` pulls funds via
-  // `safeTransferFrom(payoutSource, gateway, ...)`. If the payout wallet
-  // doesn't approve the gateway with sufficient allowance, refunds revert
-  // on-chain. We can't gate bootstrap on RPC (RPC outage shouldn't lock out
-  // onboarding), so we surface a best-effort `warning` flag the dashboard
-  // renders into a "Grant approval" CTA. V10 custody model removes this.
-  const MIN_REFUND_HEADROOM = BigInt(process.env.H4_MIN_BOOTSTRAP_ALLOWANCE ?? "1000000"); // 1 USDC default (6 decimals)
-  const GATEWAY_V9_ADDR = (process.env.GATEWAY_ADDRESS_V9 ?? "") as Address;
-  let warning: string | undefined;
-  try {
-    if (GATEWAY_V9_ADDR) {
-      const allowance = await readAllowance(
-        parsed.data.payoutToken as Address,
-        session.merchantAddress as Address,
-        GATEWAY_V9_ADDR,
-      );
-      if (allowance < MIN_REFUND_HEADROOM) warning = "approval_required";
-    }
-  } catch {
-    // RPC outage shouldn't block bootstrap; warning is a best-effort hint.
-  }
-
   return NextResponse.json(
-    { apiKey, webhookSecret, ...(warning && { warning }) },
+    { apiKey, webhookSecret },
     { status: 201 },
   );
 }

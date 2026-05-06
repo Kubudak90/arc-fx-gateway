@@ -57,6 +57,7 @@ async function fetchDue(): Promise<Row[]> {
        join merchants m on m.id = i.merchant_id
       where wa.succeeded_at is null
         and wa.next_attempt <= now()
+        and wa.terminal_reason is null
       order by wa.next_attempt
       limit $1`,
     [BATCH],
@@ -66,7 +67,7 @@ async function fetchDue(): Promise<Row[]> {
 
 async function markSucceeded(id: string): Promise<void> {
   await pool.query(
-    "update webhook_attempts set succeeded_at = now() where id = $1",
+    "update webhook_attempts set succeeded_at = now(), next_attempt = null where id = $1",
     [id],
   );
 }
@@ -74,15 +75,27 @@ async function markSucceeded(id: string): Promise<void> {
 async function markFailed(id: string, attempts: number, lastError: string, status: number): Promise<void> {
   const isTerminal4xx =
     status >= 400 && status < 500 && attempts >= TERMINAL_4XX_AFTER;
-  const backoffSec = isTerminal4xx
-    ? MAX_BACKOFF_HOURS * 3600
-    : Math.min(2 ** attempts, MAX_BACKOFF_HOURS * 3600);
-  await pool.query(
-    `update webhook_attempts
-        set attempts = $2, last_error = $3, next_attempt = now() + ($4 || ' seconds')::interval
-      where id = $1`,
-    [id, attempts, lastError, backoffSec],
-  );
+  if (isTerminal4xx) {
+    // Audit M5 (2026-05-06): 4xx responses after TERMINAL_4XX_AFTER attempts
+    // are permanently terminated. Set terminal_reason and NULL next_attempt
+    // so fetchDue (which filters terminal_reason IS NULL) never re-queues
+    // this row. Operator must manually clear terminal_reason to retry.
+    const reason = `http_${status}`;
+    await pool.query(
+      `update webhook_attempts
+          set attempts = $2, last_error = $3, next_attempt = null, terminal_reason = $4
+        where id = $1`,
+      [id, attempts, lastError, reason],
+    );
+  } else {
+    const backoffSec = Math.min(2 ** attempts, MAX_BACKOFF_HOURS * 3600);
+    await pool.query(
+      `update webhook_attempts
+          set attempts = $2, last_error = $3, next_attempt = now() + ($4 || ' seconds')::interval
+        where id = $1`,
+      [id, attempts, lastError, backoffSec],
+    );
+  }
 }
 
 // Audit pass 3 (2026-05-04): even though /api/merchant/bootstrap and

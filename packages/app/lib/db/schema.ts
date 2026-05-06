@@ -74,6 +74,11 @@ export const webhookAttempts = pgTable("webhook_attempts", {
   // replayed events ("invoice.paid", "invoice.refunded", "invoice.failed")
   // can't double-enqueue webhooks for the same invoice. Audit H5 (2026-05-05).
   eventType: text("event_type").notNull(),
+  // Audit M5 (2026-05-06): once a 4xx response causes permanent termination
+  // of this attempt row, `terminalReason` is set to a short code (e.g.
+  // "http_404") and `nextAttempt` is set to NULL so fetchDue never picks it
+  // up again. NULL means "still retryable".
+  terminalReason: text("terminal_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

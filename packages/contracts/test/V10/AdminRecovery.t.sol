@@ -65,4 +65,16 @@ contract V10AdminRecovery is V10TestBase {
         vm.expectRevert(abi.encodeWithSignature("InvalidPayoutAddress()"));
         gw.adminRecoverEscrow(_id(g), address(0));
     }
+
+    function test_Recover_NonPaidInvoice_Reverts() public {
+        // Use an invoice that was refunded (not in Paid state) → InvoiceNotRecoverable
+        bytes32 g = _settle(bytes32("inv-6"), 100e6, 100e6);
+        vm.prank(merchant); gw.refundInvoice(g);
+        vm.prank(merchant); gw.deactivateMerchant();
+        vm.warp(block.timestamp + REFUND_WINDOW + ADMIN_RECOVERY_DELAY + 1);
+
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("InvoiceNotRecoverable(bytes32)", g));
+        gw.adminRecoverEscrow(_id(g), sweepTo);
+    }
 }

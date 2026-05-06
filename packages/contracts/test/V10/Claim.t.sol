@@ -96,4 +96,24 @@ contract V10Claim is V10TestBase {
         uint256 expectedPayout = 100e6 - (100e6 * FEE_BPS) / 10_000;
         assertEq(eurc.balanceOf(payee), expectedPayout);
     }
+
+    /// @dev The PayoutAddressUnset branch is a defensive guard: no normal API path
+    /// can produce a registered merchant with payoutAddress == 0 (both
+    /// registerMerchant and updatePayoutAddress reject address(0)). We exercise
+    /// it by directly zeroing the storage slot so the guard is covered.
+    function test_Claim_PayoutAddressUnset_Reverts() public {
+        bytes32 g = _settle(bytes32("inv-7"), 100e6, 100e6);
+        vm.warp(block.timestamp + REFUND_WINDOW + 1);
+
+        // `merchants` mapping is at storage slot 4 (AccessControl._roles=0,
+        // ReentrancyGuard._status=1, Pausable._paused=2, supportedTokens=3,
+        // merchants=4). Struct base slot = keccak256(abi.encode(merchant, 4)).
+        // payoutAddress is the first field of the Merchant struct (slot+0).
+        bytes32 structBaseSlot = keccak256(abi.encode(merchant, uint256(4)));
+        vm.store(address(gw), structBaseSlot, bytes32(0));
+
+        bytes32[] memory ids = new bytes32[](1); ids[0] = g;
+        vm.expectRevert(abi.encodeWithSignature("PayoutAddressUnset(address)", merchant));
+        gw.claim(ids);
+    }
 }

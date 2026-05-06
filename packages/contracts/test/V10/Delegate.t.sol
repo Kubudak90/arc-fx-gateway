@@ -66,4 +66,40 @@ contract V10Delegate is V10TestBase {
         assertEq(exp, 0);
         assertEq(rights, 0);
     }
+
+    // --- _createInvoice guard branches ---
+
+    function test_CreateInvoice_InactiveMerchant_Reverts() public {
+        vm.prank(merchant);
+        gw.deactivateMerchant();
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("MerchantInactive()"));
+        gw.createInvoice(bytes32("inv-x"), address(usdc), 100e6, uint64(block.timestamp + 1 hours));
+    }
+
+    function test_CreateInvoice_UnsupportedPayIn_Reverts() public {
+        address badToken = makeAddr("badPayIn");
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("InvalidPayInToken()"));
+        gw.createInvoice(bytes32("inv-y"), badToken, 100e6, uint64(block.timestamp + 1 hours));
+    }
+
+    function test_CreateInvoice_DuplicateGlobalId_Reverts() public {
+        bytes32 invoiceId = bytes32("inv-dup");
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(invoiceId, address(usdc), 100e6, uint64(block.timestamp + 1 hours));
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("InvoiceAlreadyExists(bytes32)", g));
+        gw.createInvoice(invoiceId, address(usdc), 100e6, uint64(block.timestamp + 1 hours));
+    }
+
+    // --- authorizeDelegate guard branch ---
+
+    function test_AuthorizeDelegate_InactiveMerchant_Reverts() public {
+        vm.prank(merchant);
+        gw.deactivateMerchant();
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("NotMerchant()"));
+        gw.authorizeDelegate(delegate, uint64(block.timestamp + 1 days), RIGHT_CI);
+    }
 }

@@ -65,4 +65,12 @@ contract V10Settle is V10TestBase {
         vm.expectRevert(abi.encodeWithSignature("InvoiceExpired(bytes32)", g));
         gw.settleInvoice(g, customer, address(usdc), 100e6, 100e6, bytes32(0));
     }
+
+    function test_Settle_NotFound_Reverts() public {
+        bytes32 ghost = keccak256(abi.encodePacked("nonexistent"));
+        _fundRelayer(eurc, 100e6);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSignature("InvoiceNotFound(bytes32)", ghost));
+        gw.settleInvoice(ghost, customer, address(usdc), 100e6, 100e6, bytes32(0));
+    }
 }

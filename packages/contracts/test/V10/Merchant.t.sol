@@ -64,4 +64,64 @@ contract V10Merchant is V10TestBase {
         (, address pt, ) = gw.merchants(merchant);
         assertEq(pt, address(usdc));
     }
+
+    // --- registerMerchant guard branches ---
+
+    function test_Register_ZeroPayoutAddress_Reverts() public {
+        address fresh = makeAddr("fresh");
+        vm.prank(fresh);
+        vm.expectRevert(abi.encodeWithSignature("InvalidPayoutAddress()"));
+        gw.registerMerchant(address(0), address(eurc));
+    }
+
+    function test_Register_UnsupportedToken_Reverts() public {
+        address fresh = makeAddr("fresh");
+        address badToken = makeAddr("badToken");
+        vm.prank(fresh);
+        vm.expectRevert(abi.encodeWithSignature("InvalidPayoutToken()"));
+        gw.registerMerchant(payee, badToken);
+    }
+
+    // --- updatePayoutAddress guard branches ---
+
+    function test_UpdatePayoutAddress_InactiveMerchant_Reverts() public {
+        vm.prank(merchant);
+        gw.deactivateMerchant();
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("NotMerchant()"));
+        gw.updatePayoutAddress(payee);
+    }
+
+    function test_UpdatePayoutAddress_ZeroAddress_Reverts() public {
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("InvalidPayoutAddress()"));
+        gw.updatePayoutAddress(address(0));
+    }
+
+    // --- updatePayoutToken guard branches ---
+
+    function test_UpdatePayoutToken_InactiveMerchant_Reverts() public {
+        vm.prank(merchant);
+        gw.deactivateMerchant();
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("NotMerchant()"));
+        gw.updatePayoutToken(address(usdc));
+    }
+
+    function test_UpdatePayoutToken_UnsupportedToken_Reverts() public {
+        address badToken = makeAddr("badToken");
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("InvalidPayoutToken()"));
+        gw.updatePayoutToken(badToken);
+    }
+
+    // --- deactivateMerchant guard branch ---
+
+    function test_Deactivate_AlreadyInactive_Reverts() public {
+        vm.prank(merchant);
+        gw.deactivateMerchant();
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("NotMerchant()"));
+        gw.deactivateMerchant();
+    }
 }

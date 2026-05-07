@@ -31,7 +31,7 @@ interface Props {
   payoutToken: string;
 }
 
-export function MerchantV9ActivationCard({ payoutAddress, payoutToken }: Props) {
+export function MerchantV10ActivationCard({ payoutAddress, payoutToken }: Props) {
   const { address } = useAccount();
   const chainId = useChainId();
   const publicClient = usePublicClient();

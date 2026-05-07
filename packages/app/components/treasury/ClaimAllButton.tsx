@@ -2,8 +2,13 @@
 
 import { useState } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import type { Address } from "viem";
 import { gatewayAbi } from "@/lib/chain/gateway-abi";
-import { GATEWAY_ADDRESS } from "@/lib/chain/client";
+
+// Read the V10 gateway address from the public env var directly — importing
+// from `@/lib/chain/client` would transitively pull `pg` (server-only) into
+// the client bundle and break the build with "Module not found: 'fs' / 'net'".
+const GATEWAY_ADDRESS = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 ?? "") as Address;
 
 interface ClaimAllButtonProps {
   globalIds: `0x${string}`[];

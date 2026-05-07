@@ -29,9 +29,21 @@ export interface VaultSignerOpts {
  * HSM boundary.
  */
 export async function vaultSigner(opts: VaultSignerOpts): Promise<LocalAccount> {
-  const token = await login(opts);
-  const privateKey = await fetchPrivateKey(opts.vaultUrl, token, opts.kvPath, opts.kvField);
+  const privateKey = await fetchPrivateKeyFromVault(opts);
   return privateKeyToAccount(privateKey);
+}
+
+/**
+ * Fetch the raw 32-byte hex private key from Vault KV-v2.
+ *
+ * Use this when an external library (like Circle's AppKit
+ * `createViemAdapterFromPrivateKey`) requires a raw key and cannot accept a
+ * viem `LocalAccount`. The returned key lives in process memory only —
+ * never log, never persist to disk.
+ */
+export async function fetchPrivateKeyFromVault(opts: VaultSignerOpts): Promise<Hex> {
+  const token = await login(opts);
+  return fetchPrivateKey(opts.vaultUrl, token, opts.kvPath, opts.kvField);
 }
 
 async function login(opts: VaultSignerOpts): Promise<string> {

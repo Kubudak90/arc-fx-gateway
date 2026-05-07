@@ -21,7 +21,7 @@
  *
  * V10 NOTE: RELAYER_PRIVATE_KEY has been replaced by VAULT_* env vars.
  * force-refund authenticates via Vault transit (same as the daemon).
- * Required env: VAULT_URL, VAULT_ROLE_ID, VAULT_SECRET_ID, VAULT_KEY_NAME.
+ * Required env: VAULT_URL, VAULT_ROLE_ID, VAULT_SECRET_ID, VAULT_KV_PATH (kvField defaults to "privateKey").
  */
 
 import {
@@ -126,10 +126,11 @@ async function forceRefund(id: string): Promise<void> {
   }
 
   const account = await vaultSigner({
-    vaultUrl:  need("VAULT_URL"),
-    roleId:    need("VAULT_ROLE_ID"),
-    secretId:  need("VAULT_SECRET_ID"),
-    keyName:   need("VAULT_KEY_NAME"),
+    vaultUrl: need("VAULT_URL"),
+    roleId:   need("VAULT_ROLE_ID"),
+    secretId: need("VAULT_SECRET_ID"),
+    kvPath:   need("VAULT_KV_PATH"),
+    kvField:  process.env.VAULT_KV_FIELD ?? "privateKey",
   });
   const wallet = createWalletClient({ account, transport: http(RPC) });
   const chain  = createPublicClient({ transport: http(RPC) });

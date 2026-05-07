@@ -1,106 +1,140 @@
 // Run with: pnpm --filter arcora-relayer exec vitest run vault-signer.test.ts
 //
-// Integration tests (itOnDev) require a local Vault dev-mode instance with
-// the secp256k1 plugin and a key called `test-relayer`. Skipped in CI unless
-// VAULT_DEV=1 is set.
+// Architecture: V10 Vault signer fetches the relayer privkey from KV-v2 at
+// boot via AppRole, then uses viem's privateKeyToAccount in-process. No
+// transit signing, no community plugin trust. (See `ops/vault/README.md`.)
+//
+// Integration tests require a local Vault dev-mode instance and KV-v2 secret.
+// Skipped unless VAULT_DEV=1.
 //
 //   vault server -dev -dev-root-token-id=root &
-//   VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root \
-//     vault secrets enable -path=transit -plugin-name=vault-plugin-secrets-secp256k1 plugin
-//   VAULT_ADDR=… vault write -f transit/keys/test-relayer type=secp256k1 exportable=false
-//   VAULT_ADDR=… vault auth enable approle
-//   …  (see ops/vault/README.md for the full ceremony — abbreviated for tests)
+//   VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root vault secrets enable -path=secret kv-v2
+//   vault kv put secret/relayer-test privateKey=0x<32-byte-hex>
+//   vault auth enable approle
+//   ... (see ops/vault/README.md for AppRole role + secret_id ceremony)
 
-import { describe, it, expect } from "vitest";
-import { hashMessage, recoverMessageAddress, recoverAddress } from "viem";
-import { publicKeyToAddress } from "viem/accounts";
-import { secp256k1 } from "@noble/curves/secp256k1";
-import { vaultSigner, parseDerToRSV } from "./vault-signer.js";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { privateKeyToAccount } from "viem/accounts";
+import { vaultSigner } from "./vault-signer.js";
 
 const enabled = process.env.VAULT_DEV === "1";
 const itOnDev = enabled ? it : it.skip;
 
 // ---------------------------------------------------------------------------
-// Unit test: DER parse + v recovery — runs without VAULT_DEV=1
-// Constructs a known DER fixture using @noble/curves and verifies the parser
-// produces a signature whose recovered address matches the expected address.
+// Unit tests — fetch is mocked, no live Vault needed
 // ---------------------------------------------------------------------------
-describe("parseDerToRSV (offline unit test)", () => {
-  it("parses ASN.1 DER and recovers the correct v byte", async () => {
-    // Generate a deterministic test key (fixed seed for reproducibility)
-    const privKey = new Uint8Array(32);
-    privKey.fill(0xab); // arbitrary non-zero repeating pattern
-    const pubKey  = secp256k1.getPublicKey(privKey, false); // uncompressed 04||x||y
-    const address = publicKeyToAddress(`0x${Buffer.from(pubKey).toString("hex")}`);
 
-    // Sign a known digest
-    const digest = new Uint8Array(32);
-    digest.fill(0x42);
-    const digestHex = `0x${Buffer.from(digest).toString("hex")}` as `0x${string}`;
+describe("vaultSigner (unit, mocked fetch)", () => {
+  const TEST_PRIV_KEY = "0x" + "ab".repeat(32);
+  const expectedAddr = privateKeyToAccount(TEST_PRIV_KEY as `0x${string}`).address;
 
-    // Produce a low-S DER signature (matches Vault's default behaviour)
-    const nobleSig = secp256k1.sign(digest, privKey, { lowS: true });
-    const derBytes = nobleSig.toDERRawBytes();
-    const derHex   = `0x${Buffer.from(derBytes).toString("hex")}` as `0x${string}`;
-
-    // parseDerToRSV should round-trip correctly
-    const { r, s, v } = await parseDerToRSV(digestHex, address, derHex);
-
-    // r and s must match the noble signature
-    expect(BigInt(r)).toBe(nobleSig.r);
-    expect(BigInt(s)).toBe(nobleSig.normalizeS().s);
-
-    // v must be 27 or 28
-    expect([27n, 28n]).toContain(v);
-
-    // Recovered address must match the expected address
-    const recovered = await recoverAddress({ hash: digestHex, signature: { r, s, v } });
-    expect(recovered.toLowerCase()).toBe(address.toLowerCase());
+  beforeEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("handles both possible recovery candidates correctly", async () => {
-    // Run 10 random trials to exercise both v=27 and v=28 cases
-    for (let i = 0; i < 10; i++) {
-      const privKey = secp256k1.utils.randomPrivateKey();
-      const pubKey  = secp256k1.getPublicKey(privKey, false);
-      const address = publicKeyToAddress(`0x${Buffer.from(pubKey).toString("hex")}`);
+  it("logs in via AppRole, fetches the privkey from KV-v2, and returns a viem account", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ auth: { client_token: "s.fakeToken" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { data: { privateKey: TEST_PRIV_KEY } } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
 
-      const digest = crypto.getRandomValues(new Uint8Array(32));
-      const digestHex = `0x${Buffer.from(digest).toString("hex")}` as `0x${string}`;
+    const account = await vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    });
 
-      const nobleSig = secp256k1.sign(digest, privKey, { lowS: true });
-      const derHex   = `0x${Buffer.from(nobleSig.toDERRawBytes()).toString("hex")}` as `0x${string}`;
+    expect(account.address.toLowerCase()).toBe(expectedAddr.toLowerCase());
+    // first call is login, second is KV read
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/v1\/auth\/approle\/login$/);
+    expect(fetchMock.mock.calls[1][0]).toMatch(/\/v1\/secret\/data\/relayer-v10$/);
+    // KV read carries the AppRole-issued token
+    expect((fetchMock.mock.calls[1][1] as { headers: Record<string, string> }).headers["X-Vault-Token"])
+      .toBe("s.fakeToken");
+  });
 
-      const { r, s, v } = await parseDerToRSV(digestHex, address, derHex);
-      const recovered = await recoverAddress({ hash: digestHex, signature: { r, s, v } });
-      expect(recovered.toLowerCase()).toBe(address.toLowerCase());
-    }
+  it("throws when login returns non-200", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: async () => "permission denied",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "bad",
+      secretId: "bad",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/Vault login failed/);
+  });
+
+  it("throws when KV secret has no privateKey field", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ auth: { client_token: "s.fakeToken" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { data: { somethingElse: "x" } } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/has no field 'privateKey'/);
+  });
+
+  it("throws when the KV value is not a 32-byte hex private key", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ auth: { client_token: "s.fakeToken" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { data: { privateKey: "not-a-hex-key" } } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/not a 32-byte hex private key/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Integration tests: require VAULT_DEV=1 and a live Vault instance
+// Integration tests — require VAULT_DEV=1
 // ---------------------------------------------------------------------------
-describe("vault-signer (integration — skipped without VAULT_DEV=1)", () => {
-  itOnDev("derives an Ethereum address from the transit public key", async () => {
-    const account = await vaultSigner({
-      vaultUrl:  "http://127.0.0.1:8200",
-      roleId:    process.env.TEST_VAULT_ROLE_ID!,
-      secretId:  process.env.TEST_VAULT_SECRET_ID!,
-      keyName:   "test-relayer",
-    });
-    expect(account.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
-  });
 
-  itOnDev("signs a message and the signature recovers to the same address", async () => {
+describe("vaultSigner (integration — skipped without VAULT_DEV=1)", () => {
+  itOnDev("fetches a real KV secret and produces a working signer", async () => {
     const account = await vaultSigner({
       vaultUrl: "http://127.0.0.1:8200",
       roleId:   process.env.TEST_VAULT_ROLE_ID!,
       secretId: process.env.TEST_VAULT_SECRET_ID!,
-      keyName:  "test-relayer",
+      kvPath:   process.env.TEST_VAULT_KV_PATH ?? "secret/data/relayer-test",
+      kvField:  process.env.TEST_VAULT_KV_FIELD ?? "privateKey",
     });
-    const sig = await account.signMessage!({ message: "hello arcora" });
-    const recovered = await recoverMessageAddress({ message: "hello arcora", signature: sig });
-    expect(recovered.toLowerCase()).toEqual(account.address.toLowerCase());
+    expect(account.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 });

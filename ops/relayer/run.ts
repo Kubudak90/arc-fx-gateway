@@ -72,14 +72,16 @@ const PERMIT2_ABI = parseAbi([
   "function permitWitnessTransferFrom(PermitTransferFrom permit, SignatureTransferDetails transferDetails, address owner, bytes32 witness, string witnessTypeString, bytes signature)",
 ]);
 
-// V10 (audit M1): relayer key is isolated in HashiCorp Vault transit engine.
-// The private key never leaves Vault — authentication is via AppRole, and
-// signing is delegated to the transit/sign endpoint. See ops/vault/README.md.
+// V10 (audit M1 partial): relayer key fetched from Vault KV-v2 at boot.
+// AppRole-authenticated, audit-logged, encrypted at rest. Key still lives in
+// process memory after fetch; signing-isolated HSM is Plan 11. See
+// ops/vault/README.md.
 const account = await vaultSigner({
-  vaultUrl:  need("VAULT_URL"),
-  roleId:    need("VAULT_ROLE_ID"),
-  secretId:  need("VAULT_SECRET_ID"),
-  keyName:   need("VAULT_KEY_NAME"),
+  vaultUrl: need("VAULT_URL"),
+  roleId:   need("VAULT_ROLE_ID"),
+  secretId: need("VAULT_SECRET_ID"),
+  kvPath:   need("VAULT_KV_PATH"),
+  kvField:  process.env.VAULT_KV_FIELD ?? "privateKey",
 });
 const RELAYER_ADDR = account.address;
 const wallet = createWalletClient({ account, transport: http(RPC) });

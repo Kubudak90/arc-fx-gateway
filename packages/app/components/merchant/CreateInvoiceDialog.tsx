@@ -21,16 +21,27 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
   const [created, setCreated] = useState<Created | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Local apiKey override: bootstrap returns the key once in the response
+  // body and we don't store it on session (audit L9). After page reload the
+  // dashboard prop is null. Allow the merchant to paste the key they saved
+  // in their password manager. Persisted to localStorage so they don't have
+  // to paste on every dialog open.
+  const [pastedKey, setPastedKey] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("arcora.apiKey") ?? "";
+  });
+  const effectiveKey = apiKey ?? pastedKey ?? null;
+
   async function handleSubmit() {
-    if (!apiKey) { toast.error("Generate an API key in Settings first"); return; }
+    if (!effectiveKey) { toast.error("Paste your API key (saved at bootstrap) below"); return; }
+    if (typeof window !== "undefined") window.localStorage.setItem("arcora.apiKey", effectiveKey);
     setBusy(true);
     try {
-      // Plan 9 (2026-05-03): default engine is now v9 (refund-source binding
-      // fix on the gateway contract). V8 + V6 remain available via explicit
-      // ?engine= query for testing.
-      const res = await fetch("/api/invoices?engine=v9", {
+      // V10 cutover (Plan 10): /api/invoices now routes V10-only; the legacy
+      // ?engine= param is gone.
+      const res = await fetch("/api/invoices", {
         method: "POST",
-        headers: { "content-type": "application/json", "X-Arcora-Api-Key": apiKey },
+        headers: { "content-type": "application/json", "X-Arcora-Api-Key": effectiveKey },
         body: JSON.stringify({ amountUsdc: Number(amount), payInToken: payIn, successUrl }),
       });
       if (!res.ok) {
@@ -154,6 +165,23 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
               <Label htmlFor="invoice-success">Success URL</Label>
               <Input id="invoice-success" value={successUrl} onChange={(e) => setSuccessUrl(e.target.value)} />
             </div>
+            {!apiKey && (
+              <div className="space-y-2">
+                <Label htmlFor="invoice-apikey">API key</Label>
+                <Input
+                  id="invoice-apikey"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="ak_live_…"
+                  value={pastedKey}
+                  onChange={(e) => setPastedKey(e.target.value.trim())}
+                />
+                <p className="text-xs text-muted-foreground">
+                  The key shown once at bootstrap. Stored in this browser only (localStorage); rotate from{" "}
+                  <span className="font-medium">Settings</span> if compromised.
+                </p>
+              </div>
+            )}
             <Button disabled={busy} onClick={handleSubmit} className="w-full mt-2">
               {busy ? "Creating…" : "Create invoice"}
             </Button>

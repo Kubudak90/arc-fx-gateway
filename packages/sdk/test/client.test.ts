@@ -90,3 +90,48 @@ describe("new Arcora() — instance pattern", () => {
     expect(call[1].headers["X-Arcora-Api-Key"]).toBe("ak_instance_A");
   });
 });
+
+describe("Arcora.escrows() — V10 escrow listing", () => {
+  const escrowPayload = {
+    pending: [{ id: "0xaaa", amountOut: "9990000", payoutToken: "0xUsdc", claimableAt: "2026-05-10T00:00:00Z", status: "paid" }],
+    matured: [],
+    claimed: [],
+  };
+
+  it("GETs /api/merchant/escrows and returns structured payload", async () => {
+    (globalThis.fetch as any).mockResolvedValue(
+      new Response(JSON.stringify(escrowPayload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    const result = await Arcora.escrows();
+    expect(result.pending).toHaveLength(1);
+    expect(result.pending[0].id).toBe("0xaaa");
+    expect(result.matured).toHaveLength(0);
+    const call = (globalThis.fetch as any).mock.calls[0];
+    expect(call[0]).toMatch(/\/api\/merchant\/escrows$/);
+    expect(call[1].method).toBe("GET");
+    expect(call[1].headers["X-Arcora-Api-Key"]).toBe("ak_test_xxx");
+  });
+
+  it("instance escrows() uses the instance's apiKey", async () => {
+    (globalThis.fetch as any).mockResolvedValue(
+      new Response(JSON.stringify({ pending: [], matured: [], claimed: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    const a = new Arcora({ apiKey: "ak_escrow_inst", environment: "testnet" });
+    await a.escrows();
+    const call = (globalThis.fetch as any).mock.calls[0];
+    expect(call[1].headers["X-Arcora-Api-Key"]).toBe("ak_escrow_inst");
+  });
+
+  it("throws INVALID_API_KEY on 401", async () => {
+    (globalThis.fetch as any).mockResolvedValue(
+      new Response(JSON.stringify({ error: "invalid_api_key" }), { status: 401 })
+    );
+    await expect(Arcora.escrows()).rejects.toMatchObject({ code: "INVALID_API_KEY" });
+  });
+});

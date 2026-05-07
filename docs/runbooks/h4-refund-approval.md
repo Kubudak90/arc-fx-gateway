@@ -1,3 +1,8 @@
+> **DEPRECATED 2026-05-06.** V10 (Plan 10) eliminates the H4 refund-approval
+> dependency entirely via the custody model. This runbook is retained for
+> historical reference only — do not action it on V10. See
+> `docs/runbooks/v10-deploy.md` and `docs/superpowers/specs/2026-05-06-plan-10-custody-gateway-design.md`.
+
 # H4 — Refund-Approval Invariant (V9)
 
 V9 `refundInvoice` uses `safeTransferFrom(payoutSource, ...)`. The payout

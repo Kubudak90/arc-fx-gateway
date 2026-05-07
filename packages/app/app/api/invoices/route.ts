@@ -11,13 +11,9 @@ import { screenWithAudit } from "@/lib/compliance/screen";
 import { assertOriginAllowed, assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
-// Per-engine gateway addresses. Plan 9 (2026-05-03) made V9 the canonical
-// default: V8's refundInvoice broke for merchants whose payout wallet
-// differs from their identity wallet, V9 snapshots `payoutSource` per
-// invoice. V8 stays addressable via `?engine=v8` for testing; V6 via
-// `?engine=v6` for legacy traffic.
-const GATEWAY_V8 = (process.env.GATEWAY_ADDRESS_V8 ?? "") as Address;
-const GATEWAY_V9 = (process.env.GATEWAY_ADDRESS_V9 ?? "") as Address;
+// V10 cutover (Plan 10, 2026-05-07): V8/V9 retired. The gateway address comes
+// from GATEWAY_ADDRESS_V10 via lib/chain/client.ts. The legacy `?engine=`
+// query param is no-op now — all invoices route to V10.
 
 const Body = z.object({
   amountUsdc: z.number().positive(),
@@ -100,25 +96,8 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  // Engine selection moves up — we need targetGateway to read the on-chain
-  // payoutAddress for compliance screening (audit pass 4 #8). Was below;
-  // moved above so we can both screen the right wallet AND short-circuit
-  // unknown-engine errors before any provider call.
-  const engineParam = new URL(req.url).searchParams.get("engine");
-  const engine: "v6" | "v8" | "v9" =
-    engineParam === "v8" ? "v8" :
-    engineParam === "v6" ? "v6" :
-    "v9";
-  const targetGateway: Address =
-    engine === "v9" ? GATEWAY_V9 :
-    engine === "v8" ? GATEWAY_V8 :
-    GATEWAY;
-  if (engine === "v9" && !GATEWAY_V9) {
-    return corsResponse({ error: "v9_gateway_not_configured" }, { status: 503 });
-  }
-  if (engine === "v8" && !GATEWAY_V8) {
-    return corsResponse({ error: "v8_gateway_not_configured" }, { status: 503 });
-  }
+  // V10-only: all invoices route to GATEWAY (== GATEWAY_ADDRESS_V10).
+  const targetGateway: Address = GATEWAY;
 
   // Audit pass 4 (2026-05-04, finding #8): we used to screen
   // `merchant.address` (the identity wallet) but V9 settles to
@@ -205,11 +184,6 @@ export async function POST(req: NextRequest) {
   const amountOut = BigInt(Math.round(amountUsdc * 1_000_000));
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + INVOICE_TTL_SEC);
 
-  // engine + targetGateway already resolved above (moved up for on-chain
-  // payoutAddress read). Plan 9 default = v9; v8/v6 reachable via ?engine=
-  // for testing / legacy traffic; the hosted checkout reads metadata.engine
-  // to choose the right PayButton.
-
   let txHash: Hex;
   try {
     const wallet = await getServerWalletClient();
@@ -237,7 +211,7 @@ export async function POST(req: NextRequest) {
     expiresAt: new Date(Number(expiresAt) * 1000),
     status: "created",
     gatewayAddress: targetGateway.toLowerCase(),
-    metadata: { ...(metadata ?? {}), engine },
+    metadata: { ...(metadata ?? {}), engine: "v10" },
     successUrl,
     cancelUrl: cancelUrl ?? null,
   });

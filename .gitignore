@@ -34,3 +34,6 @@ Thumbs.db
 
 # TS incremental build info (regenerated; should not be tracked)
 *.tsbuildinfo
+
+# Claude Code session state — never commit
+.claude/

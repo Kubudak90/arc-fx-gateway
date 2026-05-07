@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import { Script, console2 } from "forge-std/Script.sol";
-import { ArcFXGatewayV9 } from "../src/ArcFXGatewayV9.sol";
+import { ArcFXGatewayV9 } from "../legacy/src/ArcFXGatewayV9.sol";
 
 /// @notice Deploys the v0.9 (refund-source binding) ArcFXGateway. Same shape
 /// as DeployV8 — only the contract changed; the constructor + token whitelist

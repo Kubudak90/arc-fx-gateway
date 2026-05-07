@@ -29,7 +29,7 @@ positives in this codebase (H3, M2). 1 skipped as a false positive on review
 
 | ID | Finding | Resolution | Phase |
 |----|---------|------------|-------|
-| M1 | `RELAYER_PRIVATE_KEY` lives at module scope | IIFE-wrapped account construction; defensive log audit. Note: viem `WalletClient` retains internal key reference — this is logging defense-in-depth, NOT key erasure. V10 + HSM is the real fix. | 6 |
+| M1 | `RELAYER_PRIVATE_KEY` lives at module scope | IIFE-wrapped account construction; defensive log audit. Note: viem `WalletClient` retains internal key reference — this is logging defense-in-depth, NOT key erasure. V10 settle path now uses Vault HSM (`ops/relayer/vault-signer.ts`). **Partial** — App Kit's `createViemAdapterFromPrivateKey` does not accept a custom signer; the swap leg in `ops/relayer/run.ts` still uses `RELAYER_ADAPTER_KEY` (raw private key) pending upstream App Kit support. | 6 |
 | M2 | (FALSE POSITIVE) | Refund fee already debited per code-reading; no change | — |
 | M3 | V9 `protocolFeeBps` has no on-chain upper bound | NatSpec WARNING on V9 constructor + `require(feeBps <= 1000)` in `DeployV9.s.sol` (off-chain). V10 will enforce in-constructor. | 6 |
 | M4 | NatSpec misleadingly said deactivated merchants cannot re-register | NatSpec corrected. Behavior unchanged. V10 will add explicit `reactivateMerchant`. | 6 |
@@ -59,22 +59,23 @@ positives in this codebase (H3, M2). 1 skipped as a false positive on review
 | L9 | `session.apiKey` was stored on session for "dashboard convenience" | Removed; bootstrap/rotation responses still return `apiKey` in body | 7 |
 | L10 | `packages/shop/lib/cart.tsx` used `JSON.parse(raw) as CartItem[]` | Zod-validated parse with `[]` fallback | 7 |
 
-## Deferred to V10
+## Deferred to V10 — CLOSED 2026-05-06 (Plan 10)
 
-| Finding | Plan |
-|--------|------|
-| H4 (refund custody) | V10 custody model — eliminates allowance dependency entirely |
-| M3 (fee bound) | V10 in-constructor `require(protocolFeeBps <= 1000)` |
-| M4 (reactivate semantics) | V10 explicit `reactivateMerchant` with operator-only gating |
-| L2 (`nonReentrant` on `recordPayerRefund`) | V10 redeploy will pick up the modifier (V9 immutable) |
+| Finding | Resolution |
+|--------|------------|
+| H4 (refund custody) | V10 custody model deployed at `0x<V10>`. Allowance dependency eliminated. |
+| M3 (fee bound) | V10 constructor enforces `protocolFeeBps <= 1000`. |
+| M4 (reactivate semantics) | V10 admin-only `reactivateMerchant`; `registerMerchant` rejects deactivated overwrite. |
+| L2 (`nonReentrant` on `recordPayerRefund`) | Modifier added in V10. |
 
 ## Operational gotchas worth carrying into V10 plan
 
 1. **Cron response leaks merchant addresses** — `/api/internal/cron/h4-allowance-check` returns flagged merchant `address` + `payoutToken` + liability in the public JSON. Anyone holding `CRON_SECRET` (a long-lived shared secret) can dump this. Move details to server-side log + ops-dashboard fetch in V10 cycle.
 2. **Bootstrap allowance check goes stale on payoutAddress rotation** — `bootstrap/route.ts` reads `allowance(session.merchantAddress, gateway)` once. After `updatePayoutAddress`, the dashboard banner doesn't re-check. Hourly cron catches it; UI should re-check on rotation event.
 3. **M1 IIFE is logging defense, not key erasure** — viem `WalletClient` retains internal references to the key after `privateKeyToAccount`. The IIFE only prevents accidental `console.log(PRIVATE_KEY)` and module-globals dumps. HSM/encrypted-keystore is the V10 fix.
-4. **`vercel.json` location is fragile** — lives at `packages/app/vercel.json` because Vercel project root is set there. If anyone moves project root to repo root, the cron silently stops registering.
-5. **Migration 0014 (M10 UNIQUE index) was not exercised against the local dev DB** — local DB is on a pre-0007 snapshot (no `checkout_authorizations` table). The migration SQL is correct and will apply cleanly to production. Test coverage for the idempotency path is via mocked drizzle 23505 errors.
+4. **M1 partial — App Kit limitation tracked for follow-up** — V10 settle path uses Vault HSM via `ops/relayer/vault-signer.ts`. However, the App Kit swap adapter (`createViemAdapterFromPrivateKey`) does not expose a custom signer interface; `ops/relayer/run.ts:91` (`RELAYER_ADAPTER_KEY`) still holds a raw private key for this leg. Full M1 closure requires upstream App Kit to support a custom `LocalAccount` signer — track in backlog.
+5. **`vercel.json` location is fragile** — lives at `packages/app/vercel.json` because Vercel project root is set there. If anyone moves project root to repo root, the cron silently stops registering.
+6. **Migration 0014 (M10 UNIQUE index) was not exercised against the local dev DB** — local DB is on a pre-0007 snapshot (no `checkout_authorizations` table). The migration SQL is correct and will apply cleanly to production. Test coverage for the idempotency path is via mocked drizzle 23505 errors.
 
 ## Verification at branch tip
 

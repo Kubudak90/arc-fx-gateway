@@ -18,14 +18,18 @@
  *
  * Run from `/root/arcora-ops/relayer/` on the VPS, or locally after
  * `cd ops/relayer && pnpm install`.
+ *
+ * V10 NOTE: RELAYER_PRIVATE_KEY has been replaced by VAULT_* env vars.
+ * force-refund authenticates via Vault transit (same as the daemon).
+ * Required env: VAULT_URL, VAULT_ROLE_ID, VAULT_SECRET_ID, VAULT_KV_PATH (kvField defaults to "privateKey").
  */
 
 import {
   createPublicClient, createWalletClient, http, parseAbi,
   type Address, type Hex,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import pg from "pg";
+import { vaultSigner } from "./vault-signer";
 
 const PG_URL      = need("POSTGRES_URL_NON_POOLING");
 
@@ -104,9 +108,8 @@ async function requeue(id: string): Promise<void> {
 }
 
 async function forceRefund(id: string): Promise<void> {
-  const RPC         = need("ARC_TESTNET_RPC");
-  const PRIVATE_KEY = need("RELAYER_PRIVATE_KEY") as Hex;
-  const GATEWAY     = need("GATEWAY_ADDRESS").toLowerCase() as Address;
+  const RPC     = need("ARC_TESTNET_RPC");
+  const GATEWAY = need("GATEWAY_ADDRESS").toLowerCase() as Address;
 
   const r = await pool.query<{
     invoice_id: string; payer: string; pay_in_token: string; amount_in: string; status: string;
@@ -122,7 +125,14 @@ async function forceRefund(id: string): Promise<void> {
     throw new Error(`row already settled — cannot force-refund. Use the merchant refund flow instead.`);
   }
 
-  const wallet = createWalletClient({ account: privateKeyToAccount(PRIVATE_KEY), transport: http(RPC) });
+  const account = await vaultSigner({
+    vaultUrl: need("VAULT_URL"),
+    roleId:   need("VAULT_ROLE_ID"),
+    secretId: need("VAULT_SECRET_ID"),
+    kvPath:   need("VAULT_KV_PATH"),
+    kvField:  process.env.VAULT_KV_FIELD ?? "privateKey",
+  });
+  const wallet = createWalletClient({ account, transport: http(RPC) });
   const chain  = createPublicClient({ transport: http(RPC) });
 
   const reasonHash = ("0x" +

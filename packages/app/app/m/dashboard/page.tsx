@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { InvoiceTable, type InvoiceRow } from "@/components/merchant/InvoiceTable";
 import { CreateInvoiceDialog } from "@/components/merchant/CreateInvoiceDialog";
-import { MerchantV9ActivationCard } from "@/components/merchant/MerchantV9ActivationCard";
+import { MerchantV10ActivationCard } from "@/components/merchant/MerchantV10ActivationCard";
 
 interface DashboardData {
   merchant: { address: string; payoutToken: string; webhookUrl: string | null } | null;
@@ -37,7 +37,7 @@ export default function DashboardPage() {
         <h1 className="font-[family-name:var(--font-display)] text-[36px]">Invoices</h1>
         <CreateInvoiceDialog apiKey={null} onCreated={refresh} />
       </div>
-      <MerchantV9ActivationCard
+      <MerchantV10ActivationCard
         payoutAddress={data.merchant.address}
         payoutToken={data.merchant.payoutToken}
       />

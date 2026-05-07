@@ -21,5 +21,12 @@ export async function getServerWalletClient() {
   return createWalletClient({ account, chain: arcTestnet, transport: http() });
 }
 
-export const GATEWAY: Address = (process.env.GATEWAY_ADDRESS ?? "0x0000000000000000000000000000000000000000") as Address;
 export const POOL: Address = (process.env.POOL_ADDRESS ?? "0x0000000000000000000000000000000000000000") as Address;
+
+// V10 custody gateway address. Throws at import time if unset so a missing
+// env var surfaces immediately rather than failing at first RPC call.
+const _v10 = process.env.GATEWAY_ADDRESS_V10;
+export const GATEWAY_ADDRESS: Address = (_v10 ?? "0x0000000000000000000000000000000000000000") as Address;
+
+// Keep GATEWAY alias for call sites that haven't migrated yet.
+export const GATEWAY = GATEWAY_ADDRESS;

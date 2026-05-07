@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["smoke.ts", "run.ts", "replay.ts"]
+  "include": ["smoke.ts", "run.ts", "replay.ts", "vault-signer.ts", "vault-signer.test.ts", "e2e-test.ts", "e2e-twowallet.ts"]
 }

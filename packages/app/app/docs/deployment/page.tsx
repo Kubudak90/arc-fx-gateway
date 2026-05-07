@@ -22,7 +22,7 @@ export default function DeploymentDocs() {
         <thead><tr><th>Service</th><th>What it does</th></tr></thead>
         <tbody>
           <tr><td><code>packages/app</code> (Next.js on Vercel)</td><td>Hosted checkout, merchant dashboard, REST API</td></tr>
-          <tr><td><code>packages/contracts</code> (Foundry)</td><td><code>ArcFXGatewayV9</code> (canonical since 2026-05-03) + helpers, deployed via <code>script/DeployV9.s.sol</code></td></tr>
+          <tr><td><code>packages/contracts</code> (Foundry)</td><td><code>ArcFXGatewayV10</code> (canonical since 2026-05-07, custody-escrow gateway) + helpers, deployed via <code>script/DeployV10.s.sol</code></td></tr>
           <tr><td><code>ops/relayer</code> (single VPS)</td><td>Drains the Permit2 queue, runs <code>kit.swap</code>, calls <code>settleInvoice</code></td></tr>
           <tr><td><code>ops/indexer</code> (same VPS)</td><td>Watches gateway events, writes invoice status, enqueues webhooks</td></tr>
           <tr><td>Postgres (Neon or self-hosted)</td><td>Invoices, queue, merchant rows, compliance audit log</td></tr>
@@ -33,9 +33,8 @@ export default function DeploymentDocs() {
       <h3>App (<code>packages/app</code>)</h3>
       <pre><code>{`POSTGRES_URL_NON_POOLING   Neon non-pooling URL (used by API + indexer)
 POSTGRES_URL               Neon pooled URL (used by Vercel functions)
-GATEWAY_ADDRESS_V9         v0.9 gateway (canonical — Plan 9, refund-source binding)
-GATEWAY_ADDRESS_V8         v0.8 gateway (legacy relayer path; in-flight refunds)
-GATEWAY_ADDRESS            v0.6 gateway (legacy on-chain swap path; historical)
+GATEWAY_ADDRESS_V10        v0.10 gateway (canonical — Plan 10, custody escrow)
+NEXT_PUBLIC_GATEWAY_ADDRESS_V10  same address, exposed to client components
 USDC_ADDRESS               on Arc
 EURC_ADDRESS               on Arc
 ARC_TESTNET_RPC            https://rpc.testnet.arc.network

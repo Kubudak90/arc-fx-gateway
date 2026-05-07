@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import { Script, console2 } from "forge-std/Script.sol";
-import { ArcFXGatewayV8 } from "../src/ArcFXGatewayV8.sol";
+import { ArcFXGatewayV8 } from "../legacy/src/ArcFXGatewayV8.sol";
 
 /// @notice Deploys the v0.8 (pool-free, relayer-driven) ArcFXGateway. No pool,
 /// no oracle — App Kit Swap on Arc owns the FX, the relayer owns settlement.

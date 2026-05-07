@@ -5,10 +5,9 @@
 # script/, test/, testnet/MintableERC20.sol since those aren't audit scope).
 # Exits 1 if either falls below threshold.
 #
-# Today's floor reflects current V8 coverage and prevents regression.
-# Audit-ready target is LINE_TARGET=95 BRANCH_TARGET=90 — unblock that
-# by extending V8 tests to cover merchant management + delegate paths
-# + remaining revert branches. Tracked as a follow-up task.
+# Today's floor reflects current V10 coverage and prevents regression.
+# Audit-ready target is LINE_TARGET=95 BRANCH_TARGET=90 — V10 is the
+# current canonical deployment with per-invoice escrow custody.
 #
 # Override via env: COVERAGE_LINE_FLOOR / COVERAGE_BRANCH_FLOOR.
 
@@ -39,9 +38,8 @@ fi
 awk '
   BEGIN { in_scope = 0 }
   /^SF:/ {
-    # Audit scope: V8 + V9 (both deployed; V8 in legacy refund maintenance,
-    # V9 is the new canonical with refund-source binding).
-    in_scope = ($0 ~ /^SF:src\/ArcFXGateway(V8|V9)\.sol$/) ? 1 : 0
+    # Audit scope: V10 (current canonical custody gateway). V8/V9 retired to legacy/.
+    in_scope = ($0 ~ /^SF:src\/ArcFXGatewayV10\.sol$/) ? 1 : 0
   }
   in_scope && /^LF:/  { sub(/^LF:/,"");  lf  += $0 }
   in_scope && /^LH:/  { sub(/^LH:/,"");  lh  += $0 }

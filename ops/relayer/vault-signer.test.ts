@@ -1,0 +1,140 @@
+// Run with: pnpm --filter arcora-relayer exec vitest run vault-signer.test.ts
+//
+// Architecture: V10 Vault signer fetches the relayer privkey from KV-v2 at
+// boot via AppRole, then uses viem's privateKeyToAccount in-process. No
+// transit signing, no community plugin trust. (See `ops/vault/README.md`.)
+//
+// Integration tests require a local Vault dev-mode instance and KV-v2 secret.
+// Skipped unless VAULT_DEV=1.
+//
+//   vault server -dev -dev-root-token-id=root &
+//   VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root vault secrets enable -path=secret kv-v2
+//   vault kv put secret/relayer-test privateKey=0x<32-byte-hex>
+//   vault auth enable approle
+//   ... (see ops/vault/README.md for AppRole role + secret_id ceremony)
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { privateKeyToAccount } from "viem/accounts";
+import { vaultSigner } from "./vault-signer.js";
+
+const enabled = process.env.VAULT_DEV === "1";
+const itOnDev = enabled ? it : it.skip;
+
+// ---------------------------------------------------------------------------
+// Unit tests — fetch is mocked, no live Vault needed
+// ---------------------------------------------------------------------------
+
+describe("vaultSigner (unit, mocked fetch)", () => {
+  const TEST_PRIV_KEY = "0x" + "ab".repeat(32);
+  const expectedAddr = privateKeyToAccount(TEST_PRIV_KEY as `0x${string}`).address;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("logs in via AppRole, fetches the privkey from KV-v2, and returns a viem account", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ auth: { client_token: "s.fakeToken" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { data: { privateKey: TEST_PRIV_KEY } } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const account = await vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    });
+
+    expect(account.address.toLowerCase()).toBe(expectedAddr.toLowerCase());
+    // first call is login, second is KV read
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/v1\/auth\/approle\/login$/);
+    expect(fetchMock.mock.calls[1][0]).toMatch(/\/v1\/secret\/data\/relayer-v10$/);
+    // KV read carries the AppRole-issued token
+    expect((fetchMock.mock.calls[1][1] as { headers: Record<string, string> }).headers["X-Vault-Token"])
+      .toBe("s.fakeToken");
+  });
+
+  it("throws when login returns non-200", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: async () => "permission denied",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "bad",
+      secretId: "bad",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/Vault login failed/);
+  });
+
+  it("throws when KV secret has no privateKey field", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ auth: { client_token: "s.fakeToken" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { data: { somethingElse: "x" } } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/has no field 'privateKey'/);
+  });
+
+  it("throws when the KV value is not a 32-byte hex private key", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ auth: { client_token: "s.fakeToken" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { data: { privateKey: "not-a-hex-key" } } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/not a 32-byte hex private key/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration tests — require VAULT_DEV=1
+// ---------------------------------------------------------------------------
+
+describe("vaultSigner (integration — skipped without VAULT_DEV=1)", () => {
+  itOnDev("fetches a real KV secret and produces a working signer", async () => {
+    const account = await vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   process.env.TEST_VAULT_ROLE_ID!,
+      secretId: process.env.TEST_VAULT_SECRET_ID!,
+      kvPath:   process.env.TEST_VAULT_KV_PATH ?? "secret/data/relayer-test",
+      kvField:  process.env.TEST_VAULT_KV_FIELD ?? "privateKey",
+    });
+    expect(account.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+  });
+});

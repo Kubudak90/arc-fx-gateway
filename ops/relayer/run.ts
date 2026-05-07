@@ -23,10 +23,10 @@ import {
   createPublicClient, createWalletClient, http, parseAbi,
   type Address, type Hex,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import pg from "pg";
+import { vaultSigner, fetchPrivateKeyFromVault } from "./vault-signer";
 
 const RPC           = need("ARC_TESTNET_RPC");
 const PG_URL        = need("POSTGRES_URL_NON_POOLING");
@@ -72,25 +72,26 @@ const PERMIT2_ABI = parseAbi([
   "function permitWitnessTransferFrom(PermitTransferFrom permit, SignatureTransferDetails transferDetails, address owner, bytes32 witness, string witnessTypeString, bytes signature)",
 ]);
 
-// Audit M1 (2026-05-06): scope the raw private-key string to an IIFE so it
-// leaves the module-level binding scope immediately after privateKeyToAccount
-// and createViemAdapterFromPrivateKey consume it. The `account` object and the
-// viem adapter keep internal references to key material for signing, but the
-// module-scope `PRIVATE_KEY: Hex` string is dropped, narrowing the blast radius
-// of any future inadvertent logging of module globals.
-//
-// Note: viem's `account` and `adapter` still hold key material internally —
-// this mitigation is defence-in-depth, not a complete key-erasure guarantee.
-// A V10 improvement would move to an HSM or encrypted-keystore model.
-const { wallet, adapter, RELAYER_ADDR } = (() => {
-  const pk = need("RELAYER_PRIVATE_KEY") as Hex;
-  const account = privateKeyToAccount(pk);
-  return {
-    wallet:       createWalletClient({ account, transport: http(RPC) }),
-    adapter:      createViemAdapterFromPrivateKey({ privateKey: pk }),
-    RELAYER_ADDR: account.address,
-  };
-})();
+// V10 (audit M1 partial): relayer key fetched once from Vault KV-v2 at boot.
+// AppRole-authenticated, audit-logged, encrypted at rest. The same fetched
+// key is used to construct both the gateway-signing account AND the AppKit
+// swap adapter, so the raw key never lives on disk in any env file.
+// Signing-isolated HSM is Plan 11. See ops/vault/README.md.
+const _vaultOpts = {
+  vaultUrl: need("VAULT_URL"),
+  roleId:   need("VAULT_ROLE_ID"),
+  secretId: need("VAULT_SECRET_ID"),
+  kvPath:   need("VAULT_KV_PATH"),
+  kvField:  process.env.VAULT_KV_FIELD ?? "privateKey",
+};
+const _relayerKey = await fetchPrivateKeyFromVault(_vaultOpts);
+const account = await vaultSigner(_vaultOpts);
+const RELAYER_ADDR = account.address;
+const wallet = createWalletClient({ account, transport: http(RPC) });
+// AppKit's createViemAdapterFromPrivateKey requires a raw key. We pass the
+// same key fetched from Vault (in-memory only), avoiding a duplicate env-file
+// secret. AppKit-side signing isolation is tracked for a future plan.
+const adapter = createViemAdapterFromPrivateKey({ privateKey: _relayerKey });
 
 const chain = createPublicClient({ transport: http(RPC) });
 const kit   = new AppKit();

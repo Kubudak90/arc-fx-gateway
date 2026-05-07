@@ -1,0 +1,100 @@
+# Vault setup for Arcora relayer (V10)
+
+The V10 relayer's private key lives in Vault's KV-v2 secret store, encrypted
+at rest by Vault's master key. At boot, the relayer process AppRole-logs in,
+fetches the key once via the transit-less KV API, and uses viem's
+`privateKeyToAccount` for in-process signing.
+
+**Why KV and not transit-sign:** Vault's native `transit` engine only supports
+ECDSA on P-256/384/521, not secp256k1. Ethereum signing therefore requires
+either a community plugin (third-party trust) or in-process signing. We chose
+KV-v2 + AppRole — encrypted at rest, audit-logged, AppRole-gated — without
+introducing unaudited plugin trust. Plan 11 (mainnet T-0) moves to a real
+HSM with signing isolation (AWS KMS Cloud HSM or vetted secp256k1 plugin).
+
+**Audit M1 closure scope (partial):**
+- ✓ encrypted at rest in Vault (no plaintext on disk)
+- ✓ AppRole-gated access; `secret_id` rotated daily
+- ✓ every read audit-logged for forensic reconstruction
+- ✗ key still lives in relayer process memory after fetch
+
+## One-time setup (run on the VPS as root)
+
+```bash
+sudo bash ops/vault/install.sh
+```
+
+Then, interactively in an SSH session:
+
+```bash
+export VAULT_ADDR=http://127.0.0.1:8200
+
+# 1. Init — save the 3 unseal keys offline (1Password + paper backup,
+#    distributed across holders).
+vault operator init -key-shares=3 -key-threshold=2
+
+# 2. Unseal — twice, with two of the three keys.
+vault operator unseal <key1>
+vault operator unseal <key2>
+
+# 3. Authenticate as root (one-time; we mint a permanent admin token next).
+vault login <root-token>
+
+# 4. Enable the KV-v2 secrets engine at the default path.
+vault secrets enable -version=2 -path=secret kv
+
+# 5. Write the relayer private key. Use a fresh secp256k1 keypair generated
+#    via `cast wallet new` locally (don't reuse the V9 relayer key — V10 is
+#    a fresh deployment, fresh role assignment).
+vault kv put secret/relayer-v10 privateKey=0x<32-byte-hex>
+
+# 6. Apply the relayer policy (read-only on the KV path, login on AppRole).
+vault policy write relayer /etc/vault.d/policy-relayer.hcl
+
+# 7. Enable AppRole auth + create the relayer role.
+vault auth enable approle
+vault write auth/approle/role/relayer \
+  secret_id_ttl=24h \
+  token_ttl=2h \
+  token_max_ttl=2h \
+  policies=relayer
+
+# 8. Mint role_id (long-lived) + first secret_id.
+ROLE_ID=$(vault read -field=role_id auth/approle/role/relayer/role-id)
+SECRET_ID=$(vault write -field=secret_id -f auth/approle/role/relayer/secret-id)
+
+# 9. Mint a long-lived ops token for the rotation cron (separate from root).
+#    Policy `approle-rotator` must be created first — it can mint secret_ids
+#    for the relayer role but cannot read KV secrets.
+cat > /tmp/rotator.hcl <<'HCL'
+path "auth/approle/role/relayer/secret-id" { capabilities = ["update"] }
+HCL
+vault policy write approle-rotator /tmp/rotator.hcl
+vault token create -policy=approle-rotator -ttl=8760h -orphan -field=token > /root/.vault-rotation-token
+chmod 600 /root/.vault-rotation-token
+
+# 10. Wire the rotation cron.
+cat > /etc/cron.d/vault-rotation <<EOF
+SHELL=/bin/bash
+0 4 * * * root VAULT_TOKEN=\$(cat /root/.vault-rotation-token) VAULT_ADDR=http://127.0.0.1:8200 /root/arcora-ops/vault/secret-id-rotation.sh >> /var/log/vault-rotation.log 2>&1
+EOF
+```
+
+## What goes in the relayer .env file
+
+```
+VAULT_URL=http://127.0.0.1:8200
+VAULT_ROLE_ID=<step 8 ROLE_ID>
+VAULT_SECRET_ID=<step 8 SECRET_ID — rotated daily>
+VAULT_KV_PATH=secret/data/relayer-v10
+VAULT_KV_FIELD=privateKey
+GATEWAY_ADDRESS=<from forge deploy>
+ARC_TESTNET_RPC=https://rpc.testnet.arc.network
+POSTGRES_URL_NON_POOLING=postgresql://…
+RELAYER_ADAPTER_KEY=0x...    # FIXME: AppKit kit.swap still requires raw key
+KIT_KEY=KIT_KEY:...
+```
+
+## Disaster recovery
+
+See `docs/runbooks/vault-recovery.md`.

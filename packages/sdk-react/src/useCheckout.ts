@@ -5,18 +5,22 @@ export interface UseCheckoutResult {
   checkout: (params: CreateInvoiceParams) => Promise<Invoice>;
   loading: boolean;
   error: Error | null;
+  /** V10: deadline after which the merchant can claim funds; null until a paid invoice is returned. */
+  refundEndsAt: Date | null;
 }
 
 export function useCheckout(opts: InitOptions): UseCheckoutResult {
   const arcora = useMemo(() => new Arcora(opts), [opts.apiKey, opts.baseUrl]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
 
   const checkout = useCallback(async (params: CreateInvoiceParams): Promise<Invoice> => {
     setLoading(true);
     setError(null);
     try {
       const inv = await arcora.createInvoice(params);
+      setInvoice(inv);
       arcora.openCheckout(inv);
       return inv;
     } catch (e) {
@@ -27,5 +31,10 @@ export function useCheckout(opts: InitOptions): UseCheckoutResult {
     }
   }, [arcora]);
 
-  return { checkout, loading, error };
+  return {
+    checkout,
+    loading,
+    error,
+    refundEndsAt: invoice?.claimableAt ? new Date(invoice.claimableAt) : null,
+  };
 }

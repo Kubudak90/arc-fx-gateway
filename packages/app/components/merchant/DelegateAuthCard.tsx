@@ -7,23 +7,26 @@ import { parseAbi, type Address } from "viem";
 import { useState } from "react";
 import { toast } from "sonner";
 
+// V10 surface: bit-flag delegate rights + 3-arg authorizeDelegate.
 const GW_ABI = parseAbi([
-  "function authorizeDelegate(address delegate, uint64 expiresAt) external",
-  "function delegateAuthorizations(address merchant, address delegate) view returns (uint64)",
+  "function authorizeDelegate(address delegate, uint64 expiresAt, uint8 rights) external",
+  "function delegates(address merchant, address delegate) view returns (uint64 expiresAt, uint8 rights)",
   "function registerMerchant(address payoutAddress, address payoutToken) external",
   "function merchants(address) view returns (address payoutAddress, address payoutToken, bool active)",
 ]);
+
+// V10 bit-flag rights (from ArcFXGatewayV10.sol):
+//   RIGHT_CREATE_INVOICE = 1 << 0  (= 0x01)
+//   RIGHT_REFUND         = 1 << 1  (= 0x02)
+// Server delegate that submits createInvoiceFor needs CREATE_INVOICE.
+const RIGHT_CREATE_INVOICE = 1;
 
 export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress: string | null }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const [busy, setBusy] = useState<"register" | "authorize" | null>(null);
-  // Plan 9 default: invoices land on V9. Delegate auth must be set on the
-  // same gateway the relayer/server signs against, otherwise createInvoiceFor
-  // reverts with DelegateNotAuthorized. V6's NEXT_PUBLIC_GATEWAY_ADDRESS is
-  // kept for backwards-compat but isn't where new traffic goes.
-  const gateway = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V9 ?? process.env.NEXT_PUBLIC_GATEWAY_ADDRESS) as Address;
+  const gateway = process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 as Address;
   const usdc = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;
 
   const { data: merchantInfo } = useReadContract({
@@ -34,16 +37,20 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
     query: { enabled: !!address },
   });
 
-  const { data: authExpiry } = useReadContract({
+  const { data: delegateInfo } = useReadContract({
     address: gateway,
     abi: GW_ABI,
-    functionName: "delegateAuthorizations",
+    functionName: "delegates",
     args: address && serverWalletAddress ? [address, serverWalletAddress as Address] : undefined,
     query: { enabled: !!address && !!serverWalletAddress },
   });
 
   const isRegistered = merchantInfo?.[2] ?? false;
-  const isAuthorized = authExpiry !== undefined && authExpiry > BigInt(Math.floor(Date.now() / 1000));
+  const expiresAt = delegateInfo?.[0] ?? 0n;
+  const rights = delegateInfo?.[1] ?? 0;
+  const isAuthorized =
+    expiresAt > BigInt(Math.floor(Date.now() / 1000)) &&
+    (rights & RIGHT_CREATE_INVOICE) === RIGHT_CREATE_INVOICE;
 
   async function register() {
     if (!address) return;
@@ -56,8 +63,10 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
         args: [address, usdc],
       });
       await publicClient!.waitForTransactionReceipt({ hash });
-      toast.success("Registered as merchant on-chain");
-    } catch (e: any) { toast.error(e.shortMessage ?? e.message); }
+      toast.success("Registered as merchant on-chain (V10)");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? (e as { shortMessage?: string }).shortMessage ?? e.message : String(e));
+    }
     finally { setBusy(null); }
   }
 
@@ -69,11 +78,13 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
         address: gateway,
         abi: GW_ABI,
         functionName: "authorizeDelegate",
-        args: [serverWalletAddress as Address, BigInt("18446744073709551615")],
+        args: [serverWalletAddress as Address, BigInt("18446744073709551615"), RIGHT_CREATE_INVOICE],
       });
       await publicClient!.waitForTransactionReceipt({ hash });
-      toast.success("Server delegate authorized");
-    } catch (e: any) { toast.error(e.shortMessage ?? e.message); }
+      toast.success("Server delegate authorized (CREATE_INVOICE right)");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? (e as { shortMessage?: string }).shortMessage ?? e.message : String(e));
+    }
     finally { setBusy(null); }
   }
 
@@ -82,7 +93,7 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
       <CardHeader><CardTitle>On-chain authorization</CardTitle></CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="flex items-center justify-between">
-          <span>Merchant registered</span>
+          <span>Merchant registered on V10</span>
           <span className={isRegistered ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
             {isRegistered ? "Yes" : "Not yet"}
           </span>
@@ -95,14 +106,14 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
         {isRegistered && (
           <>
             <div className="flex items-center justify-between">
-              <span>Server delegate authorized</span>
+              <span>Server delegate authorized (CREATE_INVOICE)</span>
               <span className={isAuthorized ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
                 {isAuthorized ? "Yes" : "Not yet"}
               </span>
             </div>
             <p className="text-muted-foreground">
               Authorizing the server delegate lets us submit invoices on your behalf.
-              You retain full control — you can revoke any time.
+              You retain full control — revoke any time.
             </p>
             {!isAuthorized && (
               <Button onClick={authorize} disabled={busy === "authorize" || !serverWalletAddress}>

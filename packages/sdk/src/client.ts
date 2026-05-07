@@ -1,5 +1,5 @@
 import { ArcoraError } from "./error";
-import type { CreateInvoiceParams, Invoice, InitOptions, Environment } from "./types";
+import type { CreateInvoiceParams, Invoice, EscrowSummary, InitOptions, Environment } from "./types";
 
 const ENV_BASE_URL: Record<Environment, string> = {
   testnet: "https://checkout-staging.arcorapay.com",
@@ -56,6 +56,34 @@ async function doCreateInvoice(opts: InitOptions, params: CreateInvoiceParams): 
   return { invoiceId: json.invoiceId, url: json.url };
 }
 
+async function doEscrows(opts: InitOptions): Promise<{ pending: EscrowSummary[]; matured: EscrowSummary[]; claimed: EscrowSummary[]; }> {
+  let res: Response;
+  try {
+    res = await fetch(`${resolveBaseUrl(opts)}/api/merchant/escrows`, {
+      method: "GET",
+      headers: {
+        "content-type": "application/json",
+        "X-Arcora-Api-Key": opts.apiKey,
+      },
+    });
+  } catch (e) {
+    throw new ArcoraError("NETWORK", "request failed", { cause: e });
+  }
+
+  if (res.status === 401) throw new ArcoraError("INVALID_API_KEY", "API key rejected");
+  if (res.status >= 500) {
+    const ra = res.headers.get("retry-after");
+    throw new ArcoraError("SERVER_ERROR", `server returned ${res.status}`, {
+      retryAfter: ra ? Number(ra) : undefined,
+    });
+  }
+  if (!res.ok) {
+    throw new ArcoraError("UNKNOWN", `unexpected ${res.status}`);
+  }
+
+  return res.json() as Promise<{ pending: EscrowSummary[]; matured: EscrowSummary[]; claimed: EscrowSummary[]; }>;
+}
+
 function doOpenCheckout(invoice: { url: string }): void {
   if (typeof window === "undefined") {
     throw new ArcoraError("UNKNOWN", "openCheckout requires a browser environment");
@@ -76,6 +104,10 @@ export class Arcora {
 
   openCheckout(invoice: { url: string }): void {
     return doOpenCheckout(invoice);
+  }
+
+  async escrows(): Promise<{ pending: EscrowSummary[]; matured: EscrowSummary[]; claimed: EscrowSummary[]; }> {
+    return doEscrows(this.options);
   }
 
   // ── Deprecated module-level singleton API (audit H6, 2026-05-05) ──────────
@@ -103,5 +135,11 @@ export class Arcora {
   /** @deprecated Use `new Arcora(opts).openCheckout(invoice)`. */
   static openCheckout(invoice: { url: string }): void {
     return doOpenCheckout(invoice);
+  }
+
+  /** @deprecated Use `new Arcora(opts).escrows()`. */
+  static async escrows(): Promise<{ pending: EscrowSummary[]; matured: EscrowSummary[]; claimed: EscrowSummary[]; }> {
+    if (!Arcora._opts) throw new ArcoraError("UNKNOWN", "Arcora.init was not called");
+    return doEscrows(Arcora._opts);
   }
 }

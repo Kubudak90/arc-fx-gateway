@@ -10,7 +10,7 @@ import { InvoiceShareQRDialog } from "./InvoiceShareQRDialog";
 import { RefundButton } from "./RefundButton";
 import { useState } from "react";
 
-export type InvoiceStatus = "created" | "paid" | "expired" | "refunded";
+export type InvoiceStatus = "created" | "paid" | "expired" | "refunded" | "claimed" | "recovered" | "failed";
 
 export interface InvoiceRow {
   id: string;
@@ -19,6 +19,8 @@ export interface InvoiceRow {
   status: InvoiceStatus;
   paidTx: string | null;
   gatewayAddress: string | null;
+  /** V10: ISO timestamp of when the refund window closes (= claimableAt). */
+  claimableAt?: string | null;
   createdAt: string;
 }
 
@@ -56,14 +58,14 @@ export function InvoiceTable({ invoices, payoutToken, onChange }: InvoiceTablePr
               <TableCell className="text-muted-foreground">{formatRelativeTime(inv.createdAt)}</TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
-                  {inv.status === "paid" && (
-                    <RefundButton
-                      invoiceId={inv.id}
-                      payoutToken={payoutToken}
-                      gatewayAddress={inv.gatewayAddress}
-                      onRefunded={onChange}
-                    />
-                  )}
+                  <RefundButton
+                    invoiceId={inv.id}
+                    payoutToken={payoutToken}
+                    gatewayAddress={inv.gatewayAddress}
+                    claimableAt={inv.claimableAt}
+                    status={inv.status}
+                    onRefunded={onChange}
+                  />
                   <Button size="sm" variant="ghost" onClick={() => setQrInvoiceId(inv.id)}>
                     <QrCode className="size-4" />
                   </Button>
@@ -92,16 +94,26 @@ export function InvoiceTable({ invoices, payoutToken, onChange }: InvoiceTablePr
 
 function StatusBadge({ status }: { status: InvoiceStatus }) {
   const variants: Record<InvoiceStatus, string> = {
-    paid:     "bg-emerald-50 text-emerald-700 border-emerald-200",
-    created:  "bg-amber-50 text-amber-700 border-amber-200",
-    expired:  "bg-neutral-100 text-neutral-600 border-neutral-200",
-    refunded: "bg-sky-50 text-sky-700 border-sky-200",
+    paid:      "bg-emerald-50 text-emerald-700 border-emerald-200",
+    created:   "bg-amber-50 text-amber-700 border-amber-200",
+    expired:   "bg-neutral-100 text-neutral-600 border-neutral-200",
+    refunded:  "bg-sky-50 text-sky-700 border-sky-200",
+    failed:    "bg-rose-50 text-rose-700 border-rose-200",
+    claimed:   "bg-violet-50 text-violet-700 border-violet-200",
+    recovered: "bg-orange-50 text-orange-700 border-orange-200",
   };
   const labels: Record<InvoiceStatus, string> = {
     paid: "Paid", created: "Pending", expired: "Expired", refunded: "Refunded",
+    failed: "Failed", claimed: "Claimed", recovered: "Recovered",
   };
   const dotColor: Record<InvoiceStatus, string> = {
-    paid: "bg-emerald-500", created: "bg-amber-500", expired: "bg-neutral-400", refunded: "bg-sky-500",
+    paid:      "bg-emerald-500",
+    created:   "bg-amber-500",
+    expired:   "bg-neutral-400",
+    refunded:  "bg-sky-500",
+    failed:    "bg-rose-500",
+    claimed:   "bg-violet-500",
+    recovered: "bg-orange-500",
   };
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${variants[status]}`}>

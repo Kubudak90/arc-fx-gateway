@@ -1,6 +1,5 @@
 {
   "crons": [
-    { "path": "/api/internal/cron/h4-allowance-check",  "schedule": "0 6 * * *" },
     { "path": "/api/internal/cron/siwe-nonce-cleanup",  "schedule": "0 0 * * *" }
   ]
 }

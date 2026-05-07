@@ -63,7 +63,7 @@ Walks `[from, to]` in 9k-block chunks, marks any missing `paid` / `refunded` inv
 
 ```
 ARC_TESTNET_RPC=…
-GATEWAY_ADDRESS=0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3   # current canonical
+GATEWAY_ADDRESS_V10=0xc91e45ffe945c0e6e2c0f8262a35477e20a5f154   # V10 custody (canonical, Plan 10)
 POSTGRES_URL_NON_POOLING=…
 INDEXER_REORG_BUFFER_BLOCKS=5     # optional, default 5
 INDEXER_TICK_MS=30000             # optional, default 30s

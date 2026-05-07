@@ -1,4 +1,14 @@
 /**
+ * DEV-ONLY two-wallet E2E test. Requires CUSTOMER_PRIVATE_KEY and
+ * RELAYER_PRIVATE_KEY (raw hex). In V10, the daemon signs via Vault
+ * (VAULT_* env vars); this script retains raw private keys because:
+ *   1. The customer key is always a raw key (customer wallet, not relayer).
+ *   2. The relayer key here serves double duty as the merchant wallet for
+ *      test convenience — Vault's single-key model doesn't support this
+ *      multi-role pattern without a dedicated test Vault instance.
+ * Update this script (or replace with a proper integration test) before any
+ * production E2E suite that targets V10.
+ *
  * Two-wallet E2E test for the v0.8 stack. Customer and relayer are
  * different addresses — exercises the real Permit2 path where the relayer
  * pulls funds from a foreign wallet using only a signed message.

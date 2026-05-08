@@ -16,7 +16,7 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("49.99");
   const [payIn, setPayIn] = useState<"USDC" | "EURC">("EURC");
-  const [successUrl, setSuccessUrl] = useState("https://example.com/success");
+  const [successUrl, setSuccessUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
   const [copied, setCopied] = useState(false);
@@ -39,10 +39,15 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
     try {
       // V10 cutover (Plan 10): /api/invoices now routes V10-only; the legacy
       // ?engine= param is gone.
+      const body: Record<string, unknown> = { amountUsdc: Number(amount), payInToken: payIn };
+      // Standalone invoice: omit successUrl when blank so /api/invoices skips
+      // the allowlist + SSRF checks. The /i/<id> page will show the paid
+      // status without redirecting anywhere.
+      if (successUrl.trim()) body.successUrl = successUrl.trim();
       const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "content-type": "application/json", "X-Arcora-Api-Key": effectiveKey },
-        body: JSON.stringify({ amountUsdc: Number(amount), payInToken: payIn, successUrl }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -162,8 +167,17 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="invoice-success">Success URL</Label>
-              <Input id="invoice-success" value={successUrl} onChange={(e) => setSuccessUrl(e.target.value)} />
+              <Label htmlFor="invoice-success">Success URL <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
+              <Input
+                id="invoice-success"
+                placeholder="https://yoursite.com/order/123/success"
+                value={successUrl}
+                onChange={(e) => setSuccessUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank for a standalone payment link — the customer sees a &quot;Payment received&quot; screen instead of being redirected.
+                Otherwise the URL must be in your <span className="font-medium">allowed origins</span> (Settings).
+              </p>
             </div>
             {!apiKey && (
               <div className="space-y-2">

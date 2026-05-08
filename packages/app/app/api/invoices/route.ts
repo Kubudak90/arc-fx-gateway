@@ -15,10 +15,13 @@ import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 // from GATEWAY_ADDRESS_V10 via lib/chain/client.ts. The legacy `?engine=`
 // query param is no-op now — all invoices route to V10.
 
+// successUrl is optional for standalone invoices (link sent directly to a
+// customer with no merchant site). When omitted, the invoice page itself
+// shows the paid status — no external redirect happens.
 const Body = z.object({
   amountUsdc: z.number().positive(),
   payInToken: z.enum(["USDC", "EURC"]),
-  successUrl: z.string().url(),
+  successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
   metadata: z.record(z.string()).optional(),
 });
@@ -68,18 +71,21 @@ export async function POST(req: NextRequest) {
   //      IPs (cloud metadata, internal admin, RFC1918), which would let a
   //      hostile merchant exfiltrate via the customer's redirect chain or
   //      worse if we ever fetched the URL server-side.
-  // Fail-CLOSED for legacy merchants with empty allowlists (pre-Phase-2
-  // rows) — they need to set origins via the dashboard before invoicing.
+  // Allowlist + SSRF checks only run when a redirect URL is supplied. A
+  // standalone invoice (no successUrl) skips both — no redirect happens, the
+  // invoice page just shows the paid status. If the merchant DID supply a
+  // URL, we still require an allowlist to be configured.
   const merchantAllowedOrigins = (merchant as { allowedOrigins?: string[] }).allowedOrigins ?? [];
-  if (merchantAllowedOrigins.length === 0) {
+  const hasRedirect = !!(successUrl || cancelUrl);
+  if (hasRedirect && merchantAllowedOrigins.length === 0) {
     return corsResponse({
       error: "merchant_origins_not_configured",
-      detail: "Set allowed redirect origins in /m/settings before creating invoices.",
+      detail: "Set allowed redirect origins in /m/settings before using successUrl / cancelUrl.",
     }, { status: 400 });
   }
   try {
-    assertOriginAllowed(successUrl, merchantAllowedOrigins);
-    if (cancelUrl) assertOriginAllowed(cancelUrl, merchantAllowedOrigins);
+    if (successUrl) assertOriginAllowed(successUrl, merchantAllowedOrigins);
+    if (cancelUrl)  assertOriginAllowed(cancelUrl,  merchantAllowedOrigins);
   } catch (e) {
     return corsResponse({
       error: "origin_not_allowed",
@@ -87,8 +93,8 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
   try {
-    await assertSafePublicUrl(successUrl);
-    if (cancelUrl) await assertSafePublicUrl(cancelUrl);
+    if (successUrl) await assertSafePublicUrl(successUrl);
+    if (cancelUrl)  await assertSafePublicUrl(cancelUrl);
   } catch (e) {
     return corsResponse({
       error: "unsafe_redirect_url",
@@ -212,7 +218,7 @@ export async function POST(req: NextRequest) {
     status: "created",
     gatewayAddress: targetGateway.toLowerCase(),
     metadata: { ...(metadata ?? {}), engine: "v10" },
-    successUrl,
+    successUrl: successUrl ?? "",
     cancelUrl: cancelUrl ?? null,
   });
 

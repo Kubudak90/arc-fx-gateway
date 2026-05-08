@@ -18,7 +18,11 @@ function isOriginAllowed(url: string | undefined, allowedOrigins: readonly strin
 }
 
 export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: string; allowedOrigins: readonly string[] }) {
-  const safe = useMemo(() => isOriginAllowed(successUrl, allowedOrigins), [successUrl, allowedOrigins]);
+  const isStandalone = !successUrl;  // standalone invoice — no redirect target was supplied
+  const safe = useMemo(
+    () => (isStandalone ? false : isOriginAllowed(successUrl, allowedOrigins)),
+    [isStandalone, successUrl, allowedOrigins],
+  );
   const [seconds, setSeconds] = useState(3);
 
   useEffect(() => {
@@ -27,6 +31,20 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
     const r = setTimeout(() => { safeClientRedirect(successUrl, allowedOrigins); }, 3000);
     return () => { clearInterval(t); clearTimeout(r); };
   }, [safe, successUrl, allowedOrigins]);
+
+  if (isStandalone) {
+    // Standalone invoice: merchant created a payment link with no redirect
+    // target. Show a clean confirmation; no "merchant" attribution.
+    return (
+      <div className="text-center space-y-4 py-12">
+        <div className="mx-auto size-16 rounded-full bg-emerald-50 grid place-items-center">
+          <Check className="size-8 text-emerald-600" />
+        </div>
+        <h2 className="font-[family-name:var(--font-display)] text-3xl">Payment received</h2>
+        <p className="text-sm text-muted-foreground">Thanks — you can close this tab.</p>
+      </div>
+    );
+  }
 
   if (!safe) {
     // Audit H1 (2026-05-05): server should never persist an out-of-allowlist

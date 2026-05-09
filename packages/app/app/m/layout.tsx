@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import Link from "next/link";
 import type { Route } from "next";
 import { ArcoraLogo } from "@/components/brand/Logo";
+import { MerchantSidebar } from "@/components/merchant/MerchantSidebar";
 
 export default async function MerchantLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -12,30 +13,32 @@ export default async function MerchantLayout({ children }: { children: React.Rea
     redirect("/m/login");
   }
 
+  if (!session.merchantAddress) {
+    return <>{children}</>;
+  }
+
   return (
-    <>
-      {session.merchantAddress && (
-        <nav className="border-b border-arcora-border px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href={"/m/dashboard" as Route} aria-label="Arcora home">
-              <ArcoraLogo size={24} />
-            </Link>
-            <div className="flex gap-6">
-              <Link href={"/m/dashboard" as Route} className="font-semibold">Dashboard</Link>
-              <Link href={"/m/treasury" as Route} className="text-muted-foreground hover:text-foreground">Treasury</Link>
-              <Link href={"/m/compliance" as Route} className="text-muted-foreground hover:text-foreground">Compliance</Link>
-              <Link href={"/m/settings" as Route} className="text-muted-foreground hover:text-foreground">Settings</Link>
-            </div>
-          </div>
+    <div className="md:grid md:grid-cols-[232px_1fr] min-h-screen bg-[#fafafb]">
+      <MerchantSidebar merchantAddress={session.merchantAddress} />
+
+      <div className="min-w-0">
+        {/* Mobile top bar — sidebar is hidden below md */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-arcora-border bg-white">
+          <Link href={"/m/dashboard" as Route} aria-label="Arcora home">
+            <ArcoraLogo size={22} />
+          </Link>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span className="font-mono">{session.merchantAddress.slice(0, 6)}…{session.merchantAddress.slice(-4)}</span>
+            <span className="mono text-[12px]">
+              {session.merchantAddress.slice(0, 6)}…{session.merchantAddress.slice(-4)}
+            </span>
             <form action="/api/auth/logout" method="POST">
               <button type="submit" className="text-arcora-link hover:underline">Sign out</button>
             </form>
           </div>
-        </nav>
-      )}
-      {children}
-    </>
+        </div>
+
+        {children}
+      </div>
+    </div>
   );
 }

@@ -5,6 +5,7 @@ import { ApiKeyCard } from "@/components/merchant/ApiKeyCard";
 import { WebhookSettingsCard } from "@/components/merchant/WebhookSettingsCard";
 import { AllowedOriginsCard } from "@/components/merchant/AllowedOriginsCard";
 import { DelegateAuthCard } from "@/components/merchant/DelegateAuthCard";
+import { PayoutTokenCard } from "@/components/merchant/PayoutTokenCard";
 
 interface MerchantInfo {
   address: string;
@@ -29,6 +30,12 @@ export default function SettingsPage() {
     <main className="px-6 py-10 max-w-3xl mx-auto space-y-6">
       <h1 className="font-[family-name:var(--font-display)] text-[36px]">Settings</h1>
       <ApiKeyCard hasMerchant={!!merchant} onBootstrap={refresh} />
+      {merchant && (
+        <PayoutTokenCard
+          currentPayoutToken={merchant.payoutToken}
+          onUpdated={refresh}
+        />
+      )}
       {merchant && <AllowedOriginsCard initialOrigins={merchant.allowedOrigins ?? []} />}
       {merchant && <WebhookSettingsCard initialUrl={merchant.webhookUrl} />}
       <DelegateAuthCard serverWalletAddress={serverWallet} />

@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
 
   let arcoraRes: Response;
   try {
-    arcoraRes = await fetch(`${arcoraBase}/api/invoices?engine=v9`, {
+    arcoraRes = await fetch(`${arcoraBase}/api/invoices`, {
       method:  "POST",
       headers: {
         "content-type":    "application/json",

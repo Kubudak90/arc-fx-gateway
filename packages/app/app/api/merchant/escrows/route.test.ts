@@ -12,12 +12,12 @@ const claimedRows: any[] = [];
 
 vi.mock("@/lib/db/client", () => {
   // The route executes these DB calls in order:
-  //   1. select().from(merchants).where().limit(1)    → merchant row
-  //   2. select().from(invoices).where()              → pending rows  (no limit)
-  //   3. select().from(invoices).where()              → matured rows  (no limit)
-  //   4. select().from(invoices).where().limit(50)    → claimed rows
-  // Calls 2-4 are issued concurrently via Promise.all, but the mock resolves
-  // them deterministically by counting .where() invocations.
+  //   1. select().from(merchants).where().limit(1)        → merchant row
+  //   2. select().from(invoices).where().limit(PAGE_SIZE+1) → pending rows
+  //   3. select().from(invoices).where().limit(PAGE_SIZE+1) → matured rows
+  //   4. select().from(invoices).where().limit(PAGE_SIZE+1) → claimed rows
+  // Calls 2-4 are issued concurrently via Promise.all; the mock resolves them
+  // deterministically by counting .where() invocations.
   let callSeq = 0;
   (globalThis as any).__resetEscrowMock = () => { callSeq = 0; };
 
@@ -30,21 +30,12 @@ vi.mock("@/lib/db/client", () => {
   builder.where.mockImplementation(() => {
     callSeq++;
     const seq = callSeq;
-
     if (seq === 1) {
-      // Merchant lookup → caller chains .limit(1)
       return { limit: (n: number) => Promise.resolve(merchantRows.slice(0, n)) };
     }
-    if (seq === 2) {
-      // Pending query — no limit, resolves as promise
-      return Promise.resolve(pendingRows);
-    }
-    if (seq === 3) {
-      // Matured query — no limit
-      return Promise.resolve(maturedRows);
-    }
-    // Claimed query → caller chains .limit(50)
-    return { limit: (n: number) => Promise.resolve(claimedRows.slice(0, n)) };
+    if (seq === 2) return { limit: (n: number) => Promise.resolve(pendingRows.slice(0, n)) };
+    if (seq === 3) return { limit: (n: number) => Promise.resolve(maturedRows.slice(0, n)) };
+    return            { limit: (n: number) => Promise.resolve(claimedRows.slice(0, n)) };
   });
 
   return { db: builder };
@@ -97,5 +88,24 @@ describe("GET /api/merchant/escrows", () => {
     expect(body.pending[0].id).toBe("0xinv-pending");
     expect(body.matured[0].id).toBe("0xinv-matured");
     expect(body.claimed[0].id).toBe("0xinv-claimed");
+    expect(body.truncated).toEqual({ pending: false, matured: false, claimed: false });
+  });
+
+  it("flags truncated=true when a bucket exceeds PAGE_SIZE", async () => {
+    const { getSession } = await import("@/lib/auth/session");
+    (getSession as any).mockResolvedValue({ merchantAddress: "0xMerchant" });
+
+    // Fill pending with 201 rows — caps at 200, truncated.pending = true.
+    for (let i = 0; i < 201; i++) {
+      pendingRows.push({ id: `pend-${i}`, status: "paid", claimableAt: new Date(Date.now() + 60_000) });
+    }
+
+    const res = await GET();
+    const body = await res.json();
+    expect(body.pending.length).toBe(200);
+    expect(body.counts.pending).toBe(200);
+    expect(body.truncated.pending).toBe(true);
+    expect(body.truncated.matured).toBe(false);
+    expect(body.truncated.claimed).toBe(false);
   });
 });

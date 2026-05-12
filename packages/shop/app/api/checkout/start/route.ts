@@ -66,7 +66,11 @@ export async function POST(req: NextRequest) {
   const successUrl = `${origin}/success`;
   const cancelUrl  = `${origin}/cart`;
 
-  const orderRef = `shop_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // Audit #39: previously `Math.random()` + `Date.now()` — fine for low
+  // volume, but Math.random isn't collision-resistant and two carts
+  // submitted in the same ms with adjacent PRNG state would clash. UUIDs
+  // give us 122 bits of entropy with no extra round-trip.
+  const orderRef = `shop_${crypto.randomUUID()}`;
 
   // Arcora's /api/invoices accepts `metadata: Record<string,string>` only —
   // no nested objects or arrays. Flatten cart line items to a JSON-encoded

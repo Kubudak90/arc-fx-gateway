@@ -4,7 +4,14 @@ import { Arcora, ArcoraError } from "@arcora/sdk";
 const API_BASE = (import.meta.env.VITE_ARC_BASE_URL ?? "https://arcorapay.xyz").replace(/\/$/, "");
 const API_KEY  = import.meta.env.VITE_ARC_API_KEY ?? "";
 
-Arcora.init({ apiKey: API_KEY, baseUrl: API_BASE });
+// Vite inlines VITE_* vars into the built JS bundle, so any key here is
+// public. Refuse to run with a live key — testnet keys only.
+const KEY_IS_LIVE = API_KEY.startsWith("ak_live_");
+const KEY_IS_TEST = API_KEY.startsWith("ak_test_");
+
+if (KEY_IS_TEST) {
+  Arcora.init({ apiKey: API_KEY, baseUrl: API_BASE });
+}
 
 export default function App() {
   const [busy, setBusy] = useState(false);
@@ -31,10 +38,31 @@ export default function App() {
     }
   }
 
+  if (KEY_IS_LIVE || !KEY_IS_TEST) {
+    return (
+      <main>
+        <div className="card">
+          <div className="brand">☕ Acme Coffee</div>
+          <div className="banner danger">
+            <strong>Demo blocked</strong>
+            {KEY_IS_LIVE
+              ? "VITE_ARC_API_KEY starts with ak_live_. Live keys are baked into the public JS bundle — never put one here. Use an ak_test_ key on testnet."
+              : "VITE_ARC_API_KEY missing or invalid. Set an ak_test_ key (testnet only) in .env.local."}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main>
       <div className="card">
         <div className="brand">☕ Acme Coffee</div>
+        <div className="banner warn">
+          <strong>Testnet demo</strong>
+          The API key is inlined into this public JS bundle. Use only on
+          testnet; route through a server for production.
+        </div>
         <h1>One americano, please.</h1>
         <p>€4.50 · payable in EURC on Arc Network</p>
         <button onClick={handlePay} disabled={busy} className="pay-btn">

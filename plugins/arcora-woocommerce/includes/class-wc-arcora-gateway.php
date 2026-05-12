@@ -112,13 +112,15 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
 
     /**
      * Map environment → Arcora API base URL. The hosted checkout app is the
-     * source of truth for both API + checkout-link domains.
+     * source of truth for both API + checkout-link domains. Testnet URL
+     * matches the SDK default (audit #22) so plugin- and SDK-built invoices
+     * land on the same environment.
      */
     private function resolve_base_url(): string {
         if ($this->environment === 'mainnet') {
             return 'https://checkout.arcorapay.com';
         }
-        return 'https://arc-fx-gateway.vercel.app';
+        return 'https://checkout-staging.arcorapay.com';
     }
 
     public function process_payment($order_id) {

@@ -432,8 +432,14 @@ async function refundPayer(row: QueueRow, reason: string): Promise<Hex> {
   await chain.waitForTransactionReceipt({ hash: transferTx });
 
   // Tell the gateway: the indexer flips the invoice to `failed` from this event.
+  // Audit #34: previously `reason.slice(0, 32)` truncated by JS character
+  // index — a 32-char string of multi-byte UTF-8 chars (e.g. emoji or
+  // non-ASCII) encodes to more than 32 bytes, then Array.from(...) overflows
+  // bytes32 and the hex literal can exceed 64 chars (padEnd doesn't shrink).
+  // Slice the byte array, not the character string.
+  const reasonBytes = new TextEncoder().encode(reason).slice(0, 32);
   const reasonHash = ("0x" +
-    Array.from(new TextEncoder().encode(reason.slice(0, 32)))
+    Array.from(reasonBytes)
       .map(b => b.toString(16).padStart(2, "0")).join("")
       .padEnd(64, "0")
   ) as Hex;

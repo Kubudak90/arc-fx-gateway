@@ -9,29 +9,40 @@
     "EURC": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a"
   },
   "current": {
-    "deployedAt": "2026-05-03",
-    "label": "v0.9.0 (Plan 9) — Refund-source binding: payoutSource snapshot at settle, refundInvoice pulls from there so split-wallet merchants can refund cleanly",
+    "deployedAt": "2026-05-07",
+    "label": "v1.0.0 (Plan 10) — V10 custody-escrow gateway: settleInvoice routes payouts into a 7-day refund-window escrow; claim()/refundInvoice() are merchant-permissionless, admin can recoverEscrow after grace.",
     "contracts": {
-      "ArcFXGatewayV9": "0xdf6233943c06d4c207d60b91ff18b9158485ea21"
+      "ArcFXGatewayV10": "0xc91e45ffe945c0e6e2c0f8262a35477e20a5f154"
     },
     "relayer": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b",
     "config": {
       "protocolFeeBps": 30,
+      "refundWindowSeconds": 604800,
+      "adminRecoveryDelaySeconds": 604800,
       "feeRecipient": "0xe8E5AAa3d8c705A07de02aADF98CE31F20A5754b",
       "permit2Spender": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
     },
-    "changes": [
-      "InvoicePayment struct gains payoutSource (address): the wallet that actually received settlement, snapshotted at settleInvoice time. refundInvoice pulls merchantPayout from payoutSource — not inv.merchant — so merchants who rotate their payoutAddress mid-flight can still refund cleanly without round-tripping the identity multisig.",
-      "Authorization expanded: refundInvoice callable by merchant identity OR by the snapshotted payoutSource (covers the operational-wallet-as-payout case).",
-      "Tests: 51 forge tests (pre-existing 48 + 3 new V9-specific: pulls-from-payee, payoutSource auth, frozen-after-rotation). 100% coverage on V9 paths."
+    "highlights": [
+      "Custody escrow: settleInvoice transfers grossPayout into the contract and locks it in `escrows[globalId]` for `REFUND_WINDOW` seconds. Merchant claim() drains matured escrows; refundInvoice() during the window returns the customer's amountOut.",
+      "Admin recovery: `adminRecoverEscrow(globalIds, to)` sweeps escrows from deactivated merchants after `REFUND_WINDOW + ADMIN_RECOVERY_DELAY`. Batch is atomic — one bad row aborts the call.",
+      "recordPayerRefund() — relayer-side terminal failure path when App Kit Swap can't deliver; off-chain refund is paired with an on-chain event so the indexer flips the invoice to 'failed'.",
+      "Source for current address: this file. Test setup (`packages/app/test/setup.ts`) and any indexer config that hardcoded the address should be migrated to read here."
     ],
-    "deployTx": "—",
-    "deployNotes": "Plan 9 cutover spec at docs/superpowers/specs/2026-05-03-plan-9-refund-source-binding.md. /api/invoices defaults engine=v9 since 2026-05-03; v8 + v6 still reachable via explicit ?engine= for legacy/testing."
+    "deployTx": "see broadcast/DeployV10.s.sol/5042002/run-latest.json",
+    "deployNotes": "Audit reference: Plan-7 PR #4 (2026-05-05) closed 17 verified findings before deploy; Plan 10 V10 cutover on 2026-05-07. Plan-12 (this branch) addresses 2026-05-12 post-V10 audit."
+  },
+  "deprecated_v0.9.0": {
+    "deployedAt": "2026-05-03",
+    "label": "v0.9.0 (Plan 9) — Refund-source binding: payoutSource snapshot at settle, refundInvoice pulls from there so split-wallet merchants can refund cleanly",
+    "reason": "Superseded by v1.0.0 (V10 custody-escrow). V9 settled directly to the merchant's payout wallet; V10 routes through a contract-held escrow so refunds and admin recovery don't require merchant cooperation.",
+    "contracts": {
+      "ArcFXGatewayV9": "0xdf6233943c06d4c207d60b91ff18b9158485ea21"
+    }
   },
   "deprecated_v0.8.0": {
     "deployedAt": "2026-05-01",
     "label": "v0.8.0 — Permit2 + relayer-driven settlement (App Kit Swap orchestrator)",
-    "reason": "Superseded by v0.9 which adds payoutSource snapshot for split-wallet refund support. V8 stays alive for any in-flight refund of pre-Plan-9 invoices; new traffic lands on V9.",
+    "reason": "Superseded by v0.9 which adds payoutSource snapshot for split-wallet refund support.",
     "contracts": {
       "ArcFXGatewayV8": "0x6fAaD920b329d0c3eAb700f2BceE6A4ec5d507a8"
     }
@@ -58,7 +69,7 @@
   "deprecated_v0.5.0": {
     "deployedAt": "2026-04-29",
     "label": "v0.5.0 — Iterating _estimateAmountIn (1-wei swap shortfall fix)",
-    "reason": "Replaced by v0.6.0 which adds refundInvoice() + payments mapping. v0.5 kept on-chain for any in-flight settlements but superseded for new merchant onboarding.",
+    "reason": "Replaced by v0.6.0 which adds refundInvoice() + payments mapping.",
     "contracts": {
       "ArcFXGateway": "0xf9537ab0934105966dce1ebfe9e9725e22cd82c0",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
@@ -73,20 +84,12 @@
       "ArcFXGateway": "0xA80A5741a09bff1f43dcBF15Df7c598A23163302",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
       "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
-    },
-    "changes": [
-      "createInvoice/createInvoiceFor take merchantInvoiceId; contract derives globalId = keccak256(merchant, merchantInvoiceId)",
-      "Merchant struct gains payoutAddress (separate from msg.sender) and active flag; updatePayoutAddress, updatePayoutToken, deactivateMerchant added",
-      "pay() takes a no-swap branch when payIn == payoutToken (same-token direct payment)",
-      "InvoicePaid event split: 6 fields (id, payer, amountIn, grossReceived, merchantPayout, fee)",
-      "InvoiceStatus.Expired enum value removed",
-      "Invoice locks payoutToken at creation; later merchant updates do not reroute pending invoices"
-    ]
+    }
   },
   "deprecated_v0.3.0": {
     "deployedAt": "2026-04-25",
     "label": "v0.3.0 — Gateway with delegate authorization (Plan 2a)",
-    "reason": "Replaced by v0.4.0 which adds the PDF-review fixes (#3, #4, #7, #8, #9). v0.3.0 still on-chain but superseded for the product flow.",
+    "reason": "Replaced by v0.4.0 which adds the PDF-review fixes (#3, #4, #7, #8, #9).",
     "contracts": {
       "ArcFXGateway": "0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
@@ -96,7 +99,7 @@
   "deprecated_v0.2.0": {
     "deployedAt": "2026-04-25",
     "label": "v0.2.0 — Gateway pre-delegate (Plan 1.5)",
-    "reason": "v0.3.0 adds backwards-compatible delegate authorization (createInvoiceFor + authorizeDelegate + revokeDelegate) so the Plan 2 server hot wallet can submit invoices on a merchant's behalf. v0.2.0 still functional but superseded by v0.3.0 for the product flow.",
+    "reason": "v0.3.0 adds backwards-compatible delegate authorization (createInvoiceFor + authorizeDelegate + revokeDelegate) so the Plan 2 server hot wallet can submit invoices on a merchant's behalf.",
     "contracts": {
       "ArcFXGateway": "0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D",
       "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
@@ -106,16 +109,12 @@
       "usdc": "5000000",
       "eurc": "4600000",
       "addLiquidityTx": "0x71dd049205e36ae78e5cb1036c628860dbd70f19538f1c896a1f83a2b90d7816"
-    },
-    "smokeTest_pay": {
-      "txHash": "0x31ddbf35ff03918fe2b4aad870f6c6a1185737a7c84643893fc2bf0bd1c2064a",
-      "note": "Real 1.0863 EUR/USD, no parity hack. 0.1 EURC → 0.108587 USDC."
     }
   },
   "deprecated_v0.1.0": {
     "deployedAt": "2026-04-25",
     "label": "Plan 1 — Saddle StableSwap (replaced; left here for reference)",
-    "reason": "StableSwap invariant assumes 1:1 peg between pooled tokens. With USDC/EURC at 1.0863 USD/EUR, the pool's implied rate stayed near 1:1 regardless of bootstrap balances, forcing the oracle to be set to parity to pass the deviation guard. Replaced in Plan 1.5 by OracleAMM (Chainlink-priced, no curve) which trades at the live oracle rate ± a 4 bps fee.",
+    "reason": "StableSwap invariant assumes 1:1 peg between pooled tokens. With USDC/EURC at 1.0863 USD/EUR, the pool's implied rate stayed near 1:1 regardless of bootstrap balances, forcing the oracle to be set to parity to pass the deviation guard.",
     "contracts": {
       "ArcFXGateway": "0x968E5dc9B675b9BF7C4d68A1e0137ada1A95523C",
       "StableSwapPool": "0xf3e47C06912803FFeae44d6F40aadd470704d123",

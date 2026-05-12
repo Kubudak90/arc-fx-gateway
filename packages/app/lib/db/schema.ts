@@ -116,7 +116,11 @@ export const siweNonces = pgTable("siwe_nonces", {
   nonce: text("nonce").primaryKey(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   used: boolean("used").notNull().default(false),
-});
+}, (t) => [
+  // Cron cleanup deletes WHERE expires_at < now(); without this index the
+  // job runs a full scan every minute (audit DB hygiene gap, 2026-05-12).
+  index("idx_siwe_nonces_expires_at").on(t.expiresAt),
+]);
 
 // Generic fixed-window rate-limit counters. PK is (bucket, window_start).
 // Used by /api/auth/siwe/nonce — keyed by `siwe-nonce:<ip>` per 60s window.
@@ -153,6 +157,9 @@ export const complianceScreenings = pgTable("compliance_screenings", {
   index("idx_compliance_screenings_address_flow").on(t.address, t.flow),
   index("idx_compliance_screenings_invoice").on(t.invoiceId),
   index("idx_compliance_screenings_merchant").on(t.merchantId),
+  // Cron prunes by expires_at; without the index the retention job scans
+  // the full table (audit DB hygiene gap, 2026-05-12).
+  index("idx_compliance_screenings_expires_at").on(t.expiresAt),
 ]);
 
 // Short-lived authorization row written by /api/checkout/authorize when

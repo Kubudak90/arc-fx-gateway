@@ -127,6 +127,13 @@
       "when": 1778268467010,
       "tag": "0017_v10_escrow",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778900000000,
+      "tag": "0018_retention_indexes",
+      "breakpoints": true
     }
   ]
 }

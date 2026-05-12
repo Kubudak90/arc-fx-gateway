@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Arcora, ArcoraError } from "@arcora/sdk";
 
 const API_BASE = (import.meta.env.VITE_ARC_BASE_URL ?? "https://arcorapay.xyz").replace(/\/$/, "");
@@ -9,29 +9,35 @@ const API_KEY  = import.meta.env.VITE_ARC_API_KEY ?? "";
 const KEY_IS_LIVE = API_KEY.startsWith("ak_live_");
 const KEY_IS_TEST = API_KEY.startsWith("ak_test_");
 
-if (KEY_IS_TEST) {
-  Arcora.init({ apiKey: API_KEY, baseUrl: API_BASE });
-}
-
 export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // SDK ^1.1.0: prefer the instance API (`new Arcora({...})`) over the
+  // deprecated module-level singleton (`Arcora.init` + `Arcora.createInvoice`)
+  // — singletons leak state across tenants in any host app that mounts more
+  // than one merchant. (Audit #24.)
+  const arcora = useMemo(
+    () => (KEY_IS_TEST ? new Arcora({ apiKey: API_KEY, baseUrl: API_BASE }) : null),
+    [],
+  );
 
   const params = new URLSearchParams(window.location.search);
   const paid      = params.get("paid") === "1";
   const cancelled = params.get("cancelled") === "1";
 
   async function handlePay() {
+    if (!arcora) return;
     setBusy(true);
     setError(null);
     try {
-      const invoice = await Arcora.createInvoice({
+      const invoice = await arcora.createInvoice({
         amountUsdc: 4.50,
         payInToken: "EURC",
         successUrl: window.location.origin + "/?paid=1",
         cancelUrl:  window.location.origin + "/?cancelled=1",
       });
-      Arcora.openCheckout(invoice);
+      arcora.openCheckout(invoice);
     } catch (e) {
       setError(e instanceof ArcoraError ? `${e.code}: ${e.message}` : (e as Error).message);
       setBusy(false);

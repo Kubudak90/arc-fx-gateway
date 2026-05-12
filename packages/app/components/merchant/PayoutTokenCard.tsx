@@ -91,13 +91,15 @@ export function PayoutTokenCard({ currentPayoutToken, onUpdated }: Props) {
         their original settle token; only new invoices use this one.
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+      <div role="radiogroup" aria-label="Settle currency" className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         {CHOICES.map((c) => {
           const isSelected = selected.toLowerCase() === c.address.toLowerCase();
           return (
             <button
               key={c.address}
               type="button"
+              role="radio"
+              aria-checked={isSelected}
               onClick={() => setSelected(c.address)}
               disabled={busy}
               className={[

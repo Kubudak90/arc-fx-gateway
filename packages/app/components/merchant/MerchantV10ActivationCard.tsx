@@ -116,6 +116,7 @@ export function MerchantV10ActivationCard({ payoutAddress, payoutToken }: Props)
               type="button"
               onClick={handleActivate}
               disabled={!address || busy}
+              aria-busy={busy || undefined}
               className="inline-flex items-center gap-2 rounded-full bg-arcora-slate text-white px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {busy ? "Registering…" : "Activate V10 →"}

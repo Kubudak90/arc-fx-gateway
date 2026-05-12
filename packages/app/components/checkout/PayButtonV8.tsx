@@ -288,11 +288,14 @@ export function PayButtonV8(props: PayButtonV8Props) {
       )}
 
       <button
+        type="button"
         onClick={handleClick}
         disabled={
           !address || !props.payInAmount || inFlight || state === "success" || props.quoteStale ||
           complianceBlocked || complianceLoading
         }
+        aria-live="polite"
+        aria-busy={inFlight || undefined}
         className="btn-arcora-pill w-full"
       >
         {complianceLoading ? "Verifying wallet…" : complianceBlocked ? "Unavailable" : label[state]}

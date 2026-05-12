@@ -111,6 +111,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
         )}
 
         <button
+          type="button"
           onClick={() => setShowQR(true)}
           className="w-full inline-flex items-center justify-center gap-2 text-sm text-arcora-link hover:underline py-2"
         >

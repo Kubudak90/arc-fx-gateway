@@ -1,6 +1,7 @@
 import { generateNonce as siweGenerateNonce, SiweMessage } from "siwe";
 import { db } from "@/lib/db/client";
 import { siweNonces } from "@/lib/db/schema";
+import { arcTestnet } from "@/lib/chain/client";
 import { and, eq, gt } from "drizzle-orm";
 
 const NONCE_TTL_MINUTES = 10;
@@ -8,8 +9,12 @@ const NONCE_TTL_MINUTES = 10;
 /**
  * Chain id we accept SIWE messages on. Arc Testnet only — refuse messages
  * signed for any other chain so a leaked signature can't authenticate here.
+ *
+ * Audit #28: derive from the canonical viem chain definition rather than
+ * hardcoding the number, so a future chain id change (mainnet cutover) ripples
+ * everywhere from one source.
  */
-const ARC_TESTNET_CHAIN_ID = 5042002;
+const SUPPORTED_CHAIN_ID = arcTestnet.id;
 
 /**
  * The hostname an Arcora SIWE message must be signed for. Derived from
@@ -52,8 +57,8 @@ export async function verifySiweMessage(args: { message: string; signature: stri
     throw new Error("siwe verification failed");
   }
 
-  if (siwe.chainId !== ARC_TESTNET_CHAIN_ID) {
-    throw new Error(`siwe chainId mismatch: got ${siwe.chainId}, expected ${ARC_TESTNET_CHAIN_ID}`);
+  if (siwe.chainId !== SUPPORTED_CHAIN_ID) {
+    throw new Error(`siwe chainId mismatch: got ${siwe.chainId}, expected ${SUPPORTED_CHAIN_ID}`);
   }
 
   // Atomic nonce consume — single UPDATE that only succeeds when the row is

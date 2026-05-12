@@ -141,21 +141,23 @@ async function tick(): Promise<{
       const a = d.args;
       const id            = a.globalId as Hex;
       const merchantAddr  = (a.merchant as string).toLowerCase();
-      const exists = await pool.query("select 1 from invoices where id = $1", [id]);
-      if (exists.rowCount && exists.rowCount > 0) continue;
-      created++;
 
+      // Audit #20: dropped pre-check `select 1 from invoices`. ON CONFLICT
+      // DO NOTHING is already idempotent, and the RETURNING here lets us
+      // increment `created` only on actual inserts (duplicates return 0
+      // rows). One round-trip per event instead of two on backfill.
       const mr = await pool.query<{ id: string }>(
         "select id from merchants where lower(address) = $1 limit 1", [merchantAddr],
       );
       if (!mr.rowCount) continue; // unknown merchant - cannot satisfy FK
 
-      await pool.query(
+      const inserted = await pool.query<{ id: string }>(
         `insert into invoices
            (id, merchant_invoice_id, merchant_id, pay_in_token, payout_token,
             amount_out, expires_at, status, success_url, metadata, gateway_address)
          values ($1, $2, $3, $4, $5, $6, to_timestamp($7), 'created', '', $8::jsonb, $9)
-         on conflict (id) do nothing`,
+         on conflict (id) do nothing
+         returning id`,
         [
           id,
           a.merchantInvoiceId as Hex,
@@ -168,7 +170,10 @@ async function tick(): Promise<{
           GATEWAY_V10,
         ],
       );
-      backfilled++;
+      if (inserted.rowCount && inserted.rowCount > 0) {
+        created++;
+        backfilled++;
+      }
     }
 
     for (const log of paidLogs) {

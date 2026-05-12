@@ -1,11 +1,13 @@
 "use client";
 
 import { useAccount, useConnect, useSignMessage, useDisconnect } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { injected, walletConnect } from "wagmi/connectors";
 import { SiweMessage } from "siwe";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+
+type Method = "injected" | "walletconnect";
 
 export function ConnectMerchantButton() {
   const { address, isConnected } = useAccount();
@@ -13,14 +15,24 @@ export function ConnectMerchantButton() {
   const { disconnect } = useDisconnect();
   const { signMessageAsync } = useSignMessage();
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<Method | null>(null);
 
-  async function handleSignIn() {
-    setBusy(true);
+  const hasInjected =
+    typeof window !== "undefined" && typeof (window as { ethereum?: unknown }).ethereum !== "undefined";
+
+  async function handleSignIn(method: Method) {
+    setBusy(method);
     try {
       let acc = address;
       if (!isConnected) {
-        const result = await connectAsync({ connector: injected() });
+        const connector =
+          method === "injected"
+            ? injected()
+            : walletConnect({
+                projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "",
+                showQrModal: true,
+              });
+        const result = await connectAsync({ connector });
         acc = result.accounts[0];
       }
       if (!acc) throw new Error("no account");
@@ -48,17 +60,37 @@ export function ConnectMerchantButton() {
       if (!verify.ok) throw new Error("verify failed");
 
       router.push("/m/dashboard");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Sign-in failed");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Sign-in failed";
+      toast.error(msg);
       disconnect();
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   return (
-    <button onClick={handleSignIn} disabled={busy} className="btn-arcora-pill">
-      {busy ? "Signing in…" : "Connect wallet"}
-    </button>
+    <div className="flex flex-col gap-2 w-full">
+      {hasInjected && (
+        <button
+          onClick={() => handleSignIn("injected")}
+          disabled={busy !== null}
+          className="btn-arcora-pill"
+        >
+          {busy === "injected" ? "Signing in…" : "Connect browser wallet"}
+        </button>
+      )}
+      <button
+        onClick={() => handleSignIn("walletconnect")}
+        disabled={busy !== null}
+        className={hasInjected ? "btn-arcora-pill-light" : "btn-arcora-pill"}
+      >
+        {busy === "walletconnect"
+          ? "Waiting on wallet…"
+          : hasInjected
+            ? "Or scan with mobile / hardware wallet"
+            : "Connect with WalletConnect"}
+      </button>
+    </div>
   );
 }

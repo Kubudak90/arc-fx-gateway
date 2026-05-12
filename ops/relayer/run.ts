@@ -23,10 +23,11 @@ import {
   createPublicClient, createWalletClient, http, parseAbi,
   type Address, type Hex,
 } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import pg from "pg";
-import { vaultSigner, fetchPrivateKeyFromVault } from "./vault-signer";
+import { fetchPrivateKeyFromVault } from "./vault-signer";
 
 const RPC           = need("ARC_TESTNET_RPC");
 const PG_URL        = need("POSTGRES_URL_NON_POOLING");
@@ -74,9 +75,14 @@ const PERMIT2_ABI = parseAbi([
 
 // V10 (audit M1 partial): relayer key fetched once from Vault KV-v2 at boot.
 // AppRole-authenticated, audit-logged, encrypted at rest. The same fetched
-// key is used to construct both the gateway-signing account AND the AppKit
-// swap adapter, so the raw key never lives on disk in any env file.
-// Signing-isolated HSM is Plan 11. See ops/vault/README.md.
+// key feeds (a) the gateway-signing LocalAccount and (b) the AppKit swap
+// adapter, so the raw key never lives on disk in any env file.
+//
+// Single fetch: previously called fetchPrivateKeyFromVault + vaultSigner
+// (which itself called fetchPrivateKeyFromVault) — two AppRole logins +
+// two KV reads on boot, with a small race window if secret_id rotated
+// between them. Now one fetch, both consumers derive from the same key.
+// Audit #17 (2026-05-12).
 const _vaultOpts = {
   vaultUrl: need("VAULT_URL"),
   roleId:   need("VAULT_ROLE_ID"),
@@ -85,12 +91,9 @@ const _vaultOpts = {
   kvField:  process.env.VAULT_KV_FIELD ?? "privateKey",
 };
 const _relayerKey = await fetchPrivateKeyFromVault(_vaultOpts);
-const account = await vaultSigner(_vaultOpts);
+const account = privateKeyToAccount(_relayerKey);
 const RELAYER_ADDR = account.address;
 const wallet = createWalletClient({ account, transport: http(RPC) });
-// AppKit's createViemAdapterFromPrivateKey requires a raw key. We pass the
-// same key fetched from Vault (in-memory only), avoiding a duplicate env-file
-// secret. AppKit-side signing isolation is tracked for a future plan.
 const adapter = createViemAdapterFromPrivateKey({ privateKey: _relayerKey });
 
 const chain = createPublicClient({ transport: http(RPC) });

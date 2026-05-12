@@ -30,10 +30,24 @@ contract DeployV10 is Script {
 
         vm.startBroadcast(pk);
         gw = new ArcFXGatewayV10(feeBps, refundWin, recoveryDel, owner, relayer_);
-        if (tokens.length > 0 && vm.addr(pk) == owner) {
-            for (uint i; i < tokens.length; i++) {
-                gw.setTokenSupport(tokens[i], true);
-                console2.log("supported:", tokens[i]);
+        if (tokens.length > 0) {
+            // Audit #26: setTokenSupport is onlyRole(DEFAULT_ADMIN_ROLE).
+            // When deployer != owner, the loop silently no-op'd in the
+            // previous version. Surface it loudly so the operator runs
+            // setTokenSupport separately from the owner address.
+            if (vm.addr(pk) == owner) {
+                for (uint i; i < tokens.length; i++) {
+                    gw.setTokenSupport(tokens[i], true);
+                    console2.log("supported:", tokens[i]);
+                }
+            } else {
+                console2.log("WARN: SUPPORTED_TOKENS set but deployer != owner; tokens NOT whitelisted.");
+                console2.log("       Call setTokenSupport(token,true) from the owner address (GATEWAY_OWNER).");
+                console2.log("       Deployer:", vm.addr(pk));
+                console2.log("       Owner:   ", owner);
+                for (uint i; i < tokens.length; i++) {
+                    console2.log("       pending:", tokens[i]);
+                }
             }
         }
         vm.stopBroadcast();

@@ -287,7 +287,11 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
         inv.status = InvoiceStatus.Paid;
         inv.paidBy = payer;
 
-        emit InvoicePaid(globalId, payer, amountIn, grossPayout, inv.amountOut, /*fee=*/0);
+        // Excess (grossPayout - amountOut) accrued to protocolFeesAccrued
+        // above; surface it as the `fee` field so indexers don't see a
+        // protocol-fee event with fee=0 while the gateway's accrued bucket
+        // grows. Audit #25.
+        emit InvoicePaid(globalId, payer, amountIn, grossPayout, inv.amountOut, excess);
         emit SettlementContext(globalId, payInToken, swapTxHash);
         emit EscrowCreated(globalId, payoutToken, inv.amountOut, escrows[globalId].claimableAt);
     }
@@ -450,7 +454,12 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
 
     event FeesWithdrawn(address indexed token, address indexed to, uint256 amount);
 
-    function withdrawFees(address token, address to) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    // Audit #27: nonReentrant for consistency with every other fund-moving
+    // path in this contract. The CEI ordering here (zero-before-transfer)
+    // already prevents a reentrancy drain, but the missing modifier breaks
+    // the invariant and would become a latent vector the day a non-standard
+    // ERC20 (fee-on-transfer, hook-equipped) gets whitelisted.
+    function withdrawFees(address token, address to) external nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) {
         if (to == address(0)) revert InvalidPayoutAddress();
         uint256 amount = protocolFeesAccrued[token];
         if (amount == 0)      revert NoFeesToWithdraw();

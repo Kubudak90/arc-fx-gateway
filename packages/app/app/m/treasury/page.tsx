@@ -65,20 +65,28 @@ export default function TreasuryPage() {
   const [data, setData] = useState<TreasuryData>({ merchant: null, totals: [], activity: [] });
   const [escrows, setEscrows] = useState<EscrowData>(EMPTY_ESCROWS);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
+    setFetchError(null);
     try {
       const [treasuryRes, escrowRes] = await Promise.all([
         fetch("/api/merchant/treasury"),
         fetch("/api/merchant/escrows"),
       ]);
+      if (!treasuryRes.ok) {
+        setFetchError(treasuryRes.status === 401 ? "auth_expired" : `fetch_failed_${treasuryRes.status}`);
+        return;
+      }
       const treasuryJson = await treasuryRes.json();
       setData(treasuryJson);
       if (escrowRes.ok) {
         const escrowJson = await escrowRes.json();
         setEscrows(escrowJson);
       }
+    } catch {
+      setFetchError("network");
     } finally {
       setLoading(false);
     }
@@ -89,6 +97,29 @@ export default function TreasuryPage() {
     return (
       <main className="px-6 py-10 max-w-6xl mx-auto">
         <div className="h-8 w-40 rounded bg-arcora-gray animate-pulse" />
+      </main>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <main className="px-6 py-10 max-w-6xl mx-auto space-y-6">
+        <h1 className="font-[family-name:var(--font-display)] text-[36px]">Treasury</h1>
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="font-semibold mb-1">Couldn&apos;t load treasury</div>
+          {fetchError === "auth_expired"
+            ? <>Your session has expired. <a href="/m/login" className="underline">Sign in again</a>.</>
+            : <>Network blip — retry, or check your connection.</>}
+          {fetchError !== "auth_expired" && (
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="mt-3 inline-flex px-3 py-1.5 rounded border border-amber-400 bg-amber-100 hover:bg-amber-200 font-semibold text-xs"
+            >
+              Retry
+            </button>
+          )}
+        </div>
       </main>
     );
   }

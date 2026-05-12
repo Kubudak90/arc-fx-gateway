@@ -1,9 +1,9 @@
 /**
- * DEV-ONLY smoke test. Requires PRIVATE_KEY (raw hex) for the AppKit adapter
- * and RELAYER_ADAPTER_KEY equivalent. In V10, the main daemon signs via Vault
- * (VAULT_URL/VAULT_ROLE_ID/VAULT_SECRET_ID/VAULT_KEY_NAME); this script
- * retains the raw PRIVATE_KEY path because AppKit does not support custom
- * signers. Do not use on mainnet without KMS.
+ * DEV-ONLY smoke test. AppKit's createViemAdapterFromPrivateKey requires a
+ * raw private key, so this script can't use a Vault-backed LocalAccount
+ * the way the main daemon does. It does, however, fetch that raw key from
+ * Vault when the Vault envs are set — the on-disk PRIVATE_KEY env is the
+ * fallback for local-only `pnpm smoke` runs.
  *
  * Phase A smoke test: confirm App Kit Swap is alive on Arc Testnet
  * before we commit to building the relayer daemon.
@@ -13,27 +13,51 @@
  *   2. swap (no fee)  — does a 0.10 USDC → EURC trade settle end-to-end?
  *   3. swap with fee  — does customFee.recipientAddress actually receive 90%?
  *
- * Exit code 0 = green, 1 = a step failed. The output is what we'll use to
- * decide whether Phase B is unblocked or whether we escalate to Circle.
+ * Not yet in CI: needs a funded Arc-testnet wallet + maker-network access.
+ * Suitable as a manual-trigger workflow (workflow_dispatch) once Vault-OIDC
+ * lands in the runner. Audit operability gap, 2026-05-12.
+ *
+ * Exit code 0 = green, 1 = a step failed.
  */
 
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import { createPublicClient, formatUnits, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { fetchPrivateKeyFromVault } from "./vault-signer";
 
-const required = ["PRIVATE_KEY", "KIT_KEY", "FEE_RECIPIENT"] as const;
-for (const k of required) {
-  if (!process.env[k]) {
-    console.error(`missing env ${k} — copy .env.example and fill in`);
-    process.exit(1);
-  }
+if (!process.env.KIT_KEY || !process.env.FEE_RECIPIENT) {
+  console.error("missing env KIT_KEY or FEE_RECIPIENT — copy .env.example and fill in");
+  process.exit(1);
 }
-
-const PRIVATE_KEY    = process.env.PRIVATE_KEY  as `0x${string}`;
-const KIT_KEY        = process.env.KIT_KEY      as string;
+const KIT_KEY        = process.env.KIT_KEY;
 const FEE_RECIPIENT  = process.env.FEE_RECIPIENT as `0x${string}`;
 const RPC            = process.env.ARC_TESTNET_RPC ?? "https://rpc.testnet.arc.network";
+
+async function resolvePrivateKey(): Promise<`0x${string}`> {
+  // Prefer Vault if the AppRole envs are all present — same source the main
+  // daemon uses, so a smoke run actually exercises Vault connectivity.
+  const haveVault =
+    process.env.VAULT_URL &&
+    process.env.VAULT_ROLE_ID &&
+    process.env.VAULT_SECRET_ID &&
+    process.env.VAULT_KV_PATH;
+  if (haveVault) {
+    return fetchPrivateKeyFromVault({
+      vaultUrl: process.env.VAULT_URL!,
+      roleId:   process.env.VAULT_ROLE_ID!,
+      secretId: process.env.VAULT_SECRET_ID!,
+      kvPath:   process.env.VAULT_KV_PATH!,
+      kvField:  process.env.VAULT_KV_FIELD ?? "privateKey",
+    });
+  }
+  const pk = process.env.PRIVATE_KEY;
+  if (!pk) {
+    console.error("set either Vault envs (VAULT_URL/ROLE_ID/SECRET_ID/KV_PATH) or PRIVATE_KEY");
+    process.exit(1);
+  }
+  return pk as `0x${string}`;
+}
 
 // Canonical Arc-testnet addresses, taken from @circle-fin/app-kit's ArcTestnet
 // chain definition. Keep in sync if Circle changes them.
@@ -63,12 +87,13 @@ function ms(start: number): string {
 }
 
 async function main() {
+  const privateKey = await resolvePrivateKey();
   const kit = new AppKit();
-  const adapter = createViemAdapterFromPrivateKey({ privateKey: PRIVATE_KEY });
+  const adapter = createViemAdapterFromPrivateKey({ privateKey });
   // The adapter wraps a viem account internally; recover the wallet address
   // independently from the private key so this test does not depend on the
   // adapter's internal shape.
-  const walletAddr = privateKeyToAccount(PRIVATE_KEY).address;
+  const walletAddr = privateKeyToAccount(privateKey).address;
 
   console.log(`[smoke] wallet      : ${walletAddr}`);
   console.log(`[smoke] feeRecipient: ${FEE_RECIPIENT}`);

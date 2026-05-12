@@ -269,6 +269,7 @@ contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
         if (inv.status == InvoiceStatus.None)        revert InvoiceNotFound(globalId);
         if (inv.status != InvoiceStatus.Created)     revert InvoiceAlreadyPaid(globalId);
         if (block.timestamp > inv.expiresAt)         revert InvoiceExpired(globalId);
+        if (payInToken != inv.payIn)                 revert InvalidPayInToken();
         if (grossPayout < inv.amountOut)             revert PayoutShortfall(grossPayout, inv.amountOut);
 
         address payoutToken = inv.payoutToken;

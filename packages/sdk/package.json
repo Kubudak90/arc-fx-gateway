@@ -25,6 +25,9 @@
   },
   "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

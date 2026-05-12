@@ -94,6 +94,21 @@ async function tick(): Promise<{
   let cursor = last + 1n;
   let created = 0, backfilled = 0, paid = 0, refunded = 0, failed = 0, claimed = 0, recovered = 0, chunks = 0;
 
+  // Per-tick block timestamp cache. Audit #36 — failed_at and related event
+  // times need to be the *block* time, not the daemon's wall-clock, so a
+  // catch-up replay populates refund SLAs that match what really happened
+  // on-chain. Most events in a tick cluster on a few unique blocks, so this
+  // shrinks N RPC calls to ~unique-blocks-per-tick.
+  const blockTsCache = new Map<bigint, number>();
+  async function blockTsMs(bn: bigint): Promise<number> {
+    const hit = blockTsCache.get(bn);
+    if (hit !== undefined) return hit;
+    const b = await chain.getBlock({ blockNumber: bn });
+    const ms = Number(b.timestamp) * 1000;
+    blockTsCache.set(bn, ms);
+    return ms;
+  }
+
   while (cursor <= to) {
     const tentEnd = cursor + MAX_RANGE - 1n;
     const end = tentEnd > to ? to : tentEnd;
@@ -242,6 +257,7 @@ async function tick(): Promise<{
       // pay-in back off-chain, and emitted this event so the indexer flips
       // the row to `failed`. webhooks fire so the merchant's app sees a
       // terminal "this won't pay" state.
+      const failedAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
            set status   = 'failed',
@@ -251,7 +267,7 @@ async function tick(): Promise<{
         [
           id,
           JSON.stringify({
-            failed_at:    new Date().toISOString(),
+            failed_at:    failedAt,
             failed_tx:    log.transactionHash,
             refunded_to:  payer.toLowerCase(),
             refund_amount: amount,

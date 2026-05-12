@@ -190,9 +190,10 @@ export async function POST(req: NextRequest) {
       issuedAt:        new Date().toISOString(),
     });
   } catch (err) {
-    return NextResponse.json({
-      error:   "estimate_failed",
-      message: err instanceof Error ? err.message : String(err),
-    }, { status: 502 });
+    // Log internally for ops — App Kit error messages can include the RFQ node
+    // identifier and (occasionally) a fragment of the kit key, so they must
+    // not appear in the response body (Pulse-AI M8 closure carried forward).
+    console.error("[quote] estimateSwap failed:", err);
+    return NextResponse.json({ error: "estimate_failed" }, { status: 502 });
   }
 }

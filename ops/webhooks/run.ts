@@ -88,7 +88,12 @@ async function markFailed(id: string, attempts: number, lastError: string, statu
       [id, attempts, lastError, reason],
     );
   } else {
-    const backoffSec = Math.min(2 ** attempts, MAX_BACKOFF_HOURS * 3600);
+    // Audit #19: align with relayer's 2^attempts*30 schedule. The previous
+    // `2 ** attempts` started at 2s and ramped slowly; during a multi-hour
+    // outage that means fetchDue (10s tick × 50 rows) churns the table at
+    // tens of writes per second. The relayer formula starts at 60s, doubles
+    // to 30-min cap, capped harder by MAX_BACKOFF_HOURS.
+    const backoffSec = Math.min(2 ** attempts * 30, MAX_BACKOFF_HOURS * 3600);
     await pool.query(
       `update webhook_attempts
           set attempts = $2, last_error = $3, next_attempt = now() + ($4 || ' seconds')::interval

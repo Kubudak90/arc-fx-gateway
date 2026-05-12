@@ -41,8 +41,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (rows.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const inv = rows[0]!;
 
-  // Determine if the caller is the owning merchant (authenticated).
-  const apiKeyHeader = req.headers.get("x-api-key") ?? "";
+  // Determine if the caller is the owning merchant (authenticated). The SDK
+  // and POST /api/invoices send `X-Arcora-Api-Key`; older callers and a few
+  // docs examples used `x-api-key`. Accept both — checking the canonical
+  // header first — so merchants who follow the docs aren't silently
+  // downgraded to the public invoice shape.
+  const apiKeyHeader =
+    req.headers.get("x-arcora-api-key") ??
+    req.headers.get("x-api-key") ??
+    "";
   let isAuthed = false;
   if (apiKeyHeader) {
     try {

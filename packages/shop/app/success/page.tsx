@@ -15,10 +15,18 @@ export default function SuccessPage() {
   );
 }
 
+// Audit #40: Arcora invoice ids are bytes32 hex (66 chars incl. 0x prefix).
+// Reject anything else so a crafted query param like
+// `?invoice=REFUND_PENDING_CALL_+1...` can't be rendered as code/link text
+// and social-eng the recipient. React already escapes text, so this is
+// belt-and-braces.
+const INVOICE_ID_RE = /^0x[0-9a-fA-F]{64}$/;
+
 function SuccessInner() {
   const params = useSearchParams();
   const { clear } = useCart();
-  const invoiceId = params.get("invoice") ?? params.get("invoiceId");
+  const rawInvoiceId = params.get("invoice") ?? params.get("invoiceId");
+  const invoiceId = rawInvoiceId && INVOICE_ID_RE.test(rawInvoiceId) ? rawInvoiceId : null;
   const [cleared, setCleared] = useState(false);
 
   useEffect(() => {

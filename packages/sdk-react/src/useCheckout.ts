@@ -10,7 +10,14 @@ export interface UseCheckoutResult {
 }
 
 export function useCheckout(opts: InitOptions): UseCheckoutResult {
-  const arcora = useMemo(() => new Arcora(opts), [opts.apiKey, opts.baseUrl]);
+  // Audit #23: `opts.environment` selects the default base URL (testnet vs
+  // mainnet) when `opts.baseUrl` is unset, so a parent that swaps environments
+  // mid-session must re-create the Arcora instance — otherwise the old URL
+  // sticks. Include it in the dep array.
+  const arcora = useMemo(
+    () => new Arcora(opts),
+    [opts.apiKey, opts.baseUrl, opts.environment],
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);

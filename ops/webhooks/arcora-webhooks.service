@@ -2,6 +2,8 @@
 Description=Arcora webhook dispatcher daemon
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -13,6 +15,10 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=arcora-webhooks
+
+# Audit #37 — dedicated user pending VPS migration; see arcora-relayer.service.
+# User=arcora-ops
+# Group=arcora-ops
 
 [Install]
 WantedBy=multi-user.target

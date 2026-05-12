@@ -2,6 +2,8 @@
 Description=Arcora gateway event indexer (Arc testnet)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -13,6 +15,10 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=arcora-indexer
+
+# Audit #37 — dedicated user pending VPS migration; see arcora-relayer.service.
+# User=arcora-ops
+# Group=arcora-ops
 
 [Install]
 WantedBy=multi-user.target

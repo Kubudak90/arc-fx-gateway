@@ -2,6 +2,9 @@
 Description=Arcora relayer (App Kit Swap orchestrator + gateway settle)
 After=network-online.target
 Wants=network-online.target
+# Cap restart storms so a crash loop doesn't fill the journal in minutes.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -12,6 +15,15 @@ Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=arcora-relayer
+
+# Audit #37 — dedicated unprivileged user. Not enabled yet (requires VPS
+# migration: useradd arcora-ops; chown -R arcora-ops:arcora-ops
+# /root/arcora-ops; mv working-dir into /opt or /var/lib so the user can
+# actually read it; reconcile Vault AppRole + env-file perms). Track in
+# the Plan-11 mainnet pre-flight.
+# User=arcora-ops
+# Group=arcora-ops
 
 [Install]
 WantedBy=multi-user.target

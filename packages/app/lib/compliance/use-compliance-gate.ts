@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type GateStatus = "idle" | "checking" | "allow" | "review" | "reject" | "error";
 
@@ -11,12 +11,20 @@ export interface GateState {
   code?: string;
 }
 
+export interface GateHandle extends GateState {
+  /** Re-runs the authorize call. Use after an `error` status to retry on
+   *  transient RPC / endpoint failures without forcing a full page reload. */
+  refresh: () => void;
+}
+
 /**
  * Calls `/api/checkout/authorize` after wallet connect, before the customer
  * signs the Permit2 message. The PayButton is gated on `status === "allow"`.
  */
-export function useComplianceGate(invoiceId: string, address: string | undefined): GateState {
+export function useComplianceGate(invoiceId: string, address: string | undefined): GateHandle {
   const [state, setState] = useState<GateState>({ status: "idle" });
+  const [tick, setTick] = useState(0);
+  const refresh = useCallback(() => setTick(t => t + 1), []);
 
   useEffect(() => {
     if (!address) {
@@ -58,7 +66,7 @@ export function useComplianceGate(invoiceId: string, address: string | undefined
         setState({ status: "error", reason: String(err?.message ?? err) });
       });
     return () => { cancelled = true; };
-  }, [invoiceId, address]);
+  }, [invoiceId, address, tick]);
 
-  return state;
+  return { ...state, refresh };
 }

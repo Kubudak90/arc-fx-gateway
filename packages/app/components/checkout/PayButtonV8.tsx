@@ -50,7 +50,10 @@ export function PayButtonV8(props: PayButtonV8Props) {
   const [needsPermit2Setup, setNeedsPermit2Setup] = useState<boolean | null>(null);
 
   const compliance = useComplianceGate(props.invoiceId, address);
-  const complianceBlocked = compliance.status === "reject" || compliance.status === "review";
+  const complianceBlocked =
+    compliance.status === "reject" ||
+    compliance.status === "review" ||
+    compliance.status === "error";
   const complianceLoading = compliance.status === "checking";
 
   const arcId = 5042002;
@@ -206,7 +209,13 @@ export function PayButtonV8(props: PayButtonV8Props) {
         props.onFailed?.(reason);
       } else {
         setState("failed");
-        const reason = terminal.error ?? `Settlement failed (${terminal.status})`;
+        // Audit #12: `terminal.error` originates from on-chain revert data and
+        // can include a raw selector + decoded args, which leaks contract
+        // internals to the payer. mapChainError matches known error selectors
+        // and falls back to a generic "Transaction failed — try again".
+        const reason = terminal.error
+          ? mapChainError(new Error(terminal.error))
+          : `Settlement failed (${terminal.status})`;
         toast.error(reason);
         props.onFailed?.(reason);
       }
@@ -248,6 +257,23 @@ export function PayButtonV8(props: PayButtonV8Props) {
           <div>
             <div className="font-semibold mb-0.5">This wallet can&apos;t be used for this payment</div>
             Try a different wallet or contact the merchant if you believe this is an error.
+          </div>
+        </div>
+      )}
+      {compliance.status === "error" && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
+          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+          <div className="flex-1">
+            <div className="font-semibold mb-0.5">Couldn&apos;t verify wallet</div>
+            We couldn&apos;t reach the compliance check. This is usually a
+            transient network blip — retry, or refresh the page.
+            <button
+              type="button"
+              onClick={compliance.refresh}
+              className="mt-2 px-2 py-1 rounded border border-amber-400 bg-amber-100 hover:bg-amber-200 font-semibold"
+            >
+              Retry verification
+            </button>
           </div>
         </div>
       )}

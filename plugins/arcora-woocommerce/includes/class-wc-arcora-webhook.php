@@ -22,17 +22,25 @@ class WC_Arcora_Webhook {
         $gateway = new WC_Arcora_Gateway();
         $secret  = (string) $gateway->get_option('webhook_secret');
 
+        // Audit #21: respond() calls exit, but every guard below would
+        // silently fall through if that contract ever changes (e.g. refactor
+        // to throw, swap for wp_send_json which only echoes). Pair each
+        // self::respond() with an explicit `return;` so the early-exit
+        // semantics survive any future change to respond().
         if ($secret === '') {
             self::respond(503, ['error' => 'webhook_secret_missing']);
+            return;
         }
 
         if (!self::verify_signature($body, $sig, $secret)) {
             self::respond(401, ['error' => 'invalid_signature']);
+            return;
         }
 
         $payload = json_decode($body, true);
         if (!is_array($payload) || empty($payload['type']) || empty($payload['invoice_id'])) {
             self::respond(400, ['error' => 'malformed_payload']);
+            return;
         }
 
         $orders = wc_get_orders([
@@ -46,6 +54,7 @@ class WC_Arcora_Webhook {
             // created from a different store. Reply 200 so Arcora doesn't
             // retry forever.
             self::respond(200, ['ok' => true, 'note' => 'order_not_found']);
+            return;
         }
         $order = $orders[0];
 

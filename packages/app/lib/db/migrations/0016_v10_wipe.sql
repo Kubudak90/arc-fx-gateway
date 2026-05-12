@@ -9,7 +9,6 @@ TRUNCATE TABLE
   checkout_authorizations,
   compliance_screenings,
   invoices,
-  webhook_endpoints,
   merchants
 RESTART IDENTITY CASCADE;
 

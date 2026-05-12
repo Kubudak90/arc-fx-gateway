@@ -70,9 +70,19 @@ const Q = z.object({
   message: "either amountIn or targetOutput is required",
 });
 
-// Created lazily on first request, reused across warm invocations within a
-// single Lambda. Adapter creation has no chain interaction, so there's no
-// nonce or balance state to leak.
+// Throwaway key, lazily generated on first request, reused across warm Lambda
+// invocations. Adapter creation has no chain interaction → there's no nonce
+// or balance state to leak.
+//
+// ⚠️ INVARIANT: this private key MUST NEVER be funded or used for anything
+// other than App Kit's quote-estimation adapter. App Kit calls
+// `estimateSwap` with `from.adapter = getAdapter()`, which only needs an
+// adapter shape for chain context — no signature is requested, nothing is
+// broadcast. If a future refactor wires this adapter into the *actual* swap
+// execution path (e.g. swap-not-estimate), an attacker who can read warm-
+// instance memory or trigger a key dump would drain whatever balance the
+// key holds. Keep the funding-discipline check explicit; do not delete
+// this comment when touching `getAdapter`. Audit #29.
 let cachedAdapter: ReturnType<typeof createViemAdapterFromPrivateKey> | null = null;
 
 function getAdapter() {

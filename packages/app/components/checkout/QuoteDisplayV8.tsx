@@ -42,8 +42,18 @@ export function QuoteDisplayV8(props: QuoteDisplayV8Props) {
     setLoading(true);
     setError(null);
     try {
-      const symbolFor = (a: string) =>
-        a.toLowerCase() === (process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "").toLowerCase() ? "USDC" : "EURC";
+      // Audit #31: previously fell back to "EURC" for any unknown token,
+      // which silently quoted the wrong asset. Reject explicitly so a
+      // misconfigured env or a future third stable surfaces as an error
+      // rather than a corrupted quote.
+      const usdcAddr = (process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "").toLowerCase();
+      const eurcAddr = (process.env.NEXT_PUBLIC_EURC_ADDRESS ?? "").toLowerCase();
+      const symbolFor = (a: string): "USDC" | "EURC" => {
+        const low = a.toLowerCase();
+        if (low === usdcAddr) return "USDC";
+        if (low === eurcAddr) return "EURC";
+        throw new Error(`unsupported token ${a}`);
+      };
       // targetOutput mode — backend probes the rate, divides, adds slippage
       // buffer. Returns a recommended `amountIn` we lock in for signing.
       const body = {

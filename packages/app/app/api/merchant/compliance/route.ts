@@ -62,6 +62,14 @@ export async function GET() {
     .orderBy(desc(complianceScreenings.createdAt))
     .limit(50);
 
+  // Audit #30: minimize the data we hand back to merchants. The full
+  // customer wallet address isn't needed for the review-queue card (which
+  // just wants to identify the row); a 0xABCD…1234 truncation keeps the
+  // surface usable for support escalation without handing a merchant
+  // pseudonymous identifiers they don't have a legitimate need for.
+  const truncate = (a: string): string =>
+    a.length > 10 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
+
   return NextResponse.json({
     merchant: { address: merchantRow.address, payoutToken: merchantRow.payoutToken },
     ownScreen: ownScreen
@@ -72,6 +80,6 @@ export async function GET() {
           createdAt: ownScreen.createdAt,
         }
       : null,
-    reviewQueue,
+    reviewQueue: reviewQueue.map(r => ({ ...r, address: truncate(r.address) })),
   });
 }

@@ -26,6 +26,16 @@ async function doCreateInvoice(opts: InitOptions, params: CreateInvoiceParams): 
   if (params.cancelUrl && !isHttp(params.cancelUrl)) {
     throw new ArcoraError("INVALID_URL", `cancelUrl must be http(s): got ${params.cancelUrl}`);
   }
+  // Audit #38: server already rejects via Zod (positive number), but
+  // catching invalid amounts client-side is cheaper, more actionable, and
+  // closes the Infinity/NaN/negative paths that JSON.stringify would
+  // otherwise serialise into nonsense ("null" for NaN/Infinity).
+  if (typeof params.amountUsdc !== "number" || !Number.isFinite(params.amountUsdc) || params.amountUsdc <= 0) {
+    throw new ArcoraError(
+      "UNKNOWN",
+      `amountUsdc must be a finite positive number, got ${String(params.amountUsdc)}`,
+    );
+  }
 
   let res: Response;
   try {

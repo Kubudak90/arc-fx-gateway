@@ -32,14 +32,33 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
   });
   const effectiveKey = apiKey ?? pastedKey ?? null;
 
+  // Limits invoice amount to a sane ceiling so a typo (e.g. an extra zero or
+  // a paste of a hex address) doesn't mint a multi-million-unit invoice on
+  // testnet. 100k USD-equivalent comfortably covers any legitimate use here.
+  const AMOUNT_MIN = 0.01;
+  const AMOUNT_MAX = 100_000;
+
+  function parseAmount(raw: string): { value: number; error: string | null } {
+    const trimmed = raw.trim();
+    if (!trimmed) return { value: NaN, error: "Enter an amount" };
+    const v = Number(trimmed);
+    if (!Number.isFinite(v))    return { value: v, error: "Amount must be a number" };
+    if (v < AMOUNT_MIN)         return { value: v, error: `Minimum ${AMOUNT_MIN}` };
+    if (v > AMOUNT_MAX)         return { value: v, error: `Maximum ${AMOUNT_MAX.toLocaleString()}` };
+    return { value: v, error: null };
+  }
+  const parsedAmount = parseAmount(amount);
+  const amountLabel = payIn === "EURC" ? "Amount (EUR-equivalent)" : "Amount (USD-equivalent)";
+
   async function handleSubmit() {
+    if (parsedAmount.error) { toast.error(parsedAmount.error); return; }
     if (!effectiveKey) { toast.error("Paste your API key (saved at bootstrap) below"); return; }
     if (typeof window !== "undefined") window.localStorage.setItem("arcora.apiKey", effectiveKey);
     setBusy(true);
     try {
       // V10 cutover (Plan 10): /api/invoices now routes V10-only; the legacy
       // ?engine= param is gone.
-      const body: Record<string, unknown> = { amountUsdc: Number(amount), payInToken: payIn };
+      const body: Record<string, unknown> = { amountUsdc: parsedAmount.value, payInToken: payIn };
       // Standalone invoice: omit successUrl when blank so /api/invoices skips
       // the allowlist + SSRF checks. The /i/<id> page will show the paid
       // status without redirecting anywhere.
@@ -151,8 +170,20 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
         ) : (
           <div className="space-y-5 pt-2">
             <div className="space-y-2">
-              <Label htmlFor="invoice-amount">Amount (USD-equivalent)</Label>
-              <Input id="invoice-amount" type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <Label htmlFor="invoice-amount">{amountLabel}</Label>
+              <Input
+                id="invoice-amount"
+                type="number"
+                step="0.01"
+                min={AMOUNT_MIN}
+                max={AMOUNT_MAX}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                aria-invalid={parsedAmount.error ? true : undefined}
+              />
+              {parsedAmount.error && amount.trim() !== "" && (
+                <p className="text-xs text-red-600">{parsedAmount.error}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="invoice-payin">Customer pays in</Label>
@@ -196,7 +227,7 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
                 </p>
               </div>
             )}
-            <Button disabled={busy} onClick={handleSubmit} className="w-full mt-2">
+            <Button disabled={busy || !!parsedAmount.error} onClick={handleSubmit} className="w-full mt-2">
               {busy ? "Creating…" : "Create invoice"}
             </Button>
           </div>

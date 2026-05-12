@@ -609,9 +609,31 @@ async function processOne(row: QueueRow): Promise<void> {
       // Receipt unavailable — likely still pending or RPC timeout. Don't
       // re-broadcast (would race the pending tx); leave the row in
       // processing and let the next lease reclaim retry.
+      //
+      // Audit #18: if a tx sits stuck in the mempool indefinitely (gas too
+      // low, network congestion, dropped from peer pools), repeated lease
+      // reclaims would otherwise spin forever without ever surfacing the
+      // problem. `attempts` is incremented on every claim, so once it
+      // crosses MAX_ATTEMPTS we mark the row failed for operator triage.
+      // Manual reconciliation: the tx might still land on-chain, in which
+      // case the operator replays settleInvoice externally or rebroadcasts
+      // with higher gas.
+      if (row.attempts >= MAX_ATTEMPTS) {
+        await markFailed(
+          row.id,
+          `settle: prior tx ${row.settle_tx_hash} stuck unconfirmed after ${row.attempts} attempts — manual reconciliation needed`,
+        );
+        log("error", {
+          msg: "settle.stuck_unconfirmed_max_attempts",
+          tx: row.settle_tx_hash,
+          attempts: row.attempts,
+        });
+        return;
+      }
       log("warn", {
         msg: "settle.receipt_unavailable",
         tx: row.settle_tx_hash,
+        attempts: row.attempts,
         err: e instanceof Error ? e.message : String(e),
       });
       return;

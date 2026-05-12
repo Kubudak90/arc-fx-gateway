@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import type { Address } from "viem";
+import { toast } from "sonner";
 import { gatewayAbi } from "@/lib/chain/gateway-abi";
+import { mapChainError } from "@/lib/chain/error-mapper";
 
 // Read the V10 gateway address from the public env var directly — importing
 // from `@/lib/chain/client` would transitively pull `pg` (server-only) into
@@ -45,7 +47,12 @@ export function ClaimAllButton({ globalIds }: ClaimAllButtonProps) {
       setHash(tx);
       setStep("confirming");
     } catch (e) {
-      console.error(e);
+      console.error("[claim] failed:", e);
+      // mapChainError handles known revert selectors (InvoiceExpired,
+      // User rejected, insufficient funds, …) and falls back to a generic
+      // "Transaction failed — try again" so wallet error details don't bleed
+      // into the toast verbatim.
+      toast.error(mapChainError(e));
       setStep("error");
     }
   }

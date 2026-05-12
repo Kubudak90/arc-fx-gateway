@@ -175,7 +175,12 @@ function KpiGrid({ invoices, range, fiatSign }: { invoices: InvoiceRow[]; range:
     const paid = filtered.filter(i => PAID_STATUSES.has(i.status));
     const refunded = filtered.filter(i => i.status === "refunded").length;
     const totalUnits = paid.reduce((s, i) => s + BigInt(i.amountOut || "0"), 0n);
-    const totalAmount = Number(totalUnits) / 1e6;
+    // Audit #33: `Number(totalUnits)/1e6` loses precision above 2^53 micro-
+    // units (~9.0 × 10^15 = $9Q). Not practically reachable, but stay
+    // consistent with the BigInt arithmetic everywhere else in the codebase
+    // by truncating to cents in BigInt space first; only then promote.
+    const totalCents  = totalUnits / 10_000n;
+    const totalAmount = Number(totalCents) / 100;
     const count = paid.length;
     const avg = count > 0 ? totalAmount / count : 0;
     const denom = paid.length + refunded;

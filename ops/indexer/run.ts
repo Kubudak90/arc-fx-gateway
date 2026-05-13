@@ -8,6 +8,18 @@ import { randomUUID } from "node:crypto";
 const RPC          = need("ARC_TESTNET_RPC");
 const GATEWAY_V10  = (process.env.GATEWAY_ADDRESS_V10 ?? "").toLowerCase() as Address;
 if (!GATEWAY_V10) throw new Error("GATEWAY_ADDRESS_V10 must be set");
+// Optional V11 (audit-fix bytecode) gateway. When set, the indexer watches
+// both addresses through V10's deprecation window (7d refund + 7d recovery
+// from the last V10 settle) and tags each invoice with its source via
+// `log.address`. Drop GATEWAY_ADDRESS_V11 from env once the V10 window
+// closes and indexer-discovered V10 events stop. Audit 2026-05-13.
+const GATEWAY_V11_RAW = (process.env.GATEWAY_ADDRESS_V11 ?? "").toLowerCase();
+const GATEWAY_V11: Address | null = GATEWAY_V11_RAW
+  ? (GATEWAY_V11_RAW as Address)
+  : null;
+const WATCHED_GATEWAYS: Address[] = GATEWAY_V11
+  ? [GATEWAY_V10, GATEWAY_V11]
+  : [GATEWAY_V10];
 const PG_URL       = need("POSTGRES_URL_NON_POOLING");
 const REORG_BUFFER = BigInt(process.env.INDEXER_REORG_BUFFER_BLOCKS ?? "5");
 const TICK_MS      = Number(process.env.INDEXER_TICK_MS ?? "30000");
@@ -124,15 +136,15 @@ async function tick(): Promise<{
       escrowRecoveredLogs,
       merchantReactivatedLogs,
     ] = await Promise.all([
-      chain.getLogs({ address: GATEWAY_V10, event: InvoiceCreated,      fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: InvoicePaid,         fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: SettlementContext,   fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: EscrowCreated,       fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: PayerRefunded,       fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: InvoiceRefunded,     fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: InvoiceClaimed,      fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: EscrowRecovered,     fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: MerchantReactivated, fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: InvoiceCreated,      fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: InvoicePaid,         fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: SettlementContext,   fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: EscrowCreated,       fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: PayerRefunded,       fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: InvoiceRefunded,     fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: InvoiceClaimed,      fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: EscrowRecovered,     fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: MerchantReactivated, fromBlock: cursor, toBlock: end }),
     ]);
 
     // Index SettlementContext by globalId so we can stitch payInToken +
@@ -166,6 +178,11 @@ async function tick(): Promise<{
       );
       if (!mr.rowCount) continue; // unknown merchant - cannot satisfy FK
 
+      // gateway_address comes from the log itself (log.address) so an
+      // invoice discovered on V11 doesn't get mis-tagged as V10 during the
+      // dual-watch window.
+      const sourceGateway = log.address.toLowerCase();
+      const engineTag = sourceGateway === GATEWAY_V10 ? "v10" : "v11";
       const inserted = await pool.query<{ id: string }>(
         `insert into invoices
            (id, merchant_invoice_id, merchant_id, pay_in_token, payout_token,
@@ -181,8 +198,8 @@ async function tick(): Promise<{
           a.payoutToken as Hex,
           (a.amountOut as bigint).toString(),
           Number(a.expiresAt as bigint),
-          JSON.stringify({ backfilled: true, txHash: log.transactionHash, engine: "v10" }),
-          GATEWAY_V10,
+          JSON.stringify({ backfilled: true, txHash: log.transactionHash, engine: engineTag }),
+          sourceGateway,
         ],
       );
       if (inserted.rowCount && inserted.rowCount > 0) {

@@ -7,10 +7,16 @@ import { toast } from "sonner";
 import { gatewayAbi } from "@/lib/chain/gateway-abi";
 import { mapChainError } from "@/lib/chain/error-mapper";
 
-// Read the V10 gateway address from the public env var directly — importing
-// from `@/lib/chain/client` would transitively pull `pg` (server-only) into
-// the client bundle and break the build with "Module not found: 'fs' / 'net'".
-const GATEWAY_ADDRESS = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 ?? "") as Address;
+// Read the active gateway address from public envs. V11 (audit-fix bytecode)
+// is preferred when set; falls back to V10 for environments still on the
+// original deploy. Direct env read — importing from `@/lib/chain/client`
+// would transitively pull `pg` (server-only) into the client bundle and
+// break the build with "Module not found: 'fs' / 'net'".
+const GATEWAY_ADDRESS = (
+  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11 ??
+  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 ??
+  ""
+) as Address;
 
 interface ClaimAllButtonProps {
   globalIds: `0x${string}`[];

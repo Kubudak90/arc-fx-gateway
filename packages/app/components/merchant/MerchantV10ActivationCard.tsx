@@ -21,7 +21,12 @@ import { ShieldCheck } from "lucide-react";
  * Hidden once the merchant is registered + delegate authorized on V10.
  */
 
-const GATEWAY_V10 = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 ?? "") as Address;
+// V11 (audit-fix bytecode) preferred when set; V10 fallback for unmigrated envs.
+const GATEWAY_V10 = (
+  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11 ??
+  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 ??
+  ""
+) as Address;
 const ARC_CHAIN_ID = 5042002;
 // V10 bit-flag right for createInvoiceFor (RIGHT_CREATE_INVOICE = 1 << 0)
 const RIGHT_CREATE_INVOICE = 1;

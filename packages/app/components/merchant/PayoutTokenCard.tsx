@@ -8,7 +8,12 @@ import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { mapChainError } from "@/lib/chain/error-mapper";
 import { symbolForAddress } from "@/lib/ui/format";
 
-const GATEWAY_V10 = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 ?? "") as Address;
+// V11 (audit-fix bytecode) preferred when set; V10 fallback for unmigrated envs.
+const GATEWAY_V10 = (
+  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11 ??
+  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 ??
+  ""
+) as Address;
 const USDC = (process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "") as Address;
 const EURC = (process.env.NEXT_PUBLIC_EURC_ADDRESS ?? "") as Address;
 

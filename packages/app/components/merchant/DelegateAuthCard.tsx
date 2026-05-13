@@ -26,7 +26,11 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const [busy, setBusy] = useState<"register" | "authorize" | null>(null);
-  const gateway = process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 as Address;
+  // V11 (audit-fix bytecode) preferred when set; V10 fallback for unmigrated envs.
+  const gateway = (
+    process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11 ??
+    process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10
+  ) as Address;
   const usdc = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;
 
   const { data: merchantInfo } = useReadContract({

@@ -62,14 +62,14 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
 
 <p><span class="pill pill-teal">Stablecoin checkout</span></p>
 <h1 id="arcora">Arcora</h1>
-<h2 id="customer-pays-with-what-they-have-merchant-settles-in-the-stablecoin-they-want-atomically-on-arc">Customer pays with what they have. Merchant settles in the stablecoin they want. Atomically, on Arc.</h2>
+<h2 id="the-customer-pays-with-one-signature-the-merchant-settles-in-the-stablecoin-they-want-deterministically-on-arc">The customer pays with one signature. The merchant settles in the stablecoin they want, deterministically. On Arc.</h2>
 <br />
-<p><code>v1.0.2</code> · live on Arc testnet · 117 contract tests passing</p>
+<p><code>v1.1.0</code> · live on Arc testnet · <code>arcorapay.xyz</code></p>
 <footer>arcora · 2026</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="2" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
@@ -126,15 +126,15 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
 <h2 id="the-problem">The problem</h2>
-<p>Stablecoins are now <strong>everywhere</strong> — USDC alone moved $5T in 2025. But for a merchant accepting them, payment is still:</p>
+<p>Stablecoins moved <strong>~$5T in 2025</strong>. The holder-to-holder UX is fine. The merchant UX is not:</p>
 <ul>
-<li>Multiple chains</li>
-<li>Multiple stables (USDC, EURC, USDT, PYUSD, DAI, regional pegs…)</li>
-<li>Custodial off-ramps that take days and 1.5%</li>
-<li>Or a thicket of bridges and approvals every customer has to learn</li>
+<li>The customer's chain is not the merchant's chain.</li>
+<li>The customer's token is not the merchant's token.</li>
+<li>Bridges, DEXes, approval clicks — each one is a place the customer abandons.</li>
+<li>The fallback is a custodial off-ramp that takes <em>days</em> and <em>1–2%</em>.</li>
 </ul>
 <blockquote>
 <p>&quot;I have USDC on Arbitrum. The merchant wants EURC on Arc. Five clicks and twenty minutes later I'm not sure if my money got there.&quot;</p>
@@ -195,14 +195,17 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
 <h2 id="what-arcora-is">What Arcora is</h2>
-<p><strong>A Stripe-like checkout for stablecoin payments</strong>, built around one bet:</p>
+<p><strong>A Stripe-shaped checkout for stablecoin payments.</strong></p>
+<p>The merchant invoices in their preferred stable. The customer signs once — a Permit2 EIP-712 message, no transaction, no native gas. Arcora's relayer pulls the funds, runs the swap on Circle's App Kit, and deposits the merchant's stable into a 7-day custody escrow that the merchant claims permissionlessly.</p>
 <blockquote>
-<p><strong>Customer pays from where they are, with whatever they have.<br />Merchant receives their preferred stablecoin on Arc.</strong></p>
+<p>Customer pays from where they are, with whatever they have.<br />
+Merchant receives the stable they want, on Arc.</p>
 </blockquote>
-<p>One on-chain transaction. One signature surface for the customer. The merchant never has to think about the customer's chain, their token, or the FX in between.</p>
+<br />
+<p><strong>No token. No custody. No FX gymnastics for the merchant.</strong></p>
 <footer>arcora · 2026</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="4" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
@@ -259,14 +262,15 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="live-demo--try-it-now">Live demo — try it now</h2>
+<h2 id="live-right-now">Live, right now</h2>
 <div>
-<p><strong>Demo merchant:</strong> <a href="https://arc-fx-demo.vercel.app">arc-fx-demo.vercel.app</a> · &quot;Acme Coffee, €4.50&quot;</p>
-<p><strong>Hosted checkout app:</strong> <a href="https://arc-fx-gateway.vercel.app">arc-fx-gateway.vercel.app</a></p>
-<p><strong>Merchant dashboard:</strong> /m/dashboard · /m/treasury</p>
-<p><strong>On-chain:</strong> Arc testnet · Gateway <code>0x7c1137…F25F208Fb7a3</code></p>
+<p><strong>Hosted checkout + dashboard:</strong> <a href="https://arcorapay.xyz"><code>arcorapay.xyz</code></a></p>
+<p><strong>Docs:</strong> <a href="https://docs.arcorapay.xyz"><code>docs.arcorapay.xyz</code></a></p>
+<p><strong>npm:</strong> <code>npm install @arcora/sdk @arcora/sdk-react</code></p>
+<p><strong>Gateway (V11, Arc testnet):</strong><br />
+<a href="https://testnet.arcscan.app/address/0x07BAC123A682D24d3eC439ce454cA8AC64eAe3A3"><code>0x07BAC123…aE3a3</code></a></p>
 </div>
 <pre is="marp-pre" data-auto-scaling="downscale-only"><code class="language-bash">npm install @arcora/sdk
 </code></pre>
@@ -326,9 +330,9 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="how-it-works--three-steps">How it works — three steps</h2>
+<h2 id="how-it-works--three-touch-points">How it works — three touch points</h2>
 <table>
 <thead>
 <tr>
@@ -341,25 +345,29 @@ footer, header { color: #5b6478; font-size: 16px; }
 <tr>
 <td style="text-align:center"><strong>01</strong></td>
 <td style="text-align:left"><strong>Merchant creates an invoice</strong></td>
-<td style="text-align:left">3-line SDK call or 1 click in the dashboard</td>
+<td style="text-align:left">One API call (or one click in <code>/m/dashboard</code>)</td>
 </tr>
 <tr>
 <td style="text-align:center"><strong>02</strong></td>
-<td style="text-align:left"><strong>Customer pays at the checkout</strong></td>
-<td style="text-align:left">Connect wallet, approve, pay — one tx</td>
+<td style="text-align:left"><strong>Customer signs once at the checkout</strong></td>
+<td style="text-align:left">Permit2 EIP-712 — no transaction, no gas</td>
 </tr>
 <tr>
 <td style="text-align:center"><strong>03</strong></td>
-<td style="text-align:left"><strong>Settles on Arc, atomically</strong></td>
-<td style="text-align:left">Swap (if needed) + payout + fee + event, in a single tx</td>
+<td style="text-align:left"><strong>Relayer settles atomically</strong></td>
+<td style="text-align:left">Permit2 pull → App Kit Swap → <code>settleInvoice</code> → custody escrow</td>
 </tr>
 </tbody>
 </table>
 <pre is="marp-pre" data-auto-scaling="downscale-only"><code class="language-ts"><span class="hljs-keyword">import</span> { <span class="hljs-title class_">Arcora</span> } <span class="hljs-keyword">from</span> <span class="hljs-string">&quot;@arcora/sdk&quot;</span>;
 
-<span class="hljs-title class_">Arcora</span>.<span class="hljs-title function_">init</span>({ apiKey });
-<span class="hljs-keyword">const</span> inv = <span class="hljs-keyword">await</span> <span class="hljs-title class_">Arcora</span>.<span class="hljs-title function_">createInvoice</span>({ <span class="hljs-attr">amountUsdc</span>: <span class="hljs-number">49.99</span>, <span class="hljs-attr">payInToken</span>: <span class="hljs-string">&quot;EURC&quot;</span> });
-<span class="hljs-title class_">Arcora</span>.<span class="hljs-title function_">openCheckout</span>(inv);
+<span class="hljs-keyword">const</span> arcora = <span class="hljs-keyword">new</span> <span class="hljs-title class_">Arcora</span>({ apiKey, <span class="hljs-attr">environment</span>: <span class="hljs-string">&quot;testnet&quot;</span> });
+<span class="hljs-keyword">const</span> inv = <span class="hljs-keyword">await</span> arcora.<span class="hljs-title function_">createInvoice</span>({
+  <span class="hljs-attr">amountUsdc</span>: <span class="hljs-number">49.99</span>,
+  <span class="hljs-attr">payInToken</span>: <span class="hljs-string">&quot;EURC&quot;</span>,
+  <span class="hljs-attr">successUrl</span>: <span class="hljs-string">&quot;https://yoursite.com/orders/done&quot;</span>,
+});
+arcora.<span class="hljs-title function_">openCheckout</span>(inv);
 </code></pre>
 <footer>arcora · 2026</footer>
 </section>
@@ -417,17 +425,19 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="whats-live-in-v102">What's live in v1.0.2</h2>
+<h2 id="what-ships-in-v11">What ships in v1.1</h2>
 <ul>
-<li><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> <strong>Hosted checkout</strong> with SIWE merchant auth, dashboard, QR sharing</li>
-<li><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> <strong>Atomic FX settlement</strong> via Chainlink-priced OracleAMM (USDC ⇄ EURC)</li>
-<li><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> <strong>Same-token fast path</strong> when payIn = payout (no swap, no slippage)</li>
-<li><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> <strong>Refunds</strong> — <code>refundInvoice()</code> returns the customer's payout + the protocol fee back to the merchant from accrued</li>
-<li><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> <strong>Treasury dashboard</strong> — per-stable net received, gross volume, refunded, fees, activity feed</li>
-<li><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> <strong>HMAC-signed webhooks</strong> — <code>invoice.paid</code>, <code>invoice.refunded</code>, retry with exponential backoff</li>
-<li><img class="emoji" draggable="false" alt="✅" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.2/assets/svg/2705.svg" data-marp-twemoji=""/> <strong>Two npm packages</strong> — <code>@arcora/sdk</code>, <code>@arcora/sdk-react</code></li>
+<li><strong>Permit2-based settlement</strong> — customer signs <em>once</em>, no on-chain approve, no gas</li>
+<li><strong>Custody-escrow gateway (V11)</strong> — funds sit in the contract, not the merchant wallet, until the 7-day refund window closes</li>
+<li><strong>Atomic FX via Circle App Kit Swap</strong> — RFQ-priced USDC ⇄ EURC on Arc's maker network</li>
+<li><strong>Same-token fast path</strong> — no swap when payIn = payout</li>
+<li><strong>Refund within window</strong> — merchant or refund-delegate returns the customer's exact <code>amountOut</code></li>
+<li><strong>Admin recovery</strong> — abandoned-merchant escrows sweepable after 14d (refund + recovery windows)</li>
+<li><strong>Compliance gate</strong> — config-flip Elliptic / TRM Labs hooks (Noop on testnet today)</li>
+<li><strong>HMAC-signed webhooks</strong> — <code>invoice.paid</code> / <code>refunded</code> / <code>failed</code> / <code>claimed</code> with SSRF re-validation</li>
+<li><strong>Two npm packages + WooCommerce plugin</strong> — Shopify next</li>
 </ul>
 <footer>arcora · 2026</footer>
 </section>
@@ -485,46 +495,26 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="the-killer-feature-bet">The killer-feature bet</h2>
-<table>
-<thead>
-<tr>
-<th>Layer</th>
-<th>v1.0</th>
-<th>v2.0</th>
-<th>v3.0</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Customer's chain</td>
-<td>Arc</td>
-<td>Any <strong>CCTP-supported EVM</strong></td>
-<td>Any chain (Solana, Sui…)</td>
-</tr>
-<tr>
-<td>Customer's token</td>
-<td>USDC, EURC</td>
-<td>+ USDT, PYUSD, DAI, regional</td>
-<td>+ native ETH, any ERC-20</td>
-</tr>
-<tr>
-<td>Signatures</td>
-<td>1–2</td>
-<td>2–3</td>
-<td><strong>1 intent</strong></td>
-</tr>
-<tr>
-<td>Merchant settles in</td>
-<td>USDC or EURC on Arc</td>
-<td>Any supported stable on Arc</td>
-<td>Same</td>
-</tr>
-</tbody>
-</table>
-<p>We are at v1.0 today. v2.0 — <em>crosschain via CCTP</em> — is the differentiator other stablecoin processors can't ship without rebuilding their stack.</p>
+<h2 id="architecture">Architecture</h2>
+<pre is="marp-pre" data-auto-scaling="downscale-only"><code>Customer wallet ─(Permit2 EIP-712)──→ Arcora app  ──→ relayer queue
+                                          (Vercel)        │
+                                                          ▼
+                                     ┌──── Relayer (VPS, Vault-backed key) ────┐
+                                     │  pulls Permit2  →  App Kit Swap → settle│
+                                     └──────────────────────┬──────────────────┘
+                                                            ▼
+                                            ArcFXGatewayV11 (Arc testnet)
+                                              │
+                                              ├─ escrow[globalId]  (7d refund window)
+                                              ├─ protocolFeesAccrued
+                                              └─ emit InvoicePaid + SettlementContext
+
+Indexer (VPS)  ──→ reconciles chain → Neon Postgres
+Webhooks (VPS) ──→ HMAC-sign + deliver to merchant endpoints
+</code></pre>
+<p>One repo. One team. One deploy graph. The contract is intentionally small — invoice lifecycle + escrow + fee accumulator.</p>
 <footer>arcora · 2026</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="8" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
@@ -581,24 +571,67 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="architecture">Architecture</h2>
-<pre is="marp-pre" data-auto-scaling="downscale-only"><code>Customer wallet ─(approve + pay)─→ ArcFXGateway (immutable)
-                                       │
-                                       ├─ same-token? → direct transfer
-                                       │
-                                       └─ swap? → OracleAMM (Chainlink-priced ± 4 bps)
-                                                  │
-                                                  └─ payout token → merchant
-                                                  └─ fee accrued for refund pool
-                                       │
-                                       emit InvoicePaid
-
-VPS daemons    ─→ index events 30s     ─→ Neon Postgres mirror
-              ─→ HMAC webhook 10s      ─→ merchant endpoint
-</code></pre>
-<p>Gateway, AMM, oracle, indexer, webhook dispatcher, hosted app, SDK — all in one repo, one team, one deploy graph.</p>
+<h2 id="arcora-sits-above-arc-primitives">Arcora sits <em>above</em> Arc primitives</h2>
+<p>Arc itself ships first-party financial rails. Arcora is the <strong>merchant abstraction layer</strong> on top — the shape Stripe Checkout has on top of card networks.</p>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Arc primitive</th>
+<th>Arcora</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FX swap on Arc</td>
+<td>App Kit Swap</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Crosschain USDC bridge</td>
+<td>App Kit Bridge</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Server-side wallets</td>
+<td>Circle DCW</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Compliance adapters</td>
+<td>App Kit hooks</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Invoice lifecycle + custody escrow</td>
+<td>—</td>
+<td><strong>ArcFXGatewayV11</strong></td>
+</tr>
+<tr>
+<td>Hosted checkout + Permit2 flow</td>
+<td>—</td>
+<td><code>/i/[invoiceId]</code></td>
+</tr>
+<tr>
+<td>Merchant dashboard + treasury</td>
+<td>—</td>
+<td><code>/m/*</code></td>
+</tr>
+<tr>
+<td>Refund / claim primitives</td>
+<td>—</td>
+<td><strong><code>refundInvoice</code> · <code>claim</code></strong></td>
+</tr>
+<tr>
+<td>TypeScript SDK + React + WordPress</td>
+<td>—</td>
+<td><code>@arcora/sdk</code> family</td>
+</tr>
+</tbody>
+</table>
+<p>We delegate to Arc primitives where they exist. v2.0 ships as an <strong>App Kit Bridge</strong> integration, not a re-implementation of CCTP.</p>
 <footer>arcora · 2026</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="9" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
@@ -655,72 +688,46 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="arcora-sits-above-arc-primitives">Arcora sits <em>above</em> Arc primitives</h2>
-<p>Arc itself ships first-party financial rails. Arcora is the <strong>merchant abstraction layer</strong> on top — same shape Stripe Checkout has on top of card-network rails.</p>
+<h2 id="where-we-are">Where we are</h2>
+<div>
 <table>
 <thead>
 <tr>
-<th>Concern</th>
-<th>Arc primitive</th>
-<th>Arcora</th>
+<th>Surface</th>
+<th>State</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Enterprise FX (RFQ + escrow)</td>
-<td>StableFX</td>
-<td>—</td>
+<td>Contracts (Foundry)</td>
+<td><strong>77 tests passing</strong> — including a 256-run fuzz on protocol-fee invariant</td>
 </tr>
 <tr>
-<td>Generic A→B swap</td>
-<td>App Kit Swap</td>
-<td>—</td>
+<td>App vitest suite</td>
+<td>unit + route handlers for the full /api/* surface</td>
 </tr>
 <tr>
-<td>Crosschain USDC bridge</td>
-<td>App Kit Bridge</td>
-<td>—</td>
+<td>SDK + React + WordPress plugin</td>
+<td>published, in-tree, integrated</td>
 </tr>
 <tr>
-<td>Server wallet management</td>
-<td>Circle Developer-Controlled Wallets</td>
-<td>—</td>
+<td>Live deployment</td>
+<td><code>arcorapay.xyz</code> aliased to Vercel, <code>arcora-shop.vercel.app</code> dogfooding the checkout</td>
 </tr>
 <tr>
-<td>Compliance (Elliptic / TRM Labs)</td>
-<td>App Kit hooks</td>
-<td>—</td>
+<td>Custody-escrow contract</td>
+<td>V11 live on Arc testnet (<code>0x07BAC123…aE3a3</code>)</td>
 </tr>
 <tr>
-<td>Invoice → atomic settle in <strong>exact</strong> payout token</td>
-<td>—</td>
-<td><strong>ArcFXGateway</strong></td>
-</tr>
-<tr>
-<td>Hosted checkout link + customer wallet flow</td>
-<td>—</td>
-<td><code>/i/[invoiceId]</code></td>
-</tr>
-<tr>
-<td>Refund-in-payout-token + protocol-fee return</td>
-<td>—</td>
-<td><strong><code>refundInvoice()</code></strong></td>
-</tr>
-<tr>
-<td>Per-merchant treasury reconciliation</td>
-<td>—</td>
-<td><code>/m/treasury</code></td>
-</tr>
-<tr>
-<td>Three-line npm SDK</td>
-<td>—</td>
-<td><code>@arcora/sdk</code></td>
+<td>Relayer + indexer + webhooks</td>
+<td>running on a single host, Vault-isolated key</td>
 </tr>
 </tbody>
 </table>
-<p>We delegate to Arc primitives where they fit — v2.0 crosschain ships as an <strong>App Kit Bridge</strong> integration, not a re-implementation of CCTP. Stripe doesn't reinvent ACH; we don't reinvent rails.</p>
+</div>
+<p>Pre-revenue. Testnet. No volume claims — Arc itself is testnet, and so are we.</p>
 <footer>arcora · 2026</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="10" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
@@ -777,47 +784,23 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="proof--testnet-metrics">Proof — testnet metrics</h2>
-<div>
-<table>
-<thead>
-<tr>
-<th>Surface</th>
-<th>Number</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Foundry tests passing</td>
-<td><strong>117</strong> (unit + fuzz 10k runs + invariant 256×64)</td>
-</tr>
-<tr>
-<td>Vitest tests passing</td>
-<td><strong>46</strong> (auth, crypto, schema, API routes, components)</td>
-</tr>
-<tr>
-<td>Live txs end-to-end</td>
-<td><strong>4 distinct flows</strong> (same-token + swap, both with refund)</td>
-</tr>
-<tr>
-<td>Contract bytecode</td>
-<td><strong>2.1M gas</strong> to deploy (well under block limit)</td>
-</tr>
-<tr>
-<td>Deploy cost</td>
-<td>&lt; $0.10 USDC (Arc settles gas in USDC, not ETH)</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Sample on-chain proofs:</strong></p>
+<h2 id="why-arc-why-now">Why Arc, why now</h2>
+<p><strong>Arc</strong> is Circle's stablecoin-native L1, purpose-built for payment rails:</p>
 <ul>
-<li>Same-token pay: <code>0x3f2fc3ff…84ef08</code></li>
-<li>EURC→USDC swap pay: <code>0xa35cdab6…45ae8</code></li>
-<li>Refund (swap): <code>0x2dc24ed9…733cc42</code></li>
+<li><strong>USDC as the gas token</strong> — no native ETH friction for the merchant or the relayer</li>
+<li><strong>CCTP V2</strong> for crosschain USDC, native to Arc</li>
+<li><strong>App Kit Swap + Bridge</strong> as supported primitives, not third-party DEXes</li>
+<li><strong>Stablecoin-first economy</strong> by design</li>
 </ul>
-</div>
+<p><strong>Now</strong> because:</p>
+<ul>
+<li>Stablecoin payment volume crossed $50B/month in 2025</li>
+<li>Circle Gateway + CCTP V2 unlocked native unified balances across chains</li>
+<li>Arc testnet is open and stable; mainnet is on the horizon</li>
+<li>Which stablecoin checkout becomes the default on Arc is still up for grabs</li>
+</ul>
 <footer>arcora · 2026</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="11" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
@@ -874,22 +857,56 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="why-arc-why-now">Why Arc, why now</h2>
-<p><strong>Arc</strong> is Circle's stablecoin-native L1 — purpose-built for the rails Arcora needs:</p>
-<ul>
-<li><strong>USDC is the gas token</strong> — no native ETH friction</li>
-<li><strong>CCTP V2 destination domain <code>26</code></strong> is live → any CCTP source chain bridges natively</li>
-<li><strong>Stablecoin-first economy</strong> by design — fee mechanics + sequencer policy assume payment volume, not memecoin churn</li>
-</ul>
-<p><strong>Now</strong> because:</p>
-<ul>
-<li>Stablecoin payment volume crossed $50B/month in 2025</li>
-<li>Circle Gateway + CCTP V2 unlocked native unified balances across chains</li>
-<li>Arc testnet is open + supported, mainnet on the horizon</li>
-</ul>
-<p>We are early enough that <em>which</em> stablecoin checkout becomes the default on Arc is still up for grabs.</p>
+<h2 id="the-roadmap-that-defines-the-moat">The roadmap that defines the moat</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:center"></th>
+<th style="text-align:left"></th>
+<th style="text-align:left"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong>v1.0</strong> <span class="pill pill-teal">live</span></td>
+<td style="text-align:left">Arc-only USDC / EURC</td>
+<td style="text-align:left">shipped 2026-04</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>v1.1</strong> <span class="pill pill-teal">live</span></td>
+<td style="text-align:left">Custody escrow, compliance hooks, Vault-isolated relayer key</td>
+<td style="text-align:left">shipped 2026-05</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>v1.x</strong></td>
+<td style="text-align:left">Multi-stable (USDT, PYUSD, DAI, USDe) on Arc</td>
+<td style="text-align:left">in flight, mainnet-bound</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>v2.0</strong></td>
+<td style="text-align:left">Crosschain USDC via Arc App Kit Bridge (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex)</td>
+<td style="text-align:left">spec'd</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>v2.1</strong></td>
+<td style="text-align:left">Source-side aggregator — any token on the source chain (native ETH, any ERC-20)</td>
+<td style="text-align:left">following</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>v2.2</strong></td>
+<td style="text-align:left">Solana / Sui / non-EVM</td>
+<td style="text-align:left">following</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>v3.0</strong></td>
+<td style="text-align:left">One-signature intent solver — full Stripe-like UX</td>
+<td style="text-align:left">endgame</td>
+</tr>
+</tbody>
+</table>
+<p><strong>v2.0</strong> — crosschain via App Kit Bridge — is the differentiator. Each row builds on the previous one <em>without</em> a rewrite.</p>
 <footer>arcora · 2026</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="12" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
@@ -946,51 +963,19 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="roadmap">Roadmap</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:center"></th>
-<th style="text-align:left"></th>
-<th style="text-align:left"></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><strong>v1.0</strong> <span class="pill pill-teal">live</span></td>
-<td style="text-align:left">Arc-only USDC ⇄ EURC + refunds + treasury + npm SDK</td>
-<td style="text-align:left">shipped 2026-04-29</td>
-</tr>
-<tr>
-<td style="text-align:center"><strong>v1.x</strong></td>
-<td style="text-align:left">Any stablecoin on Arc (USDT, PYUSD, DAI, regional)</td>
-<td style="text-align:left">spec drafted</td>
-</tr>
-<tr>
-<td style="text-align:center"><strong>v2.0</strong></td>
-<td style="text-align:left">Crosschain USDC source via CCTP (Eth, Arb, Base, OP, Polygon, Avalanche, Linea, Codex)</td>
-<td style="text-align:left">next quarter</td>
-</tr>
-<tr>
-<td style="text-align:center"><strong>v2.1</strong></td>
-<td style="text-align:left">Source-side DEX aggregator — pay with native ETH or any ERC-20</td>
-<td style="text-align:left">following</td>
-</tr>
-<tr>
-<td style="text-align:center"><strong>v2.2</strong></td>
-<td style="text-align:left">Solana / Sui / non-EVM</td>
-<td style="text-align:left">following</td>
-</tr>
-<tr>
-<td style="text-align:center"><strong>v3.0</strong></td>
-<td style="text-align:left">One-signature intent solver — full Stripe-like UX</td>
-<td style="text-align:left">endgame</td>
-</tr>
-</tbody>
-</table>
-<p>Each row builds on the previous one without a rewrite. Shipping v1 was the proof.</p>
+<h2 id="what-stands-between-us-and-mainnet">What stands between us and mainnet</h2>
+<ol>
+<li><strong>Arc Network mainnet launch</strong> (out of our control — we follow)</li>
+<li><strong>External audit</strong> (Spearbit / Cantina / Sherlock RFP — trigger: first paying merchant or funding round)</li>
+<li><strong>Multisig admin migration</strong> (single EOA today → 2-of-3 or 3-of-5)</li>
+<li><strong>KYB go-live</strong> (<code>ManualKybProvider</code> + <code>PersonaProvider</code> adapters scaffolded)</li>
+<li><strong>Vault hardening</strong> (TLS listener, dedicated Unix user, HSM-isolated signer)</li>
+<li><strong>Real Chainlink price feeds</strong></li>
+<li><strong>Bug bounty</strong> (Immunefi engagement with first paying merchant)</li>
+</ol>
+<p>Each row is scoped. Items 5–6 are reversible single-host changes. Items 1–4 and 7 need external coordination.</p>
 <footer>arcora · 2026</footer>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="13" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
@@ -1047,97 +1032,23 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
-<header>Arcora · Stablecoin Checkout &amp; Settlement</header>
-<h2 id="pre-mainnet-bars">Pre-mainnet bars</h2>
-<p>Before Arcora goes live on Arc mainnet:</p>
-<ul>
-<li><strong>Real Chainlink price feeds</strong> (replace <code>MockChainlinkFeed</code> testnet pattern; oracle-keepalive timer becomes obsolete)</li>
-<li><strong>External security audit</strong> + Slither / Mythril gate</li>
-<li><strong>KYB / merchant onboarding</strong> flow (testnet is wallet-only)</li>
-<li><strong>Domain &amp; branding</strong>: <code>arcorapay.com</code> registered + <code>checkout.</code> / <code>dashboard.</code> / <code>docs.</code> subdomains</li>
-<li><strong>Treasury reserve policy</strong> (refund float, fee-withdrawal cadence)</li>
-</ul>
-<p>These are scoped, not exploratory. Each one is a 1–2 week task.</p>
-<footer>arcora · 2026</footer>
-</section>
-</foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="14" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-theme="default" data-style="section {
-  font-family: &quot;Inter&quot;, -apple-system, BlinkMacSystemFont, sans-serif;
-  padding: 80px 96px;
-  font-size: 28px;
-  line-height: 1.5;
-}
-h1 { color: #0b1426; font-size: 64px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px; }
-h2 { color: #0b1426; font-size: 40px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 24px; }
-h3 { color: #2563ff; font-size: 24px; font-weight: 600; }
-strong { color: #2563ff; }
-em { color: #00c2a8; font-style: normal; font-weight: 600; }
-blockquote { border-left: 4px solid #00c2a8; padding-left: 24px; color: #5b6478; font-style: italic; }
-code { background: #e6ecf2; color: #0b1426; padding: 2px 8px; border-radius: 4px; font-size: 22px; }
-pre { background: #0b1426; color: #e6ecf2; padding: 20px 24px; border-radius: 12px; font-size: 18px; line-height: 1.6; }
-pre code { background: transparent; color: #e6ecf2; padding: 0; }
-table { font-size: 22px; border-collapse: collapse; }
-th { background: #e6ecf2; padding: 10px 16px; text-align: left; font-weight: 600; }
-td { padding: 10px 16px; border-bottom: 1px solid rgba(11, 20, 38, 0.08); }
-ul, ol { padding-left: 28px; }
-li { margin-bottom: 8px; }
-section.cover { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
-section.cover h1 { font-size: 96px; }
-section.cover h2 { font-size: 32px; color: #5b6478; font-weight: 400; margin-top: 8px; }
-footer, header { color: #5b6478; font-size: 16px; }
-.pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
-.pill-teal { background: #00c2a8; }
-.pill-gray { background: #e6ecf2; color: #0b1426; }
-" lang="tr-TR" data-marpit-pagination="14" style="--paginate:true;--background-color:#ffffff;--color:#0b1426;--header:Arcora · Stablecoin Checkout &amp; Settlement;--footer:arcora · 2026;--theme:default;--style:section {
-  font-family: &quot;Inter&quot;, -apple-system, BlinkMacSystemFont, sans-serif;
-  padding: 80px 96px;
-  font-size: 28px;
-  line-height: 1.5;
-}
-h1 { color: #0b1426; font-size: 64px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px; }
-h2 { color: #0b1426; font-size: 40px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 24px; }
-h3 { color: #2563ff; font-size: 24px; font-weight: 600; }
-strong { color: #2563ff; }
-em { color: #00c2a8; font-style: normal; font-weight: 600; }
-blockquote { border-left: 4px solid #00c2a8; padding-left: 24px; color: #5b6478; font-style: italic; }
-code { background: #e6ecf2; color: #0b1426; padding: 2px 8px; border-radius: 4px; font-size: 22px; }
-pre { background: #0b1426; color: #e6ecf2; padding: 20px 24px; border-radius: 12px; font-size: 18px; line-height: 1.6; }
-pre code { background: transparent; color: #e6ecf2; padding: 0; }
-table { font-size: 22px; border-collapse: collapse; }
-th { background: #e6ecf2; padding: 10px 16px; text-align: left; font-weight: 600; }
-td { padding: 10px 16px; border-bottom: 1px solid rgba(11, 20, 38, 0.08); }
-ul, ol { padding-left: 28px; }
-li { margin-bottom: 8px; }
-section.cover { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
-section.cover h1 { font-size: 96px; }
-section.cover h2 { font-size: 32px; color: #5b6478; font-weight: 400; margin-top: 8px; }
-footer, header { color: #5b6478; font-size: 16px; }
-.pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
-.pill-teal { background: #00c2a8; }
-.pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
 <h2 id="ask">Ask</h2>
 <div>
-<p>For <strong>builders / partners</strong>:</p>
-<ul>
-<li>Try the demo, integrate the SDK, file issues</li>
-<li><code>npm install @arcora/sdk</code> — it works today</li>
-<li>GitHub: <a href="https://github.com/Kubudak90/arc-fx-gateway">github.com/Kubudak90/arc-fx-gateway</a></li>
-</ul>
-<p>For <strong>investors / Arc ecosystem</strong>:</p>
-<ul>
-<li>v1 ships on testnet <strong>today</strong>. v2 (crosschain) is the wedge.</li>
-<li>Looking for: ecosystem support on Arc mainnet, pre-seed for KYB + audit + domain spend, distribution partners for hosted-checkout.</li>
-</ul>
-<p>For <strong>everyone</strong>:</p>
-<ul>
-<li>The customer-side problem (&quot;right token, wrong chain&quot;) is real. Arcora's bet is that the answer is <em>one checkout, not five steps</em>.</li>
-</ul>
+<p><strong>For builders / partners:</strong><br />
+Try the demo, integrate the SDK, file issues.<br />
+<a href="https://www.npmjs.com/package/@arcora/sdk"><code>npm install @arcora/sdk</code></a> — it works today.<br />
+GitHub: <a href="https://github.com/Kubudak90/arc-fx-gateway"><code>Kubudak90/arc-fx-gateway</code></a></p>
+<p><strong>For investors / Arc ecosystem:</strong><br />
+v1 ships on testnet today. v2 (crosschain) is the wedge.<br />
+Looking for: ecosystem support on Arc mainnet, pre-seed for KYB + audit + branding, distribution partners.</p>
+<p><strong>For everyone:</strong><br />
+The customer-side problem — <em>right token, wrong chain</em> — is real. Arcora's bet is one checkout, not five steps.</p>
 </div>
 <footer>arcora · 2026</footer>
 </section>
-</foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="15" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-class="cover" data-theme="default" data-style="section {
+</foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="14" data-paginate="true" data-background-color="#ffffff" data-color="#0b1426" data-header="Arcora · Stablecoin Checkout &amp; Settlement" data-footer="arcora · 2026" data-class="cover" data-theme="default" data-style="section {
   font-family: &quot;Inter&quot;, -apple-system, BlinkMacSystemFont, sans-serif;
   padding: 80px 96px;
   font-size: 28px;
@@ -1164,7 +1075,7 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-" lang="tr-TR" class="cover" data-marpit-pagination="15" style="--paginate:true;--background-color:#ffffff;--color:#0b1426;--header:Arcora · Stablecoin Checkout &amp; Settlement;--footer:arcora · 2026;--class:cover;--theme:default;--style:section {
+" lang="tr-TR" class="cover" data-marpit-pagination="14" style="--paginate:true;--background-color:#ffffff;--color:#0b1426;--header:Arcora · Stablecoin Checkout &amp; Settlement;--footer:arcora · 2026;--class:cover;--theme:default;--style:section {
   font-family: &quot;Inter&quot;, -apple-system, BlinkMacSystemFont, sans-serif;
   padding: 80px 96px;
   font-size: 28px;
@@ -1191,12 +1102,12 @@ footer, header { color: #5b6478; font-size: 16px; }
 .pill { display: inline-block; background: #2563ff; color: white; padding: 4px 14px; border-radius: 999px; font-size: 16px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 .pill-teal { background: #00c2a8; }
 .pill-gray { background: #e6ecf2; color: #0b1426; }
-;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="15" data-size="16:9">
+;color:#0b1426;background-color:#ffffff;background-image:none;" data-marpit-pagination-total="14" data-size="16:9">
 <header>Arcora · Stablecoin Checkout &amp; Settlement</header>
 
 <p><span class="pill pill-teal">Demo · Q&amp;A</span></p>
 <h1 id="pay-anywhere-settle-on-arc">Pay anywhere. Settle on Arc.</h1>
-<h2 id="arcoradev-soon--arc-fx-gatewayvercelapp--arcorasdk">arcora.dev (soon) · arc-fx-gateway.vercel.app · @arcora/sdk</h2>
+<h2 id="arcorapayxyz--arcorasdk--arc-fx-gateway-github"><code>arcorapay.xyz</code> · <code>@arcora/sdk</code> · <code>arc-fx-gateway</code> (GitHub)</h2>
 <br />
 <p>Hüseyin · 2026</p>
 <footer>arcora · 2026</footer>

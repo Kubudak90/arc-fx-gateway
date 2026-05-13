@@ -1,12 +1,9 @@
 @page {
   size: A4;
-  margin: 28mm 22mm 26mm 22mm;
+  margin: 24mm 22mm 24mm 22mm;
 }
 
-* {
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
+* { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
 html, body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -14,14 +11,23 @@ html, body {
   line-height: 1.55;
   color: #0b1426;
   background: #ffffff;
+  /* widows/orphans are inherited; set generously so paragraphs don't split badly. */
+  widows: 3;
+  orphans: 3;
 }
+
+/* Paragraphs and block-level elements should not split awkwardly */
+p, li, blockquote { widows: 3; orphans: 3; }
 
 h1, h2, h3, h4, h5, h6 {
   color: #0b1426;
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.25;
+  /* All headings must take at least one paragraph of body with them */
   page-break-after: avoid;
+  break-after: avoid;
+  page-break-inside: avoid;
 }
 
 /* Document title (first H1) */
@@ -42,17 +48,20 @@ h1 + p {
   margin-bottom: 8pt;
 }
 
-h1 + p + blockquote {
-  margin-top: 14pt;
-}
-
+/* Major section headers force a new page so nothing falls into a thin
+   widow at the bottom of the previous one. */
 h2 {
   font-size: 18pt;
-  margin: 28pt 0 12pt;
+  margin: 0 0 12pt;
   padding-bottom: 4pt;
   border-bottom: 1px solid #e6ecf2;
-  page-break-before: auto;
+  page-break-before: always;
+  break-before: page;
 }
+
+/* The TOC (first h2) and the very first h2 after the title shouldn't force
+   an immediate page break — that would leave the cover blank. */
+body > h2:first-of-type { page-break-before: avoid; break-before: avoid; }
 
 h3 {
   font-size: 13pt;
@@ -69,7 +78,10 @@ h4 {
 
 p {
   margin: 0 0 8pt;
-  text-align: left;
+  text-align: left;        /* no justify — avoids the river / float-shift artifacts */
+  hyphens: none;
+  -webkit-hyphens: none;
+  hanging-punctuation: first;
 }
 
 p strong, li strong { color: #2563ff; font-weight: 600; }
@@ -86,16 +98,15 @@ blockquote {
   color: #0b1426;
   font-style: italic;
   font-size: 10.5pt;
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
-
 blockquote p { margin: 0; }
 
-ul, ol {
-  margin: 0 0 10pt;
-  padding-left: 22pt;
-}
+ul, ol { margin: 0 0 10pt; padding-left: 22pt; }
 li { margin-bottom: 3pt; }
 li > p { margin-bottom: 4pt; }
+li { page-break-inside: avoid; break-inside: avoid; }
 
 code {
   background: #f1f4f8;
@@ -105,6 +116,7 @@ code {
   font-family: "SF Mono", ui-monospace, "JetBrains Mono", "Roboto Mono", monospace;
   font-size: 9pt;
   border: 1px solid #e6ecf2;
+  white-space: nowrap;       /* keep short inline addresses on one line */
 }
 
 pre {
@@ -115,9 +127,14 @@ pre {
   overflow-x: auto;
   font-family: "SF Mono", ui-monospace, monospace;
   font-size: 8.5pt;
-  line-height: 1.45;
+  line-height: 1.5;
   margin: 10pt 0;
   page-break-inside: avoid;
+  break-inside: avoid;
+  /* The flow diagrams are wider than typical prose; let them breathe to the
+     full content width without overflowing the page. */
+  max-width: 100%;
+  white-space: pre;
 }
 pre code {
   background: transparent;
@@ -125,6 +142,7 @@ pre code {
   padding: 0;
   border: none;
   font-size: inherit;
+  white-space: pre;
 }
 
 table {
@@ -133,14 +151,18 @@ table {
   margin: 10pt 0 14pt;
   font-size: 9.5pt;
   page-break-inside: avoid;
+  break-inside: avoid;
+  table-layout: auto;
 }
 
-thead { background: #f1f4f8; }
+thead { background: #f1f4f8; display: table-header-group; }
 th, td {
   text-align: left;
   padding: 6pt 8pt;
   border-bottom: 1px solid #e6ecf2;
   vertical-align: top;
+  word-break: normal;
+  overflow-wrap: anywhere;   /* long contract addresses wrap inside cells */
 }
 th {
   font-weight: 600;
@@ -157,20 +179,18 @@ hr {
   margin: 22pt 0;
 }
 
-/* Cover-style first page: nicer title block */
-body > h1:first-child {
-  margin-top: 24pt;
-}
-
-/* Avoid orphaned headers */
-h2, h3, h4 { page-break-after: avoid; }
-table, pre, blockquote { page-break-inside: avoid; }
 img { max-width: 100%; }
 
-/* Table of contents (rendered ordered list right after the cover) */
-h2:first-of-type + ol { font-size: 10pt; }
+/* Margin-note + footer text */
+em { color: inherit; font-style: italic; }
 
-/* Slight emphasis on Arc Network blue values inline */
-code:contains("0x"), td code, p code {
-  font-variant-numeric: tabular-nums;
+/* The italic "this document captures live state at the date stamped above"
+   trailing footer should sit calmly. */
+body > p:last-of-type {
+  font-size: 9pt;
+  color: #5b6478;
+  font-style: italic;
+  border-top: 1px solid #e6ecf2;
+  padding-top: 10pt;
+  margin-top: 14pt;
 }

@@ -43,22 +43,22 @@ footer: "arcora · 2026"
 
 # Arcora
 
-## Customer pays with what they have. Merchant settles in the stablecoin they want. Atomically, on Arc.
+## The customer pays with one signature. The merchant settles in the stablecoin they want, deterministically. On Arc.
 
 <br>
 
-`v1.0.2` · live on Arc testnet · 117 contract tests passing
+`v1.1.0` · live on Arc testnet · `arcorapay.xyz`
 
 ---
 
 ## The problem
 
-Stablecoins are now **everywhere** — USDC alone moved $5T in 2025. But for a merchant accepting them, payment is still:
+Stablecoins moved **~$5T in 2025**. The holder-to-holder UX is fine. The merchant UX is not:
 
-- Multiple chains
-- Multiple stables (USDC, EURC, USDT, PYUSD, DAI, regional pegs…)
-- Custodial off-ramps that take days and 1.5%
-- Or a thicket of bridges and approvals every customer has to learn
+- The customer's chain is not the merchant's chain.
+- The customer's token is not the merchant's token.
+- Bridges, DEXes, approval clicks — each one is a place the customer abandons.
+- The fallback is a custodial off-ramp that takes *days* and *1–2%*.
 
 > "I have USDC on Arbitrum. The merchant wants EURC on Arc. Five clicks and twenty minutes later I'm not sure if my money got there."
 
@@ -66,25 +66,31 @@ Stablecoins are now **everywhere** — USDC alone moved $5T in 2025. But for a m
 
 ## What Arcora is
 
-**A Stripe-like checkout for stablecoin payments**, built around one bet:
+**A Stripe-shaped checkout for stablecoin payments.**
 
-> **Customer pays from where they are, with whatever they have.<br>Merchant receives their preferred stablecoin on Arc.**
+The merchant invoices in their preferred stable. The customer signs once — a Permit2 EIP-712 message, no transaction, no native gas. Arcora's relayer pulls the funds, runs the swap on Circle's App Kit, and deposits the merchant's stable into a 7-day custody escrow that the merchant claims permissionlessly.
 
-One on-chain transaction. One signature surface for the customer. The merchant never has to think about the customer's chain, their token, or the FX in between.
+> Customer pays from where they are, with whatever they have.
+> Merchant receives the stable they want, on Arc.
+
+<br>
+
+**No token. No custody. No FX gymnastics for the merchant.**
 
 ---
 
-## Live demo — try it now
+## Live, right now
 
-<div style="font-size: 22px;">
+<div style="font-size: 24px;">
 
-**Demo merchant:** [arc-fx-demo.vercel.app](https://arc-fx-demo.vercel.app) · "Acme Coffee, €4.50"
+**Hosted checkout + dashboard:** [`arcorapay.xyz`](https://arcorapay.xyz)
 
-**Hosted checkout app:** [arc-fx-gateway.vercel.app](https://arc-fx-gateway.vercel.app)
+**Docs:** [`docs.arcorapay.xyz`](https://docs.arcorapay.xyz)
 
-**Merchant dashboard:** /m/dashboard · /m/treasury
+**npm:** `npm install @arcora/sdk @arcora/sdk-react`
 
-**On-chain:** Arc testnet · Gateway `0x7c1137…F25F208Fb7a3`
+**Gateway (V11, Arc testnet):**
+[`0x07BAC123…aE3a3`](https://testnet.arcscan.app/address/0x07BAC123A682D24d3eC439ce454cA8AC64eAe3A3)
 
 </div>
 
@@ -94,177 +100,168 @@ npm install @arcora/sdk
 
 ---
 
-## How it works — three steps
+## How it works — three touch points
 
 | | | |
 |:---:|:---|:---|
-| **01** | **Merchant creates an invoice** | 3-line SDK call or 1 click in the dashboard |
-| **02** | **Customer pays at the checkout** | Connect wallet, approve, pay — one tx |
-| **03** | **Settles on Arc, atomically** | Swap (if needed) + payout + fee + event, in a single tx |
+| **01** | **Merchant creates an invoice** | One API call (or one click in `/m/dashboard`) |
+| **02** | **Customer signs once at the checkout** | Permit2 EIP-712 — no transaction, no gas |
+| **03** | **Relayer settles atomically** | Permit2 pull → App Kit Swap → `settleInvoice` → custody escrow |
 
 ```ts
 import { Arcora } from "@arcora/sdk";
 
-Arcora.init({ apiKey });
-const inv = await Arcora.createInvoice({ amountUsdc: 49.99, payInToken: "EURC" });
-Arcora.openCheckout(inv);
+const arcora = new Arcora({ apiKey, environment: "testnet" });
+const inv = await arcora.createInvoice({
+  amountUsdc: 49.99,
+  payInToken: "EURC",
+  successUrl: "https://yoursite.com/orders/done",
+});
+arcora.openCheckout(inv);
 ```
 
 ---
 
-## What's live in v1.0.2
+## What ships in v1.1
 
-- ✅ **Hosted checkout** with SIWE merchant auth, dashboard, QR sharing
-- ✅ **Atomic FX settlement** via Chainlink-priced OracleAMM (USDC ⇄ EURC)
-- ✅ **Same-token fast path** when payIn = payout (no swap, no slippage)
-- ✅ **Refunds** — `refundInvoice()` returns the customer's payout + the protocol fee back to the merchant from accrued
-- ✅ **Treasury dashboard** — per-stable net received, gross volume, refunded, fees, activity feed
-- ✅ **HMAC-signed webhooks** — `invoice.paid`, `invoice.refunded`, retry with exponential backoff
-- ✅ **Two npm packages** — `@arcora/sdk`, `@arcora/sdk-react`
-
----
-
-## The killer-feature bet
-
-| Layer | v1.0 | v2.0 | v3.0 |
-|---|---|---|---|
-| Customer's chain | Arc | Any **CCTP-supported EVM** | Any chain (Solana, Sui…) |
-| Customer's token | USDC, EURC | + USDT, PYUSD, DAI, regional | + native ETH, any ERC-20 |
-| Signatures | 1–2 | 2–3 | **1 intent** |
-| Merchant settles in | USDC or EURC on Arc | Any supported stable on Arc | Same |
-
-We are at v1.0 today. v2.0 — *crosschain via CCTP* — is the differentiator other stablecoin processors can't ship without rebuilding their stack.
+- **Permit2-based settlement** — customer signs *once*, no on-chain approve, no gas
+- **Custody-escrow gateway (V11)** — funds sit in the contract, not the merchant wallet, until the 7-day refund window closes
+- **Atomic FX via Circle App Kit Swap** — RFQ-priced USDC ⇄ EURC on Arc's maker network
+- **Same-token fast path** — no swap when payIn = payout
+- **Refund within window** — merchant or refund-delegate returns the customer's exact `amountOut`
+- **Admin recovery** — abandoned-merchant escrows sweepable after 14d (refund + recovery windows)
+- **Compliance gate** — config-flip Elliptic / TRM Labs hooks (Noop on testnet today)
+- **HMAC-signed webhooks** — `invoice.paid` / `refunded` / `failed` / `claimed` with SSRF re-validation
+- **Two npm packages + WooCommerce plugin** — Shopify next
 
 ---
 
 ## Architecture
 
 ```
-Customer wallet ─(approve + pay)─→ ArcFXGateway (immutable)
-                                       │
-                                       ├─ same-token? → direct transfer
-                                       │
-                                       └─ swap? → OracleAMM (Chainlink-priced ± 4 bps)
-                                                  │
-                                                  └─ payout token → merchant
-                                                  └─ fee accrued for refund pool
-                                       │
-                                       emit InvoicePaid
+Customer wallet ─(Permit2 EIP-712)──→ Arcora app  ──→ relayer queue
+                                          (Vercel)        │
+                                                          ▼
+                                     ┌──── Relayer (VPS, Vault-backed key) ────┐
+                                     │  pulls Permit2  →  App Kit Swap → settle│
+                                     └──────────────────────┬──────────────────┘
+                                                            ▼
+                                            ArcFXGatewayV11 (Arc testnet)
+                                              │
+                                              ├─ escrow[globalId]  (7d refund window)
+                                              ├─ protocolFeesAccrued
+                                              └─ emit InvoicePaid + SettlementContext
 
-VPS daemons    ─→ index events 30s     ─→ Neon Postgres mirror
-              ─→ HMAC webhook 10s      ─→ merchant endpoint
+Indexer (VPS)  ──→ reconciles chain → Neon Postgres
+Webhooks (VPS) ──→ HMAC-sign + deliver to merchant endpoints
 ```
 
-Gateway, AMM, oracle, indexer, webhook dispatcher, hosted app, SDK — all in one repo, one team, one deploy graph.
+One repo. One team. One deploy graph. The contract is intentionally small — invoice lifecycle + escrow + fee accumulator.
 
 ---
 
 ## Arcora sits *above* Arc primitives
 
-Arc itself ships first-party financial rails. Arcora is the **merchant abstraction layer** on top — same shape Stripe Checkout has on top of card-network rails.
+Arc itself ships first-party financial rails. Arcora is the **merchant abstraction layer** on top — the shape Stripe Checkout has on top of card networks.
 
 | Concern | Arc primitive | Arcora |
 |---|---|---|
-| Enterprise FX (RFQ + escrow) | StableFX | — |
-| Generic A→B swap | App Kit Swap | — |
+| FX swap on Arc | App Kit Swap | — |
 | Crosschain USDC bridge | App Kit Bridge | — |
-| Server wallet management | Circle Developer-Controlled Wallets | — |
-| Compliance (Elliptic / TRM Labs) | App Kit hooks | — |
-| Invoice → atomic settle in **exact** payout token | — | **ArcFXGateway** |
-| Hosted checkout link + customer wallet flow | — | `/i/[invoiceId]` |
-| Refund-in-payout-token + protocol-fee return | — | **`refundInvoice()`** |
-| Per-merchant treasury reconciliation | — | `/m/treasury` |
-| Three-line npm SDK | — | `@arcora/sdk` |
+| Server-side wallets | Circle DCW | — |
+| Compliance adapters | App Kit hooks | — |
+| Invoice lifecycle + custody escrow | — | **ArcFXGatewayV11** |
+| Hosted checkout + Permit2 flow | — | `/i/[invoiceId]` |
+| Merchant dashboard + treasury | — | `/m/*` |
+| Refund / claim primitives | — | **`refundInvoice` · `claim`** |
+| TypeScript SDK + React + WordPress | — | `@arcora/sdk` family |
 
-We delegate to Arc primitives where they fit — v2.0 crosschain ships as an **App Kit Bridge** integration, not a re-implementation of CCTP. Stripe doesn't reinvent ACH; we don't reinvent rails.
+We delegate to Arc primitives where they exist. v2.0 ships as an **App Kit Bridge** integration, not a re-implementation of CCTP.
 
 ---
 
-## Proof — testnet metrics
+## Where we are
 
-<div style="font-size: 22px;">
+<div style="font-size: 24px;">
 
-| Surface | Number |
+| Surface | State |
 |---|---|
-| Foundry tests passing | **117** (unit + fuzz 10k runs + invariant 256×64) |
-| Vitest tests passing | **46** (auth, crypto, schema, API routes, components) |
-| Live txs end-to-end | **4 distinct flows** (same-token + swap, both with refund) |
-| Contract bytecode | **2.1M gas** to deploy (well under block limit) |
-| Deploy cost | < $0.10 USDC (Arc settles gas in USDC, not ETH) |
-
-**Sample on-chain proofs:**
-- Same-token pay: `0x3f2fc3ff…84ef08`
-- EURC→USDC swap pay: `0xa35cdab6…45ae8`
-- Refund (swap): `0x2dc24ed9…733cc42`
+| Contracts (Foundry) | **77 tests passing** — including a 256-run fuzz on protocol-fee invariant |
+| App vitest suite | unit + route handlers for the full /api/* surface |
+| SDK + React + WordPress plugin | published, in-tree, integrated |
+| Live deployment | `arcorapay.xyz` aliased to Vercel, `arcora-shop.vercel.app` dogfooding the checkout |
+| Custody-escrow contract | V11 live on Arc testnet (`0x07BAC123…aE3a3`) |
+| Relayer + indexer + webhooks | running on a single host, Vault-isolated key |
 
 </div>
+
+Pre-revenue. Testnet. No volume claims — Arc itself is testnet, and so are we.
 
 ---
 
 ## Why Arc, why now
 
-**Arc** is Circle's stablecoin-native L1 — purpose-built for the rails Arcora needs:
+**Arc** is Circle's stablecoin-native L1, purpose-built for payment rails:
 
-- **USDC is the gas token** — no native ETH friction
-- **CCTP V2 destination domain `26`** is live → any CCTP source chain bridges natively
-- **Stablecoin-first economy** by design — fee mechanics + sequencer policy assume payment volume, not memecoin churn
+- **USDC as the gas token** — no native ETH friction for the merchant or the relayer
+- **CCTP V2** for crosschain USDC, native to Arc
+- **App Kit Swap + Bridge** as supported primitives, not third-party DEXes
+- **Stablecoin-first economy** by design
 
 **Now** because:
+
 - Stablecoin payment volume crossed $50B/month in 2025
 - Circle Gateway + CCTP V2 unlocked native unified balances across chains
-- Arc testnet is open + supported, mainnet on the horizon
-
-We are early enough that *which* stablecoin checkout becomes the default on Arc is still up for grabs.
+- Arc testnet is open and stable; mainnet is on the horizon
+- Which stablecoin checkout becomes the default on Arc is still up for grabs
 
 ---
 
-## Roadmap
+## The roadmap that defines the moat
 
 | | | |
 |:---:|:---|:---|
-| **v1.0** <span class="pill pill-teal">live</span> | Arc-only USDC ⇄ EURC + refunds + treasury + npm SDK | shipped 2026-04-29 |
-| **v1.x** | Any stablecoin on Arc (USDT, PYUSD, DAI, regional) | spec drafted |
-| **v2.0** | Crosschain USDC source via CCTP (Eth, Arb, Base, OP, Polygon, Avalanche, Linea, Codex) | next quarter |
-| **v2.1** | Source-side DEX aggregator — pay with native ETH or any ERC-20 | following |
+| **v1.0** <span class="pill pill-teal">live</span> | Arc-only USDC / EURC | shipped 2026-04 |
+| **v1.1** <span class="pill pill-teal">live</span> | Custody escrow, compliance hooks, Vault-isolated relayer key | shipped 2026-05 |
+| **v1.x** | Multi-stable (USDT, PYUSD, DAI, USDe) on Arc | in flight, mainnet-bound |
+| **v2.0** | Crosschain USDC via Arc App Kit Bridge (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex) | spec'd |
+| **v2.1** | Source-side aggregator — any token on the source chain (native ETH, any ERC-20) | following |
 | **v2.2** | Solana / Sui / non-EVM | following |
 | **v3.0** | One-signature intent solver — full Stripe-like UX | endgame |
 
-Each row builds on the previous one without a rewrite. Shipping v1 was the proof.
+**v2.0** — crosschain via App Kit Bridge — is the differentiator. Each row builds on the previous one *without* a rewrite.
 
 ---
 
-## Pre-mainnet bars
+## What stands between us and mainnet
 
-Before Arcora goes live on Arc mainnet:
+1. **Arc Network mainnet launch** (out of our control — we follow)
+2. **External audit** (Spearbit / Cantina / Sherlock RFP — trigger: first paying merchant or funding round)
+3. **Multisig admin migration** (single EOA today → 2-of-3 or 3-of-5)
+4. **KYB go-live** (`ManualKybProvider` + `PersonaProvider` adapters scaffolded)
+5. **Vault hardening** (TLS listener, dedicated Unix user, HSM-isolated signer)
+6. **Real Chainlink price feeds**
+7. **Bug bounty** (Immunefi engagement with first paying merchant)
 
-- **Real Chainlink price feeds** (replace `MockChainlinkFeed` testnet pattern; oracle-keepalive timer becomes obsolete)
-- **External security audit** + Slither / Mythril gate
-- **KYB / merchant onboarding** flow (testnet is wallet-only)
-- **Domain & branding**: `arcorapay.com` registered + `checkout.` / `dashboard.` / `docs.` subdomains
-- **Treasury reserve policy** (refund float, fee-withdrawal cadence)
-
-These are scoped, not exploratory. Each one is a 1–2 week task.
+Each row is scoped. Items 5–6 are reversible single-host changes. Items 1–4 and 7 need external coordination.
 
 ---
 
 ## Ask
 
-<div style="font-size: 30px;">
+<div style="font-size: 28px;">
 
-For **builders / partners**:
+**For builders / partners:**
+Try the demo, integrate the SDK, file issues.
+[`npm install @arcora/sdk`](https://www.npmjs.com/package/@arcora/sdk) — it works today.
+GitHub: [`Kubudak90/arc-fx-gateway`](https://github.com/Kubudak90/arc-fx-gateway)
 
-- Try the demo, integrate the SDK, file issues
-- `npm install @arcora/sdk` — it works today
-- GitHub: [github.com/Kubudak90/arc-fx-gateway](https://github.com/Kubudak90/arc-fx-gateway)
+**For investors / Arc ecosystem:**
+v1 ships on testnet today. v2 (crosschain) is the wedge.
+Looking for: ecosystem support on Arc mainnet, pre-seed for KYB + audit + branding, distribution partners.
 
-For **investors / Arc ecosystem**:
-
-- v1 ships on testnet **today**. v2 (crosschain) is the wedge.
-- Looking for: ecosystem support on Arc mainnet, pre-seed for KYB + audit + domain spend, distribution partners for hosted-checkout.
-
-For **everyone**:
-
-- The customer-side problem ("right token, wrong chain") is real. Arcora's bet is that the answer is *one checkout, not five steps*.
+**For everyone:**
+The customer-side problem — *right token, wrong chain* — is real. Arcora's bet is one checkout, not five steps.
 
 </div>
 
@@ -276,7 +273,7 @@ For **everyone**:
 
 # Pay anywhere. Settle on Arc.
 
-## arcora.dev (soon) · arc-fx-gateway.vercel.app · @arcora/sdk
+## `arcorapay.xyz` · `@arcora/sdk` · `arc-fx-gateway` (GitHub)
 
 <br>
 

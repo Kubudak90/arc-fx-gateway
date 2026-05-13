@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import { ArcoraLogo } from "@/components/brand/Logo";
+import { arcTestnet } from "@/lib/chain/wagmi-config";
 
 const NAV_ITEMS = [
   { id: "overview",   label: "Overview",   href: "/m/dashboard",  icon: "M3 12L12 3l9 9M5 10v10h14V10" },
@@ -12,8 +13,11 @@ const NAV_ITEMS = [
   { id: "settings",   label: "Settings",   href: "/m/settings",   icon: "M12 8a4 4 0 100 8 4 4 0 000-8zM19 12l2 1-2 1M5 12l-2 1 2 1M12 5l1-2 1 2M12 19l1 2 1-2" },
 ] as const;
 
-const ARC_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 5042002);
-// Production chain id will differ; until then treat as testnet.
+// Audit #28 extension: derive from the canonical chain definition rather
+// than hardcoding 5042002 with an env-var escape hatch. When mainnet ships,
+// arcTestnet → arcMainnet here ripples everywhere. Widened to `number` so
+// the comparison stays meaningful once the source becomes a union.
+const ARC_CHAIN_ID: number = arcTestnet.id;
 const IS_TESTNET = ARC_CHAIN_ID !== 1;
 
 interface Props {

@@ -111,16 +111,16 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
     }
 
     /**
-     * Map environment → Arcora API base URL. The hosted checkout app is the
-     * source of truth for both API + checkout-link domains. Testnet URL
-     * matches the SDK default (audit #22) so plugin- and SDK-built invoices
-     * land on the same environment.
+     * Map environment → Arcora API base URL.
+     *
+     * `arcorapay.xyz` is the canonical live host today. Arc Network itself
+     * is testnet-only, so the "mainnet" branch points at the same testnet
+     * base for now and will switch when Arc ships mainnet. The previous
+     * `*.arcorapay.com` defaults pointed at unregistered DNS records and
+     * silently broke every plugin install.
      */
     private function resolve_base_url(): string {
-        if ($this->environment === 'mainnet') {
-            return 'https://checkout.arcorapay.com';
-        }
-        return 'https://checkout-staging.arcorapay.com';
+        return 'https://arcorapay.xyz';
     }
 
     public function process_payment($order_id) {

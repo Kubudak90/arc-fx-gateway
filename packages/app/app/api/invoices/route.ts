@@ -222,6 +222,10 @@ export async function POST(req: NextRequest) {
     cancelUrl: cancelUrl ?? null,
   });
 
-  const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://checkout.arcorapay.com";
+  // Falls back to arcorapay.xyz (the canonical live host) when PUBLIC_BASE_URL
+  // is unset. The previous `checkout.arcorapay.com` default pointed at an
+  // unregistered DNS record, so any deploy that forgot to set this env var
+  // returned working API responses with dead checkout URLs.
+  const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://arcorapay.xyz";
   return corsResponse({ invoiceId: globalId, url: `${baseUrl}/i/${globalId}` }, { status: 201 });
 }

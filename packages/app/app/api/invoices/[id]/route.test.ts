@@ -13,9 +13,13 @@ beforeEach(() => { vi.clearAllMocks(); });
 
 function ctx(id: string) { return { params: Promise.resolve({ id }) }; }
 
-function makeReq(opts: { apiKey?: string } = {}) {
+function makeReq(opts: { apiKey?: string; legacyHeader?: boolean } = {}) {
   const headers: Record<string, string> = {};
-  if (opts.apiKey) headers["x-api-key"] = opts.apiKey;
+  if (opts.apiKey) {
+    // Canonical header is `x-arcora-api-key` (SDK + POST handler default).
+    // `x-api-key` is the legacy alias kept for back-compat per audit #10.
+    headers[opts.legacyHeader ? "x-api-key" : "x-arcora-api-key"] = opts.apiKey;
+  }
   return new Request("http://localhost/api/invoices/0x01", { headers }) as any;
 }
 
@@ -89,5 +93,16 @@ describe("GET /api/invoices/:id", () => {
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.metadata).toBeUndefined();
+  });
+
+  it("legacy x-api-key header still authenticates (audit #10 back-compat)", async () => {
+    await mockSelect([BASE_ROW]);
+    await import("@/lib/auth/apikey").then((m) => {
+      (m.lookupMerchantByApiKey as any).mockResolvedValue({ id: MERCHANT_ID });
+    });
+    const res = await GET(makeReq({ apiKey: "ak_live_TEST", legacyHeader: true }), ctx("0x01"));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.metadata).toEqual({ orderId: "ORDER-42" });
   });
 });

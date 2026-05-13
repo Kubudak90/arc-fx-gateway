@@ -68,8 +68,8 @@ describe("Arcora.openCheckout", () => {
       configurable: true,
       writable: true,
     });
-    Arcora.openCheckout({ url: "https://checkout.arcorapay.com/i/0xabc" });
-    expect(setHref).toHaveBeenCalledWith("https://checkout.arcorapay.com/i/0xabc");
+    Arcora.openCheckout({ url: "https://arcorapay.xyz/i/0xabc" });
+    expect(setHref).toHaveBeenCalledWith("https://arcorapay.xyz/i/0xabc");
   });
 });
 

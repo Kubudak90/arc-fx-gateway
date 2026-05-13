@@ -1,9 +1,19 @@
 import { ArcoraError } from "./error";
 import type { CreateInvoiceParams, Invoice, EscrowSummary, InitOptions, Environment } from "./types";
 
+// Defaults the SDK falls back to when the caller doesn't supply `baseUrl`.
+// Arc Network is testnet-only today and so are we — `arcorapay.xyz` is the
+// canonical live host. The previous `*.arcorapay.com` defaults pointed at
+// DNS records that were never registered, so any consumer who relied on
+// them silently failed.
+//
+// When Arc ships mainnet, swap the mainnet entry for the production host.
+// Until then, `environment: "mainnet"` resolves to the same testnet base
+// (no separate mainnet exists yet); pass `baseUrl` explicitly if you self-
+// host.
 const ENV_BASE_URL: Record<Environment, string> = {
-  testnet: "https://checkout-staging.arcorapay.com",
-  mainnet: "https://checkout.arcorapay.com",
+  testnet: "https://arcorapay.xyz",
+  mainnet: "https://arcorapay.xyz",
 };
 
 // ── Module-private worker functions (single source of truth) ───────────────

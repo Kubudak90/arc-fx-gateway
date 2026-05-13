@@ -201,9 +201,12 @@ async function tick(): Promise<{
       const protocolFee     = (d.args.fee             as bigint).toString();
 
       const ctx = settleCtxByInvoice.get(id.toLowerCase());
+      // Block timestamp for catch-up replay accuracy (same pattern as
+      // failed_at — paid_at and refunded_at both used DB now() before).
+      const paidAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
-           set status = 'paid', paid_by = $2, paid_tx = $3, paid_at = now(),
+           set status = 'paid', paid_by = $2, paid_tx = $3, paid_at = $8,
                amount_in = $4, merchant_payout = $5, protocol_fee = $6,
                metadata  = coalesce(metadata, '{}'::jsonb) || $7::jsonb
          where id = $1 and status = 'created'
@@ -213,6 +216,7 @@ async function tick(): Promise<{
           ctx
             ? JSON.stringify({ pay_in_actual: ctx.payInToken, swap_tx: ctx.swapTxHash, source_address: log.address })
             : JSON.stringify({ source_address: log.address }),
+          paidAt,
         ],
       );
       if (!upd.rowCount) continue;
@@ -232,12 +236,13 @@ async function tick(): Promise<{
       // InvoiceRefunded (landing before InvoicePaid) still flips the row to
       // refunded — without this, the row sticks in 'created' forever despite
       // the customer being made whole on-chain.
+      const refundedAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
       const upd = await pool.query<{ id: string; merchant_id: string }>(
         `update invoices
-           set status = 'refunded', refund_tx = $2, refunded_at = now()
+           set status = 'refunded', refund_tx = $2, refunded_at = $3
          where id = $1 and status in ('created', 'paid')
          returning id, merchant_id`,
-        [id, log.transactionHash],
+        [id, log.transactionHash, refundedAt],
       );
       if (!upd.rowCount) continue;
       refunded++;

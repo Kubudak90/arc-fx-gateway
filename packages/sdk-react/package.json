@@ -2,7 +2,15 @@
   "name": "@arcora/sdk-react",
   "version": "1.0.0",
   "description": "React bindings for the Arcora checkout SDK — drop-in <CheckoutButton /> + useCheckout()",
-  "keywords": ["arcora", "react", "checkout", "stablecoin", "payments", "arc", "hooks"],
+  "keywords": [
+    "arcora",
+    "react",
+    "checkout",
+    "stablecoin",
+    "payments",
+    "arc",
+    "hooks"
+  ],
   "homepage": "https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/packages/sdk-react#readme",
   "repository": {
     "type": "git",
@@ -20,7 +28,11 @@
       "require": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "sideEffects": false,
   "publishConfig": {
     "access": "public",
@@ -32,15 +44,15 @@
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "react": "^18.0.0 || ^19.0.0",
-    "@arcora/sdk": "workspace:^"
+    "@arcora/sdk": "workspace:^",
+    "react": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
     "@arcora/sdk": "workspace:*",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
-    "happy-dom": "^15.0.0",
+    "happy-dom": "^20.9.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsup": "^8.3.0",

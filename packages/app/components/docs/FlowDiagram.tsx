@@ -22,7 +22,7 @@ export function FlowDiagram() {
       />
       <Connector label="settleInvoice" />
       <Step
-        primary={<MainBox title="ArcFXGatewayV8" sub="on Arc" />}
+        primary={<MainBox title="ArcFXGateway" sub="custody escrow · on Arc" />}
         sideLabel="payout"
         side={<SideBox title="Merchant wallet" />}
       />

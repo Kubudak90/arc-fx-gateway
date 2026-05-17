@@ -2,7 +2,7 @@ import { keccak256, toBytes, type Address, type Hex } from "viem";
 
 /**
  * Server-side mirror of the SDK's witness derivation in
- * `lib/checkout/permit2.ts` and `components/checkout/PayButtonV8.tsx`.
+ * `lib/checkout/permit2.ts` and `components/checkout/PayButton.tsx`.
  * Used by `/api/checkout/submit` to verify the witness the customer signed
  * binds the invoice to *our* relayer — preventing griefers from submitting
  * Permit2 messages for arbitrary witnesses against a public invoice id.

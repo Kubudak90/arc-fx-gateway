@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { InvoiceTable, type InvoiceRow } from "@/components/merchant/InvoiceTable";
 import { CreateInvoiceDialog } from "@/components/merchant/CreateInvoiceDialog";
-import { MerchantV10ActivationCard } from "@/components/merchant/MerchantV10ActivationCard";
+import { MerchantActivationCard } from "@/components/merchant/MerchantActivationCard";
 import { symbolForAddress } from "@/lib/ui/format";
 
 type DashboardData = {
@@ -92,7 +92,7 @@ export default function DashboardPage() {
       <Header range={range} setRange={setRange} payoutSymbol={payoutSymbol} />
 
       <div className="mb-6">
-        <MerchantV10ActivationCard
+        <MerchantActivationCard
           payoutAddress={data.merchant.address}
           payoutToken={data.merchant.payoutToken}
         />

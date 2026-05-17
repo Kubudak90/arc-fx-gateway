@@ -11,9 +11,11 @@ import { screenWithAudit } from "@/lib/compliance/screen";
 import { assertOriginAllowed, assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
-// V10 cutover (Plan 10, 2026-05-07): V8/V9 retired. The gateway address comes
-// from GATEWAY_ADDRESS_V10 via lib/chain/client.ts. The legacy `?engine=`
-// query param is no-op now — all invoices route to V10.
+// Custody-escrow cutover (Plan 10, 2026-05-07; V11 redeploy 2026-05-13): the
+// gateway address comes from lib/chain/client.ts, which prefers
+// GATEWAY_ADDRESS_V11 and falls back to GATEWAY_ADDRESS_V10. Every invoice
+// also records its own `gatewayAddress`, so the gateway in force at create
+// time stays pinned to the row even across a future cutover.
 
 // successUrl is optional for standalone invoices (link sent directly to a
 // customer with no merchant site). When omitted, the invoice page itself
@@ -102,7 +104,8 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  // V10-only: all invoices route to GATEWAY (== GATEWAY_ADDRESS_V10).
+  // All invoices route to GATEWAY — the active custody-escrow gateway
+  // (V11 today; lib/chain/client.ts prefers GATEWAY_ADDRESS_V11 over _V10).
   const targetGateway: Address = GATEWAY;
 
   // Audit pass 4 (2026-05-04, finding #8): we used to screen
@@ -217,7 +220,7 @@ export async function POST(req: NextRequest) {
     expiresAt: new Date(Number(expiresAt) * 1000),
     status: "created",
     gatewayAddress: targetGateway.toLowerCase(),
-    metadata: { ...(metadata ?? {}), engine: "v10" },
+    metadata: metadata ?? {},
     successUrl: successUrl ?? "",
     cancelUrl: cancelUrl ?? null,
   });

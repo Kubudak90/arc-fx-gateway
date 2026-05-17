@@ -179,10 +179,9 @@ async function tick(): Promise<{
       if (!mr.rowCount) continue; // unknown merchant - cannot satisfy FK
 
       // gateway_address comes from the log itself (log.address) so an
-      // invoice discovered on V11 doesn't get mis-tagged as V10 during the
-      // dual-watch window.
+      // invoice discovered on V11 is recorded against the gateway that
+      // actually emitted it during the dual-watch window.
       const sourceGateway = log.address.toLowerCase();
-      const engineTag = sourceGateway === GATEWAY_V10 ? "v10" : "v11";
       const inserted = await pool.query<{ id: string }>(
         `insert into invoices
            (id, merchant_invoice_id, merchant_id, pay_in_token, payout_token,
@@ -198,7 +197,7 @@ async function tick(): Promise<{
           a.payoutToken as Hex,
           (a.amountOut as bigint).toString(),
           Number(a.expiresAt as bigint),
-          JSON.stringify({ backfilled: true, txHash: log.transactionHash, engine: engineTag }),
+          JSON.stringify({ backfilled: true, txHash: log.transactionHash }),
           sourceGateway,
         ],
       );

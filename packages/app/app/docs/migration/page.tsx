@@ -13,9 +13,13 @@ export default function MigrationDocs() {
       description="How to move from v0.9 to v0.10 — the custody escrow gateway."
     >
       <p>
-        v0.10 (<code>0xc91e45…f154</code>) is the canonical gateway as of 2026-05-07.
-        v0.9 (<code>0xdf6233…ea21</code>) and earlier remain on-chain (immutable) but are no longer
-        watched, no new traffic lands there. All older invoices were wiped during the v0.10 cutover.
+        The custody-escrow gateway is canonical since 2026-05-07. The live deployment is the
+        audit-fixed <strong>V11</strong> redeploy (<code>0x07BAC123…aE3a3</code>, 2026-05-13); the
+        original v0.10 (<code>0xc91e45…f154</code>) is still watched in parallel so in-flight
+        refunds settle. v0.9 (<code>0xdf6233…ea21</code>) and earlier remain on-chain (immutable)
+        but are no longer watched. The escrow-model change documented below was the v0.9 → v0.10
+        migration; V11 is bytecode-only (audit fixes), ABI-identical, and needs nothing beyond a
+        one-time re-registration on the new address.
       </p>
 
       <h2>What changed</h2>
@@ -36,7 +40,7 @@ export default function MigrationDocs() {
       <h2>Migration steps</h2>
       <h3>Merchants on the hosted checkout</h3>
       <ol>
-        <li>Visit <code>/m/dashboard</code> → click <strong>Activate V10 →</strong> on the activation card.
+        <li>Visit <code>/m/dashboard</code> → click <strong>Activate gateway →</strong> on the activation card.
             Sign one <code>registerMerchant(payoutAddress, payoutToken)</code> tx.</li>
         <li>Visit <code>/m/settings</code> → <strong>On-chain authorization</strong> →
             <strong>Authorize delegate</strong>. Sign one

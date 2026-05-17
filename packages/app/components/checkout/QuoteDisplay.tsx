@@ -6,47 +6,80 @@ import { Button } from "@/components/ui/button";
 import { formatTokenAmount, symbolForAddress } from "@/lib/ui/format";
 import { RefreshCw } from "lucide-react";
 
-interface QuoteResponse { amountOut: string; }
-
-interface QuoteDisplayProps {
-  payInTokenAddress: string;
-  payoutTokenAddress: string;
-  amountOut: string;
-  onQuote: (amountIn: bigint) => void;
+interface QuoteResponse {
+  /** Recommended payIn (decimal string) — what the customer commits. */
+  amountIn?:        string;
+  /** Estimated payout (decimal string) — what the merchant receives. */
+  estimatedOutput?: string;
+  fees?:            { token: string; amount: string; type: string }[];
+  ttlSeconds:       number;
+  error?:           string;
 }
 
-const STALE_MS = 30_000;
-const TICK_MS = 5_000;
+interface QuoteDisplayProps {
+  payInTokenAddress:  string;
+  payoutTokenAddress: string;
+  /** Invoice's amountOut, base units of payoutToken — the floor we settle to. */
+  amountOut:          string;
+  /** Both bigints in base units; PayButton needs payInAmount to sign. */
+  onQuote:            (estimatedOut: bigint, payInAmount: bigint) => void;
+  onStale:            () => void;
+}
 
 export function QuoteDisplay(props: QuoteDisplayProps) {
   const sameToken = props.payInTokenAddress.toLowerCase() === props.payoutTokenAddress.toLowerCase();
+  const exactOut  = BigInt(props.amountOut);
 
-  const [amountIn, setAmountIn] = useState<bigint | null>(sameToken ? BigInt(props.amountOut) : null);
-  const [stale, setStale] = useState(false);
-  const [loading, setLoading] = useState(!sameToken);
+  const [estimateOut, setEstimateOut] = useState<bigint | null>(sameToken ? exactOut : null);
+  const [payInAmount, setPayInAmount] = useState<bigint | null>(sameToken ? exactOut : null);
+  const [stale,   setStale]           = useState(false);
+  const [loading, setLoading]         = useState(!sameToken);
+  const [error,   setError]           = useState<string | null>(null);
   const fetchedAt = useRef<number>(0);
+  const ttlRef    = useRef<number>(30);
 
   async function fetchQuote() {
     setLoading(true);
+    setError(null);
     try {
+      // Audit #31: previously fell back to "EURC" for any unknown token,
+      // which silently quoted the wrong asset. Reject explicitly so a
+      // misconfigured env or a future third stable surfaces as an error
+      // rather than a corrupted quote.
       const usdcAddr = (process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "").toLowerCase();
-      const fromSym = props.payoutTokenAddress.toLowerCase() === usdcAddr ? "USDC" : "EURC";
-      const toSym   = props.payInTokenAddress.toLowerCase()  === usdcAddr ? "USDC" : "EURC";
-      const url = `/api/quote?from=${fromSym}&to=${toSym}&amountIn=${props.amountOut}`;
-      const res = await fetch(url);
+      const eurcAddr = (process.env.NEXT_PUBLIC_EURC_ADDRESS ?? "").toLowerCase();
+      const symbolFor = (a: string): "USDC" | "EURC" => {
+        const low = a.toLowerCase();
+        if (low === usdcAddr) return "USDC";
+        if (low === eurcAddr) return "EURC";
+        throw new Error(`unsupported token ${a}`);
+      };
+      // targetOutput mode — backend probes the rate, divides, adds slippage
+      // buffer. Returns a recommended `amountIn` we lock in for signing.
+      const body = {
+        payInToken:   symbolFor(props.payInTokenAddress),
+        payoutToken:  symbolFor(props.payoutTokenAddress),
+        targetOutput: humanizeAmount(BigInt(props.amountOut), 6),
+      };
+      const res = await fetch("/api/checkout/quote", {
+        method:  "POST",
+        headers: { "content-type": "application/json" },
+        body:    JSON.stringify(body),
+      });
       const data: QuoteResponse = await res.json();
-      const inv = BigInt(data.amountOut);
-      // The pool's calculateSwap is asked the forward question (X USDC → Y EURC), but
-      // the user actually pays the reverse leg (Y EURC → X USDC). Forward and reverse
-      // diverge slightly under integer rounding + fee, so a flat 1% cushion can fall
-      // 1 wei short and the swap reverts with InsufficientOutput. Bump to 2% and add a
-      // 1000-wei floor so tiny invoice amounts also clear. Long-term fix: ask the AMM
-      // for the inverse quote (calculateSwapForExactOut) and drop the cushion.
-      const cushioned = (inv * 102n) / 100n + 1_000n;
-      setAmountIn(cushioned);
-      props.onQuote(cushioned);
+      if (!res.ok || !data.estimatedOutput || !data.amountIn) {
+        throw new Error(data.error ?? `quote failed: ${res.status}`);
+      }
+      const out = parseHumanAmount(data.estimatedOutput, 6);
+      const inn = parseHumanAmount(data.amountIn, 6);
+      setEstimateOut(out);
+      setPayInAmount(inn);
+      props.onQuote(out, inn);
       fetchedAt.current = Date.now();
+      ttlRef.current = data.ttlSeconds;
       setStale(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "quote unavailable");
     } finally {
       setLoading(false);
     }
@@ -54,21 +87,29 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
 
   useEffect(() => {
     if (sameToken) {
-      // Direct payment path — no swap, no quote, customer pays exactly amountOut.
-      const exact = BigInt(props.amountOut);
-      setAmountIn(exact);
-      props.onQuote(exact);
+      // Direct payment path — payInToken == payoutToken means no swap, no
+      // App Kit RFQ. Customer commits exactly amountOut; the relayer's
+      // settle path skips kit.swap on the same-token branch. Without this
+      // bypass the quote endpoint returns same_token 400 and the UI gets
+      // stuck with an estimated output of "same_token".
+      props.onQuote(exactOut, exactOut);
       return;
     }
     void fetchQuote();
     const t = setInterval(() => {
-      if (Date.now() - fetchedAt.current > STALE_MS) setStale(true);
-    }, TICK_MS);
+      const ageS = (Date.now() - fetchedAt.current) / 1000;
+      if (ageS > ttlRef.current && !stale) {
+        setStale(true);
+        props.onStale();
+      }
+    }, 1000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const sym = symbolForAddress(props.payInTokenAddress);
+  const payInSym  = symbolForAddress(props.payInTokenAddress);
+  const payoutSym = symbolForAddress(props.payoutTokenAddress);
+
   return (
     <Card className={`rounded-2xl ${stale ? "border-arcora-blue" : "border-arcora-border"}`}>
       <CardContent className="p-6 space-y-3">
@@ -80,13 +121,27 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
             </span>
           )}
         </div>
-        {loading && !amountIn ? (
+        {loading && !payInAmount ? (
           <div className="h-8 w-32 rounded bg-arcora-gray animate-pulse" />
         ) : (
           <div className="font-[family-name:var(--font-display)] text-3xl">
-            {amountIn ? formatTokenAmount(amountIn) : "—"} {sym}
+            {payInAmount ? formatTokenAmount(payInAmount) : "—"} {payInSym}
           </div>
         )}
+
+        <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground pt-2">
+          Merchant receives (estimated)
+        </div>
+        {loading && !estimateOut ? (
+          <div className="h-8 w-32 rounded bg-arcora-gray animate-pulse" />
+        ) : error ? (
+          <div className="text-sm text-red-600">{error}</div>
+        ) : (
+          <div className="font-[family-name:var(--font-display)] text-2xl">
+            {estimateOut ? formatTokenAmount(estimateOut) : "—"} {payoutSym}
+          </div>
+        )}
+
         {stale && (
           <Button variant="ghost" size="sm" onClick={() => void fetchQuote()} disabled={loading}>
             <RefreshCw className="size-4 mr-2" /> Refresh quote
@@ -95,4 +150,17 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
       </CardContent>
     </Card>
   );
+}
+
+function parseHumanAmount(amount: string, decimals: number): bigint {
+  const [wholeStr = "0", fracStr = ""] = amount.split(".");
+  const fracPadded = fracStr.padEnd(decimals, "0").slice(0, decimals);
+  return BigInt(wholeStr) * 10n ** BigInt(decimals) + BigInt(fracPadded || "0");
+}
+
+function humanizeAmount(baseUnits: bigint, decimals: number): string {
+  const scale = 10n ** BigInt(decimals);
+  const whole = baseUnits / scale;
+  const frac  = (baseUnits % scale).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return frac.length === 0 ? whole.toString() : `${whole}.${frac}`;
 }

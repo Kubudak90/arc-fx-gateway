@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { ConnectButton } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { QuoteDisplay } from "@/components/checkout/QuoteDisplay";
-import { QuoteDisplayV8 } from "@/components/checkout/QuoteDisplayV8";
 import { PayButton } from "@/components/checkout/PayButton";
-import { PayButtonV8 } from "@/components/checkout/PayButtonV8";
 import { SuccessScreen, ExpiredScreen } from "@/components/checkout/StatusScreens";
 import { MobileWalletQR } from "@/components/checkout/MobileWalletQR";
 import { Smartphone } from "lucide-react";
@@ -28,20 +26,18 @@ interface CheckoutClientProps {
    *  payment. Defense-in-depth in the browser; server already enforces the
    *  same list at invoice-create. Audit H1 (2026-05-05). */
   allowedOrigins: readonly string[];
-  /** v6 = legacy on-chain swap path; v8 + v9 = relayer-driven Permit2 path
-   *  (UI shape identical, the relayer dispatches to the right gateway based
-   *  on invoice.gatewayAddress). */
-  engine: "v6" | "v8" | "v9" | "v10";
 }
 
 export default function CheckoutClient(props: CheckoutClientProps) {
   const [status, setStatus] = useState(props.initialStatus);
-  // v6 needs the inverse-quote payIn (USDC required to deliver amountOut).
-  // v8 quotes the forward direction: customer commits to a payIn upfront,
-  // the relayer's kit.swap converts it; merchant gets >= amountOut or revert.
-  const [amountIn, setAmountIn] = useState<bigint | null>(null);
-  const [v8Stale, setV8Stale]   = useState(false);
-  const [showQR, setShowQR]     = useState(false);
+  // QuoteDisplay quotes the forward direction: the customer commits to a
+  // payIn upfront and the relayer's kit.swap converts it; the merchant gets
+  // >= amountOut or the settle reverts. The custody-escrow gateway (V11 today,
+  // V10 during the in-flight cutover window) is selected server-side from the
+  // invoice's stored gateway address — the checkout UI is gateway-agnostic.
+  const [amountIn, setAmountIn]     = useState<bigint | null>(null);
+  const [quoteStale, setQuoteStale] = useState(false);
+  const [showQR, setShowQR]         = useState(false);
 
   useEffect(() => {
     if (status !== "created") return;
@@ -62,28 +58,15 @@ export default function CheckoutClient(props: CheckoutClientProps) {
     return <MobileWalletQR url={typeof window !== "undefined" ? window.location.href : ""} onBack={() => setShowQR(false)} />;
   }
 
-  // v8 sizing is computed inside QuoteDisplayV8 via the targetOutput mode
-  // of /api/checkout/quote (probe the rate, divide, add slippage cushion).
-  // The component returns the resolved `payInAmount` through onQuote.
-
   return (
     <div className="space-y-4">
-      {props.engine === "v8" || props.engine === "v9" || props.engine === "v10" ? (
-        <QuoteDisplayV8
-          payInTokenAddress={props.payInTokenAddress}
-          payoutTokenAddress={props.payoutTokenAddress}
-          amountOut={props.amountOut}
-          onQuote={(_out, payIn) => { setAmountIn(payIn); setV8Stale(false); }}
-          onStale={() => setV8Stale(true)}
-        />
-      ) : (
-        <QuoteDisplay
-          payInTokenAddress={props.payInTokenAddress}
-          payoutTokenAddress={props.payoutTokenAddress}
-          amountOut={props.amountOut}
-          onQuote={setAmountIn}
-        />
-      )}
+      <QuoteDisplay
+        payInTokenAddress={props.payInTokenAddress}
+        payoutTokenAddress={props.payoutTokenAddress}
+        amountOut={props.amountOut}
+        onQuote={(_out, payIn) => { setAmountIn(payIn); setQuoteStale(false); }}
+        onStale={() => setQuoteStale(true)}
+      />
 
       <div className="space-y-3">
         <ConnectButton
@@ -92,23 +75,14 @@ export default function CheckoutClient(props: CheckoutClientProps) {
           theme="light"
         />
 
-        {props.engine === "v8" || props.engine === "v9" || props.engine === "v10" ? (
-          <PayButtonV8
-            invoiceId={props.invoiceId}
-            payInTokenAddress={props.payInTokenAddress as Address}
-            payInAmount={amountIn}
-            quoteStale={v8Stale}
-            onPaid={() => setStatus("paid")}
-            onFailed={() => setStatus("failed")}
-          />
-        ) : (
-          <PayButton
-            invoiceId={props.invoiceId}
-            payInTokenAddress={props.payInTokenAddress as Address}
-            amountIn={amountIn}
-            onPaid={() => setStatus("paid")}
-          />
-        )}
+        <PayButton
+          invoiceId={props.invoiceId}
+          payInTokenAddress={props.payInTokenAddress as Address}
+          payInAmount={amountIn}
+          quoteStale={quoteStale}
+          onPaid={() => setStatus("paid")}
+          onFailed={() => setStatus("failed")}
+        />
 
         <button
           type="button"

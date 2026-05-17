@@ -36,17 +36,6 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
   const inv = rows[0]!;
   const expired = inv.expiresAt.getTime() < Date.now();
   const initialStatus = expired && inv.status === "created" ? "expired" : inv.status;
-  // /api/invoices stamps `metadata.engine` so the client knows which
-  // PayButton to render. V8/V9/V10 share the same client-side Permit2 flow
-  // (relayer-settled). The contract differences (V9 = refund-source binding,
-  // V10 = custody escrow) are server-side only. Legacy V6 invoices used a
-  // different client flow.
-  const rawEngine = (inv.metadata as { engine?: string } | null)?.engine;
-  const engine: "v6" | "v8" | "v9" | "v10" =
-    rawEngine === "v10" ? "v10" :
-    rawEngine === "v9"  ? "v9"  :
-    rawEngine === "v8"  ? "v8"  :
-    "v6";
 
   return (
     <main className="min-h-screen grid place-items-center px-6 py-10">
@@ -66,7 +55,6 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
           successUrl={inv.successUrl}
           cancelUrl={inv.cancelUrl ?? undefined}
           allowedOrigins={inv.merchantAllowedOrigins ?? []}
-          engine={engine}
         />
       </div>
     </main>

@@ -1,4 +1,5 @@
 import { formatCurrency, symbolForAddress, abbreviateAddress } from "@/lib/ui/format";
+import { ExpiryCountdown } from "./ExpiryCountdown";
 
 interface LineItem {
   name?: string;
@@ -41,16 +42,6 @@ export function InvoiceCard({
     return m.lineItems as LineItem[];
   })();
 
-  const expiryLabel = (() => {
-    if (!expiresAt) return null;
-    const diff = expiresAt.getTime() - Date.now();
-    if (diff <= 0) return "Expired";
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    if (mins > 0) return `Expires in ${mins}m ${secs}s`;
-    return `Expires in ${secs}s`;
-  })();
-
   return (
     <div className="flex flex-col gap-6 flex-1">
       {/* Amount block */}
@@ -68,7 +59,7 @@ export function InvoiceCard({
       </div>
 
       {/* Invoice metadata row */}
-      {(invoiceId || expiryLabel) && (
+      {(invoiceId || expiresAt) && (
         <div className="flex flex-wrap gap-4 font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg tracking-[0.04em]">
           {invoiceId && (
             <span>
@@ -76,8 +67,11 @@ export function InvoiceCard({
               <span className="text-arcora-slate">{invoiceId.slice(0, 8)}…</span>
             </span>
           )}
-          {expiryLabel && (
-            <span className={status === "expired" ? "text-red-500" : ""}>{expiryLabel}</span>
+          {expiresAt && (
+            <ExpiryCountdown
+              expiresAt={expiresAt}
+              className={status === "expired" ? "text-red-500" : ""}
+            />
           )}
         </div>
       )}

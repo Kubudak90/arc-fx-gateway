@@ -50,7 +50,6 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
           <span className="opacity-40">·</span>
           <span>Permit2 / EIP-712</span>
         </div>
-        <div className="text-[13px] text-arcora-muted-fg">Need help?</div>
       </header>
 
       {/* Two-column grid */}

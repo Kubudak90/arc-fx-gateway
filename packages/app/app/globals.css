@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   /* Arcora brand */
@@ -123,6 +123,8 @@
   --warn:        #f1c21b;
   --danger:      #fa4d56;
 }
+
+.dark .tag.muted { background: rgba(255, 255, 255, 0.06); }
 
 .eyebrow {
   font-family: var(--font-mono);

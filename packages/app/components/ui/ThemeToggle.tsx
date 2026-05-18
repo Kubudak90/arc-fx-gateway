@@ -9,7 +9,7 @@ export function ThemeToggle() {
   useEffect(() => setMounted(true), []);
 
   // Avoid a hydration mismatch — render a fixed-size placeholder until mounted.
-  if (!mounted) return <span className="inline-block h-8 w-8" aria-hidden />;
+  if (!mounted) return <span className="inline-block h-8 w-8" aria-hidden={true} />;
 
   const isDark = resolvedTheme === "dark";
   return (

@@ -36,12 +36,16 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
     // Standalone invoice: merchant created a payment link with no redirect
     // target. Show a clean confirmation; no "merchant" attribution.
     return (
-      <div className="text-center space-y-4 py-12">
-        <div className="mx-auto size-16 rounded-full bg-emerald-50 grid place-items-center">
+      <div className="flex flex-col items-center gap-5 py-16 text-center">
+        <div className="size-16 rounded-full bg-emerald-50 border border-emerald-200 grid place-items-center">
           <Check className="size-8 text-emerald-600" />
         </div>
-        <h2 className="font-[family-name:var(--font-display)] text-3xl">Payment received</h2>
-        <p className="text-sm text-muted-foreground">Thanks — you can close this tab.</p>
+        <div>
+          <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+            Payment received
+          </h2>
+          <p className="mt-2 text-[14px] text-arcora-muted-fg">Thanks — you can close this tab.</p>
+        </div>
       </div>
     );
   }
@@ -52,25 +56,33 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
     // static "payment received" screen rather than auto-redirecting to an
     // attacker-controlled page.
     return (
-      <div className="text-center space-y-4 py-12">
-        <div className="mx-auto size-16 rounded-full bg-emerald-50 grid place-items-center">
+      <div className="flex flex-col items-center gap-5 py-16 text-center">
+        <div className="size-16 rounded-full bg-emerald-50 border border-emerald-200 grid place-items-center">
           <Check className="size-8 text-emerald-600" />
         </div>
-        <h2 className="font-[family-name:var(--font-display)] text-3xl">Payment received</h2>
-        <p className="text-sm text-muted-foreground">
-          We can&apos;t safely return you to the merchant — the redirect target isn&apos;t in their allowlist. Close this tab or contact the merchant directly.
-        </p>
+        <div>
+          <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+            Payment received
+          </h2>
+          <p className="mt-2 text-[14px] text-arcora-muted-fg max-w-sm mx-auto">
+            We can&apos;t safely return you to the merchant — the redirect target isn&apos;t in their allowlist. Close this tab or contact the merchant directly.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="text-center space-y-4 py-12">
-      <div className="mx-auto size-16 rounded-full bg-emerald-50 grid place-items-center">
+    <div className="flex flex-col items-center gap-5 py-16 text-center">
+      <div className="size-16 rounded-full bg-emerald-50 border border-emerald-200 grid place-items-center">
         <Check className="size-8 text-emerald-600" />
       </div>
-      <h2 className="font-[family-name:var(--font-display)] text-3xl">Payment received</h2>
-      <p className="text-sm text-muted-foreground">Redirecting to merchant in {seconds}s…</p>
+      <div>
+        <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+          Payment received
+        </h2>
+        <p className="mt-2 text-[14px] text-arcora-muted-fg">Redirecting to merchant in {seconds}s…</p>
+      </div>
     </div>
   );
 }
@@ -78,11 +90,18 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
 export function ExpiredScreen({ cancelUrl, allowedOrigins }: { cancelUrl?: string; allowedOrigins: readonly string[] }) {
   const safe = isOriginAllowed(cancelUrl, allowedOrigins);
   return (
-    <div className="text-center space-y-4 py-12">
-      <h2 className="font-[family-name:var(--font-display)] text-3xl">Invoice expired</h2>
-      <p className="text-sm text-muted-foreground">Please request a new invoice from the merchant.</p>
+    <div className="flex flex-col items-center gap-5 py-16 text-center">
+      <div className="size-16 rounded-full bg-arcora-gray border border-arcora-border grid place-items-center">
+        <span className="font-[family-name:var(--font-mono)] text-[20px] text-arcora-muted-fg">×</span>
+      </div>
+      <div>
+        <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+          Invoice expired
+        </h2>
+        <p className="mt-2 text-[14px] text-arcora-muted-fg">Please request a new invoice from the merchant.</p>
+      </div>
       {safe && cancelUrl && (
-        <a href={cancelUrl} className="btn-arcora-pill-light inline-block">Return to merchant</a>
+        <a href={cancelUrl} className="btn-arcora-pill-light inline-block mt-2">Return to merchant</a>
       )}
     </div>
   );
@@ -90,9 +109,13 @@ export function ExpiredScreen({ cancelUrl, allowedOrigins }: { cancelUrl?: strin
 
 export function NotFoundScreen() {
   return (
-    <div className="text-center space-y-4 py-12">
-      <h2 className="font-[family-name:var(--font-display)] text-3xl">Invoice not found</h2>
-      <p className="text-sm text-muted-foreground">This invoice doesn&apos;t exist or has been removed.</p>
+    <div className="flex flex-col items-center gap-5 py-16 text-center">
+      <div>
+        <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+          Invoice not found
+        </h2>
+        <p className="mt-2 text-[14px] text-arcora-muted-fg">This invoice doesn&apos;t exist or has been removed.</p>
+      </div>
     </div>
   );
 }

@@ -242,17 +242,17 @@ export function PayButton(props: PayButtonProps) {
   return (
     <div className="space-y-3">
       {compliance.status === "review" && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
+        <div className="border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
           <ShieldAlert className="size-4 mt-0.5 flex-none" />
           <div>
             <div className="font-semibold mb-0.5">Compliance review required</div>
             We&apos;re confirming a few details before this wallet can pay. The merchant has been notified and will follow up within 24h.
-            {compliance.ticketId && <div className="font-mono text-[10px] mt-1 opacity-70">Ref: {compliance.ticketId}</div>}
+            {compliance.ticketId && <div className="font-[family-name:var(--font-mono)] text-[10px] mt-1 opacity-70">Ref: {compliance.ticketId}</div>}
           </div>
         </div>
       )}
       {compliance.status === "reject" && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-3 flex items-start gap-2 text-xs text-red-900">
+        <div className="border border-red-300 bg-red-50 p-3 flex items-start gap-2 text-xs text-red-900">
           <ShieldAlert className="size-4 mt-0.5 flex-none" />
           <div>
             <div className="font-semibold mb-0.5">This wallet can&apos;t be used for this payment</div>
@@ -261,7 +261,7 @@ export function PayButton(props: PayButtonProps) {
         </div>
       )}
       {compliance.status === "error" && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
+        <div className="border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
           <ShieldAlert className="size-4 mt-0.5 flex-none" />
           <div className="flex-1">
             <div className="font-semibold mb-0.5">Couldn&apos;t verify wallet</div>
@@ -270,7 +270,7 @@ export function PayButton(props: PayButtonProps) {
             <button
               type="button"
               onClick={compliance.refresh}
-              className="mt-2 px-2 py-1 rounded border border-amber-400 bg-amber-100 hover:bg-amber-200 font-semibold"
+              className="mt-2 px-2 py-1 border border-amber-400 bg-amber-100 hover:bg-amber-200 font-semibold"
             >
               Retry verification
             </button>
@@ -278,7 +278,7 @@ export function PayButton(props: PayButtonProps) {
         </div>
       )}
       {needsPermit2Setup && state === "idle" && !complianceBlocked && (
-        <div className="rounded-lg border border-arcora-border bg-arcora-gray/30 p-3 flex items-start gap-2 text-xs">
+        <div className="border border-arcora-border bg-arcora-gray/30 p-3 flex items-start gap-2 text-xs">
           <Info className="size-4 mt-0.5 flex-none text-arcora-blue" />
           <div>
             <div className="font-semibold mb-0.5">First-time wallet setup</div>
@@ -333,7 +333,7 @@ function ProgressList({ state }: { state: State }) {
   const idx   = order.indexOf(state);
 
   return (
-    <ul className="space-y-1.5 text-xs">
+    <ul className="space-y-1.5 font-[family-name:var(--font-mono)] text-[11px] tracking-[0.02em]">
       {STEPS.filter(s => s.key[0] !== "checking_allowance" || idx >= order.indexOf("approving_permit2")).map((step) => {
         const stepIdx = Math.max(...step.key.map(k => order.indexOf(k)));
         const done    = idx > stepIdx || state === "success";
@@ -341,13 +341,13 @@ function ProgressList({ state }: { state: State }) {
         return (
           <li key={step.label} className="flex items-center gap-2">
             {done ? (
-              <Check className="size-4 text-emerald-600" />
+              <Check className="size-4 text-emerald-600 flex-none" />
             ) : active ? (
-              <Loader2 className="size-4 text-arcora-blue animate-spin" />
+              <Loader2 className="size-4 text-arcora-blue animate-spin flex-none" />
             ) : (
-              <span className="size-4 rounded-full border border-arcora-border" />
+              <span className="size-4 border border-arcora-border flex-none" />
             )}
-            <span className={done ? "text-muted-foreground line-through" : active ? "font-medium" : "text-muted-foreground"}>
+            <span className={done ? "text-arcora-muted-fg line-through" : active ? "font-medium text-arcora-slate" : "text-arcora-muted-fg"}>
               {step.label}
             </span>
           </li>

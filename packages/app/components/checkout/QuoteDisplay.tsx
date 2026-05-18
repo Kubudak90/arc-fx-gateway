@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { formatTokenAmount, symbolForAddress } from "@/lib/ui/format";
 import { RefreshCw } from "lucide-react";
 
@@ -111,44 +109,93 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
   const payoutSym = symbolForAddress(props.payoutTokenAddress);
 
   return (
-    <Card className={`rounded-2xl ${stale ? "border-arcora-blue" : "border-arcora-border"}`}>
-      <CardContent className="p-6 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">You pay</div>
-          {sameToken && (
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-              No swap
-            </span>
-          )}
+    <div className={`bg-white border ${stale ? "border-arcora-blue" : "border-arcora-border"}`}>
+      {/* Quote card header */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-arcora-border">
+        <div className="flex items-center gap-2">
+          <span className={`inline-block size-[6px] rounded-full ${stale ? "bg-amber-400" : "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]"}`} />
+          <span className="text-[12px] font-medium text-arcora-slate">
+            {sameToken ? "Direct payment" : "Live quote · App Kit Swap RFQ"}
+          </span>
         </div>
-        {loading && !payInAmount ? (
-          <div className="h-8 w-32 rounded bg-arcora-gray animate-pulse" />
-        ) : (
-          <div className="font-[family-name:var(--font-display)] text-3xl">
-            {payInAmount ? formatTokenAmount(payInAmount) : "—"} {payInSym}
-          </div>
+        {sameToken && (
+          <span className="font-[family-name:var(--font-mono)] text-[10px] font-semibold tracking-[0.08em] uppercase text-emerald-700 border border-emerald-200 bg-emerald-50 px-2 py-[2px]">
+            No swap
+          </span>
         )}
-
-        <div className="text-xs uppercase tracking-wider font-semibold text-muted-foreground pt-2">
-          Merchant receives (estimated)
-        </div>
-        {loading && !estimateOut ? (
-          <div className="h-8 w-32 rounded bg-arcora-gray animate-pulse" />
-        ) : error ? (
-          <div className="text-sm text-red-600">{error}</div>
-        ) : (
-          <div className="font-[family-name:var(--font-display)] text-2xl">
-            {estimateOut ? formatTokenAmount(estimateOut) : "—"} {payoutSym}
-          </div>
-        )}
-
         {stale && (
-          <Button variant="ghost" size="sm" onClick={() => void fetchQuote()} disabled={loading}>
-            <RefreshCw className="size-4 mr-2" /> Refresh quote
-          </Button>
+          <button
+            type="button"
+            onClick={() => void fetchQuote()}
+            disabled={loading}
+            className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[11px] font-medium text-arcora-blue hover:underline disabled:opacity-50"
+          >
+            <RefreshCw className="size-3" /> Refresh
+          </button>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Quote body — two-column with arrow */}
+      <div className="p-5">
+        <div className="grid grid-cols-[1fr_32px_1fr] items-center gap-3">
+          {/* You pay */}
+          <div>
+            <div className="eyebrow mb-2">You pay</div>
+            {loading && !payInAmount ? (
+              <div className="h-8 w-28 bg-arcora-gray animate-pulse" />
+            ) : (
+              <div className="font-[family-name:var(--font-display)] font-light text-[32px] leading-[1] tracking-[-0.02em] text-arcora-slate">
+                {payInAmount ? formatTokenAmount(payInAmount) : "—"}
+                <span className="text-[14px] text-arcora-muted-fg font-normal ml-1.5 tracking-[0.02em]">
+                  {payInSym}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Arrow */}
+          <div className="flex items-center justify-center size-8 border border-arcora-border text-arcora-muted-fg text-[15px] self-end mb-1">
+            →
+          </div>
+
+          {/* Merchant receives */}
+          <div className="text-right">
+            <div className="eyebrow mb-2">Merchant receives</div>
+            {loading && !estimateOut ? (
+              <div className="h-8 w-28 bg-arcora-gray animate-pulse ml-auto" />
+            ) : error ? (
+              <div className="text-[13px] text-red-600">{error}</div>
+            ) : (
+              <div className="font-[family-name:var(--font-display)] font-light text-[32px] leading-[1] tracking-[-0.02em] text-arcora-slate">
+                {estimateOut ? formatTokenAmount(estimateOut) : "—"}
+                <span className="text-[14px] text-arcora-muted-fg font-normal ml-1.5 tracking-[0.02em]">
+                  {payoutSym}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Rate footer */}
+        {!sameToken && !loading && !error && payInAmount && estimateOut && (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-arcora-border font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg">
+            <span>
+              Rate{" "}
+              <span className="text-arcora-slate">
+                1 {payInSym} = {(Number(estimateOut) / Number(payInAmount)).toFixed(4)} {payoutSym}
+              </span>
+            </span>
+            {stale ? (
+              <span className="text-amber-600 font-semibold tracking-[0.06em] uppercase">QUOTE STALE</span>
+            ) : (
+              <span className="bg-arcora-blue/10 text-arcora-blue font-semibold tracking-[0.04em] uppercase px-2 py-[2px]">
+                FIXED
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

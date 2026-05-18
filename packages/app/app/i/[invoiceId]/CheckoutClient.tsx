@@ -59,7 +59,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5">
       <QuoteDisplay
         payInTokenAddress={props.payInTokenAddress}
         payoutTokenAddress={props.payoutTokenAddress}
@@ -68,7 +68,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
         onStale={() => setQuoteStale(true)}
       />
 
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         <ConnectButton
           client={thirdwebClient}
           connectButton={{ label: "Connect wallet", className: "btn-arcora-pill w-full" }}
@@ -87,10 +87,36 @@ export default function CheckoutClient(props: CheckoutClientProps) {
         <button
           type="button"
           onClick={() => setShowQR(true)}
-          className="w-full inline-flex items-center justify-center gap-2 text-sm text-arcora-link hover:underline py-2"
+          className="w-full inline-flex items-center justify-center gap-2 text-[13px] text-arcora-link hover:underline py-2"
         >
           <Smartphone className="size-4" /> Pay with mobile wallet
         </button>
+      </div>
+
+      {/* What you're signing — compact EIP-712 info panel */}
+      <div className="border border-arcora-border bg-white mt-2">
+        <div className="grid grid-cols-2 divide-x divide-arcora-border">
+          <div className="p-4">
+            <p className="eyebrow mb-2">What you&apos;re signing</p>
+            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+              EIP-712{" "}
+              <code className="font-[family-name:var(--font-mono)] text-arcora-slate bg-arcora-gray px-[3px] py-[1px] text-[11px]">
+                PermitWitnessTransferFrom
+              </code>
+              . Witness binds to{" "}
+              <code className="font-[family-name:var(--font-mono)] text-arcora-slate bg-arcora-gray px-[3px] py-[1px] text-[11px] break-all">
+                {props.invoiceId}
+              </code>{" "}
+              and the Arcora relayer only. Signature cannot be replayed on another transaction.
+            </p>
+          </div>
+          <div className="p-4">
+            <p className="eyebrow mb-2">What happens next</p>
+            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+              The relayer pulls funds via Permit2, runs the FX swap via Arc&apos;s App Kit, and delivers the merchant&apos;s preferred stablecoin. Under 30 seconds.
+            </p>
+          </div>
+        </div>
       </div>
 
       {props.cancelUrl && (() => {
@@ -103,8 +129,8 @@ export default function CheckoutClient(props: CheckoutClientProps) {
           if (!props.allowedOrigins.includes(origin)) return null;
         } catch { return null; }
         return (
-          <div className="text-center pt-2">
-            <a href={props.cancelUrl} className="text-sm text-muted-foreground hover:underline">Cancel</a>
+          <div className="text-center pt-1">
+            <a href={props.cancelUrl} className="text-[13px] text-arcora-muted-fg hover:underline">Cancel</a>
           </div>
         );
       })()}

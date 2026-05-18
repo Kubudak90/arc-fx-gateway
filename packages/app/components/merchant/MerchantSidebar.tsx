@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import { ArcoraLogo } from "@/components/brand/Logo";
 import { arcTestnet } from "@/lib/chain/wagmi-config";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 const NAV_ITEMS = [
   { id: "overview",   label: "Overview",   href: "/m/dashboard",  icon: "M3 12L12 3l9 9M5 10v10h14V10" },
@@ -30,20 +31,20 @@ export function MerchantSidebar({ merchantAddress }: Props) {
   const shortAddr = `${merchantAddress.slice(0, 6)}…${merchantAddress.slice(-4)}`;
 
   return (
-    <aside className="hidden md:flex flex-col w-[232px] shrink-0 px-4 py-6 gap-1 bg-[#fbfafa] border-r border-arcora-border min-h-screen sticky top-0 self-start">
+    <aside className="hidden md:flex flex-col w-[232px] shrink-0 px-4 py-6 gap-1 bg-[var(--bg-elev-2)] border-r border-[var(--line)] min-h-screen sticky top-0 self-start">
       <Link href={"/m/dashboard" as Route} aria-label="Arcora home" className="px-2.5 pb-3 inline-flex">
         <ArcoraLogo size={22} />
       </Link>
 
       <div className="px-2.5 pb-3.5 flex flex-col gap-1.5">
-        <span className="eyebrow">Merchant</span>
+        <span className="eyebrow text-[var(--ink-3)]">Merchant</span>
         <div className="flex items-center gap-2.5">
           <div className="w-[30px] h-[30px] rounded-lg bg-arcora-blue/10 text-arcora-blue flex items-center justify-center mono font-bold text-[12px]">
             {initials}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[13px] font-medium truncate">{shortAddr}</span>
-            <span className="mono text-[10.5px] text-arcora-muted-fg">arc · {IS_TESTNET ? "testnet" : "live"}</span>
+            <span className="text-[13px] font-medium truncate text-[var(--ink)]">{shortAddr}</span>
+            <span className="mono text-[10.5px] text-[var(--ink-3)]">arc · {IS_TESTNET ? "testnet" : "live"}</span>
           </div>
         </div>
       </div>
@@ -60,8 +61,8 @@ export function MerchantSidebar({ merchantAddress }: Props) {
               className={[
                 "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13.5px] transition-colors",
                 active
-                  ? "bg-arcora-gray text-arcora-slate font-medium"
-                  : "text-arcora-deep hover:bg-arcora-gray/60",
+                  ? "bg-[var(--bg-elev)] text-[var(--accent)] font-medium"
+                  : "text-[var(--ink-2)] hover:bg-[var(--bg-elev)] hover:text-[var(--ink)]",
               ].join(" ")}
             >
               <svg
@@ -85,21 +86,24 @@ export function MerchantSidebar({ merchantAddress }: Props) {
 
       <div className="mt-auto pt-3 flex flex-col gap-2">
         {IS_TESTNET && (
-          <div className="p-3 border border-arcora-border rounded-[10px] bg-white">
+          <div className="p-3 border border-[var(--line)] rounded-[10px] bg-[var(--bg-elev)]">
             <div className="flex items-center gap-1.5 mb-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-arcora-blue" />
-              <span className="mono text-[10.5px] text-arcora-muted-fg tracking-wider">ARC TESTNET</span>
+              <span className="mono text-[10.5px] text-[var(--ink-3)] tracking-wider">ARC TESTNET</span>
             </div>
-            <p className="text-[11.5px] text-arcora-deep leading-snug m-0">
+            <p className="text-[11.5px] text-[var(--ink-2)] leading-snug m-0">
               You&apos;re on testnet. Switch network to go live.
             </p>
           </div>
         )}
-        <form action="/api/auth/logout" method="POST" className="px-2.5">
-          <button type="submit" className="text-arcora-link hover:underline text-[12px]">
-            Sign out
-          </button>
-        </form>
+        <div className="px-2.5 flex items-center justify-between">
+          <form action="/api/auth/logout" method="POST">
+            <button type="submit" className="text-[var(--accent)] hover:underline text-[12px]">
+              Sign out
+            </button>
+          </form>
+          <ThemeToggle />
+        </div>
       </div>
     </aside>
   );

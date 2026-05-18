@@ -134,7 +134,7 @@ export default function Home() {
             <span>
               <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="hover:text-arcora-link transition-colors">338 tests passing</a>
               {" · "}
-              <a href="https://github.com/Kubudak90/arc-fx-gateway/blob/plan-1-protocol/SECURITY.md" target="_blank" rel="noopener noreferrer" className="hover:text-arcora-link transition-colors">audited</a>
+              <a href="https://github.com/Kubudak90/arc-fx-gateway/blob/HEAD/SECURITY.md" target="_blank" rel="noopener noreferrer" className="hover:text-arcora-link transition-colors">audited</a>
               {" · "}
               <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="hover:text-arcora-link transition-colors">open-source</a>
             </span>

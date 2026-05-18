@@ -72,6 +72,7 @@
   cursor: pointer;
 }
 .btn-arcora-pill-light:hover { background: var(--color-arcora-blue); color: var(--color-white); }
+.btn-arcora-pill-light:focus-visible { outline: 2px solid var(--color-arcora-slate); outline-offset: 2px; }
 
 @layer base {
   * {

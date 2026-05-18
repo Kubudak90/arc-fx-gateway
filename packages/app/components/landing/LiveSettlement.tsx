@@ -107,7 +107,7 @@ export function LiveSettlement() {
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-stretch">
         {/* Customer side */}
         <Side
-          role="CUSTOMER"
+          side="CUSTOMER"
           token={s.payIn}
           amountMicro={amountIn}
           highlight={phase === "quote" || phase === "pay"}
@@ -139,7 +139,7 @@ export function LiveSettlement() {
           </div>
 
           {/* Cost breakdown */}
-          <div className="w-full text-[11px] font-[family-name:var(--font-mono)] tabular-nums text-muted-foreground space-y-1">
+          <div className="w-full text-[11px] font-[family-name:var(--font-mono)] tabular-nums text-arcora-muted-fg space-y-1">
             <div className="flex justify-between">
               <span>amountIn</span>
               <span className="text-arcora-slate">{fmt(amountIn)} {s.payIn}</span>
@@ -159,7 +159,7 @@ export function LiveSettlement() {
 
         {/* Merchant side */}
         <Side
-          role="MERCHANT"
+          side="MERCHANT"
           token={s.payout}
           amountMicro={payout}
           highlight={phase === "settled"}
@@ -203,9 +203,9 @@ export function LiveSettlement() {
 }
 
 function Side({
-  role, token, amountMicro, highlight, dim, subline, align,
+  side, token, amountMicro, highlight, dim, subline, align,
 }: {
-  role: "CUSTOMER" | "MERCHANT";
+  side: "CUSTOMER" | "MERCHANT";
   token: "USDC" | "EURC";
   amountMicro: number;
   highlight: boolean;
@@ -220,7 +220,7 @@ function Side({
       } ${align === "right" ? "md:items-end md:text-right" : ""}`}
     >
       <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.12em] uppercase text-arcora-muted-fg">
-        {role}
+        {side}
       </div>
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-light tabular-nums tracking-[-0.02em] text-arcora-slate">

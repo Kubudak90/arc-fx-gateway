@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Marketing-side preview of the merchant dashboard. The chart shape and the
  * activity rows are deliberate placeholders — Arc testnet's real numbers are

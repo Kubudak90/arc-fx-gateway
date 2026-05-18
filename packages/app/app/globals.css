@@ -105,6 +105,25 @@
   --danger:      #dc2626;
 }
 
+/* Dark palette — applies only when next-themes sets .dark on <html>.
+   Overrides design-system tokens ONLY. The --color-arcora-* tokens and
+   --color-background are deliberately left untouched so landing and checkout
+   (authored with arcora-* utilities, no dark: variants) stay light. */
+.dark {
+  --ink:         #f4f4f4;
+  --ink-2:       #a8a8a8;
+  --ink-3:       #6f6f6f;
+  --line:        #1f1f1f;
+  --line-strong: #2a2a2a;
+  --bg-elev:     #0a0a0a;
+  --bg-elev-2:   #0e0e0e;
+  --accent:      #4589ff;
+  --accent-ink:  #ffffff;
+  --accent-soft: rgba(69, 137, 255, 0.14);
+  --warn:        #f1c21b;
+  --danger:      #fa4d56;
+}
+
 .eyebrow {
   font-family: var(--font-mono);
   font-size: 11px;

@@ -38,7 +38,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
   const initialStatus = expired && inv.status === "created" ? "expired" : inv.status;
 
   return (
-    <main className="min-h-screen bg-[#f4f4f4] py-0">
+    <main className="min-h-screen bg-arcora-canvas">
       {/* Topbar */}
       <header className="h-14 px-6 flex items-center justify-between bg-white border-b border-arcora-border">
         <div className="flex items-center gap-2 font-semibold text-[15px] tracking-tight text-arcora-slate">
@@ -69,7 +69,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
         </div>
 
         {/* Right column — quote + sign */}
-        <div className="bg-[#f4f4f4] p-10 md:p-14 flex flex-col gap-6">
+        <div className="bg-arcora-canvas p-10 md:p-14 flex flex-col gap-6">
           <CheckoutClient
             invoiceId={inv.id}
             initialStatus={initialStatus as "created" | "paid" | "expired" | "failed"}

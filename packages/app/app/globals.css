@@ -16,6 +16,7 @@
   --color-arcora-link:       #2563ff;
   --color-arcora-border:     rgba(11, 20, 38, 0.12);
   --color-arcora-muted-fg:   #5b6478;
+  --color-arcora-canvas:     #f4f4f4;
 
   /* Fonts (set by next/font in layout.tsx) */
   --font-display: var(--font-display, "Inter Display"), "Inter", sans-serif;

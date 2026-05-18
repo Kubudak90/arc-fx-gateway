@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { safeClientRedirect } from "@/lib/security/redirect";
 
+const screenHeadingCls = "font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate";
+
 /** Returns true when `url` is safe to render as a clickable link from this
  *  page — same rules as `safeClientRedirect` minus the `window.location` write. */
 function isOriginAllowed(url: string | undefined, allowedOrigins: readonly string[]): boolean {
@@ -41,7 +43,7 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
           <Check className="size-8 text-emerald-600" />
         </div>
         <div>
-          <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+          <h2 className={screenHeadingCls}>
             Payment received
           </h2>
           <p className="mt-2 text-[14px] text-arcora-muted-fg">Thanks — you can close this tab.</p>
@@ -61,7 +63,7 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
           <Check className="size-8 text-emerald-600" />
         </div>
         <div>
-          <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+          <h2 className={screenHeadingCls}>
             Payment received
           </h2>
           <p className="mt-2 text-[14px] text-arcora-muted-fg max-w-sm mx-auto">
@@ -78,7 +80,7 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
         <Check className="size-8 text-emerald-600" />
       </div>
       <div>
-        <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+        <h2 className={screenHeadingCls}>
           Payment received
         </h2>
         <p className="mt-2 text-[14px] text-arcora-muted-fg">Redirecting to merchant in {seconds}s…</p>
@@ -95,7 +97,7 @@ export function ExpiredScreen({ cancelUrl, allowedOrigins }: { cancelUrl?: strin
         <span className="font-[family-name:var(--font-mono)] text-[20px] text-arcora-muted-fg">×</span>
       </div>
       <div>
-        <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+        <h2 className={screenHeadingCls}>
           Invoice expired
         </h2>
         <p className="mt-2 text-[14px] text-arcora-muted-fg">Please request a new invoice from the merchant.</p>
@@ -111,7 +113,7 @@ export function NotFoundScreen() {
   return (
     <div className="flex flex-col items-center gap-5 py-16 text-center">
       <div>
-        <h2 className="font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate">
+        <h2 className={screenHeadingCls}>
           Invoice not found
         </h2>
         <p className="mt-2 text-[14px] text-arcora-muted-fg">This invoice doesn&apos;t exist or has been removed.</p>

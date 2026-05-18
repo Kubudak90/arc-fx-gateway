@@ -16,13 +16,24 @@ function formatRemaining(diff: number): string {
 }
 
 export function ExpiryCountdown({ expiresAt, className }: ExpiryCountdownProps) {
-  const [label, setLabel] = useState(() => formatRemaining(expiresAt.getTime() - Date.now()));
+  const [label, setLabel] = useState("…");
 
   useEffect(() => {
+    if (expiresAt.getTime() <= Date.now()) { setLabel("Expired"); return; }
     const tick = () => setLabel(formatRemaining(expiresAt.getTime() - Date.now()));
+    tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [expiresAt]);
 
-  return <span className={className}>{label}</span>;
+  return (
+    <span
+      className={className}
+      role="timer"
+      aria-label={label}
+      aria-live={label === "Expired" ? "assertive" : "off"}
+    >
+      {label}
+    </span>
+  );
 }

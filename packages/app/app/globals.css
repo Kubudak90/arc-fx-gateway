@@ -107,11 +107,11 @@
   --danger:      #dc2626;
 }
 
-/* Dark palette — applies only when next-themes sets .dark on <html>.
-   Overrides design-system tokens ONLY. The --color-arcora-* tokens and
-   --color-background are deliberately left untouched so landing and checkout
-   (authored with arcora-* utilities, no dark: variants) stay light. */
-.dark {
+/* Dark palette — applies only when next-themes sets .dark on <html>
+   AND the element is inside a .theme-scope subtree (merchant layout).
+   Landing/checkout are NOT inside .theme-scope so their helper classes
+   (.eyebrow/.hairline/.tag) always resolve to :root light token values. */
+.dark .theme-scope {
   --ink:         #f4f4f4;
   --ink-2:       #a8a8a8;
   --ink-3:       #6f6f6f;
@@ -126,7 +126,7 @@
   --danger:      #fa4d56;
 }
 
-.dark .tag.muted { background: rgba(255, 255, 255, 0.06); }
+.dark .theme-scope .tag.muted { background: rgba(255, 255, 255, 0.06); }
 
 .eyebrow {
   font-family: var(--font-mono);

@@ -88,7 +88,7 @@ export function MerchantSidebar({ merchantAddress }: Props) {
         {IS_TESTNET && (
           <div className="p-3 border border-[var(--line)] rounded-[10px] bg-[var(--bg-elev)]">
             <div className="flex items-center gap-1.5 mb-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-arcora-blue" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
               <span className="mono text-[10.5px] text-[var(--ink-3)] tracking-wider">ARC TESTNET</span>
             </div>
             <p className="text-[11.5px] text-[var(--ink-2)] leading-snug m-0">

@@ -19,7 +19,7 @@ export default async function MerchantLayout({ children }: { children: React.Rea
   }
 
   return (
-    <div className="md:grid md:grid-cols-[232px_1fr] min-h-screen bg-[var(--bg-elev)]">
+    <div className="theme-scope md:grid md:grid-cols-[232px_1fr] min-h-screen bg-[var(--bg-elev)]">
       <MerchantSidebar merchantAddress={session.merchantAddress} />
 
       <div className="min-w-0">

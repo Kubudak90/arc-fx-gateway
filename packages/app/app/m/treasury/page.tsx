@@ -144,7 +144,7 @@ export default function TreasuryPage() {
           <h1 className="font-[family-name:var(--font-display)] text-[28px] leading-[1.1] tracking-[-0.025em] text-[var(--ink)]">
             Treasury
           </h1>
-          <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.06em] uppercase text-[var(--ink-3)] mt-1.5">
+          <p className="mono text-[10px] tracking-[0.06em] uppercase text-[var(--ink-3)] mt-1.5">
             Reconciled from on-chain · 30-day window
           </p>
         </div>
@@ -172,7 +172,7 @@ export default function TreasuryPage() {
       <section>
         <h2 className="eyebrow mb-3">Claim escrows</h2>
         <div className="glass p-4 space-y-4">
-          <div className="flex flex-wrap gap-5 font-[family-name:var(--font-mono)] text-xs text-[var(--ink-3)]">
+          <div className="flex flex-wrap gap-5 mono text-xs text-[var(--ink-3)]">
             <span>
               <span className="text-[var(--ink)] font-semibold">{escrows.counts.pending}</span>&nbsp;pending
               {escrows.counts.pending > 0 && " (within 7-day refund window)"}
@@ -194,7 +194,7 @@ export default function TreasuryPage() {
         <h2 className="eyebrow mb-3">Recent activity</h2>
         <div className="glass overflow-hidden">
           {data.activity.length === 0 ? (
-            <div className="p-10 text-center text-[var(--ink-3)] font-[family-name:var(--font-mono)] text-xs">
+            <div className="p-10 text-center text-[var(--ink-3)] mono text-xs">
               No settlement activity yet.
             </div>
           ) : (
@@ -215,10 +215,10 @@ function TokenSection({ t, series }: { t: TokenTotals; series?: TimeSeriesEntry 
     <section className="space-y-3">
       {/* Token header */}
       <div className="flex items-center gap-3 border-b border-[var(--line)] pb-2">
-        <h2 className="font-[family-name:var(--font-mono)] text-xs font-semibold tracking-[0.1em] uppercase text-[var(--ink)]">
+        <h2 className="mono text-xs font-semibold tracking-[0.1em] uppercase text-[var(--ink)]">
           {sym}
         </h2>
-        <span className="font-[family-name:var(--font-mono)] text-[10px] text-[var(--ink-3)]">
+        <span className="mono text-[10px] text-[var(--ink-3)]">
           {t.paidCount} paid · {t.refundedCount} refunded
         </span>
       </div>
@@ -235,7 +235,7 @@ function TokenSection({ t, series }: { t: TokenTotals; series?: TimeSeriesEntry 
         <div className="glass overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--line)]">
             <span className="eyebrow">Daily net payout · last 30 days</span>
-            <span className="font-[family-name:var(--font-mono)] text-[10px] text-[var(--ink-3)] tabular-nums">
+            <span className="mono text-[10px] text-[var(--ink-3)] tabular-nums">
               {sym}
             </span>
           </div>
@@ -290,9 +290,13 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
 
   // SVG color palette — branches on theme
   const accentColor    = "#00c2a8";                              // teal: legible on both
+  // Intentional theme-branched value for the zero-baseline dashes
   const baselineStroke = isDark ? "rgba(255,255,255,0.08)" : "rgba(11,20,38,0.06)";
+  // Mirror of --ink-3 (SVG attributes can't use CSS custom properties)
   const emptyFill      = isDark ? "#6f6f6f" : "#5b6478";
+  // Mirror of --bg-elev-2
   const circleStroke   = isDark ? "#0e0e0e" : "#fff";
+  // Intentional theme-branched value for refund-only lines
   const refundColor    = isDark ? "#38bdf8" : "#0284c7";
 
   function handleMove(e: React.MouseEvent<SVGSVGElement>) {
@@ -308,7 +312,7 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
   }
 
   const hover = hoverIdx !== null
-    ? { idx: hoverIdx, day: days[hoverIdx]!, value: values[hoverIdx]! }
+    ? { idx: hoverIdx, point: days[hoverIdx]!, value: values[hoverIdx]! }
     : null;
 
   return (
@@ -318,13 +322,15 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         className="w-full h-[140px] cursor-crosshair"
+        role="img"
+        aria-label={`Daily net payout, last 30 days, ${symbolForAddress(token)}`}
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}
       >
         <defs>
           <linearGradient id={`treasury-area-${series.token}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#00c2a8" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#00c2a8" stopOpacity="0" />
+            <stop offset="0%"   stopColor={accentColor} stopOpacity="0.32" />
+            <stop offset="100%" stopColor={accentColor} stopOpacity="0" />
           </linearGradient>
         </defs>
         {/* zero baseline */}
@@ -366,22 +372,22 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
           }}
         >
           <div className="bg-[var(--bg-elev-2)] text-[var(--ink)] border border-[var(--line)] rounded px-3 py-2 shadow-lg whitespace-nowrap">
-            <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-wider text-[var(--ink-3)] uppercase">
-              {hover.day.day}
+            <div className="mono text-[10px] tracking-wider text-[var(--ink-3)] uppercase">
+              {hover.point.day}
             </div>
-            <div className="font-[family-name:var(--font-mono)] text-sm tabular-nums mt-0.5">
+            <div className="mono text-sm tabular-nums mt-0.5">
               {hover.value >= 0 ? "+" : ""}
               {formatCurrency(BigInt(Math.round(hover.value * 1_000_000)).toString(), token)}
             </div>
-            <div className="font-[family-name:var(--font-mono)] text-[10px] text-[var(--ink-3)] mt-0.5">
-              {hover.day.paidCount} paid
-              {hover.day.refundedCount > 0 && ` · ${hover.day.refundedCount} refunded`}
+            <div className="mono text-[10px] text-[var(--ink-3)] mt-0.5">
+              {hover.point.paidCount} paid
+              {hover.point.refundedCount > 0 && ` · ${hover.point.refundedCount} refunded`}
             </div>
           </div>
         </div>
       )}
 
-      <div className="flex items-center justify-between mt-2 font-[family-name:var(--font-mono)] text-[10px] text-[var(--ink-3)] tabular-nums">
+      <div className="flex items-center justify-between mt-2 mono text-[10px] text-[var(--ink-3)] tabular-nums">
         <span>{days[0]!.day}</span>
         <span>{summary}</span>
         <span>{days[days.length - 1]!.day}</span>
@@ -393,14 +399,14 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="px-4 py-4 min-h-[88px] relative bg-[var(--bg-elev-2)]">
-      <div className="font-[family-name:var(--font-mono)] text-[9px] tracking-[0.12em] uppercase text-[var(--ink-3)]">
+      <div className="mono text-[9px] tracking-[0.12em] uppercase text-[var(--ink-3)]">
         {label}
       </div>
       <div className="font-[family-name:var(--font-display)] text-[22px] leading-none mt-2 text-[var(--ink)] tracking-[-0.02em]">
         {value}
       </div>
       {hint && (
-        <div className="font-[family-name:var(--font-mono)] text-[9px] text-amber-600 dark:text-amber-400 mt-1.5">
+        <div className="mono text-[9px] text-amber-600 dark:text-amber-400 mt-1.5">
           {hint}
         </div>
       )}
@@ -432,7 +438,7 @@ function ActivityItem({ a }: { a: ActivityRow }) {
   const sign = SIGN_FOR[a.status] ?? "+";
   const color = STATUS_COLOR[a.status] ?? "text-emerald-700 dark:text-emerald-400";
   return (
-    <li className="grid grid-cols-[72px_1fr_auto] items-center gap-3 px-4 py-2.5 border-b border-[var(--line)] last:border-b-0 hover:bg-[var(--bg-elev)] transition-colors font-[family-name:var(--font-mono)] text-xs">
+    <li className="grid grid-cols-[72px_1fr_auto] items-center gap-3 px-4 py-2.5 border-b border-[var(--line)] last:border-b-0 hover:bg-[var(--bg-elev)] transition-colors mono text-xs">
       {/* Timestamp / relative time */}
       <span className="text-[var(--ink-3)] text-[10px] tracking-[0.04em] truncate">
         {a.eventAt ? formatRelativeTime(a.eventAt) : "—"}

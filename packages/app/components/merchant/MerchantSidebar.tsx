@@ -39,7 +39,7 @@ export function MerchantSidebar({ merchantAddress }: Props) {
       <div className="px-2.5 pb-3.5 flex flex-col gap-1.5">
         <span className="eyebrow text-[var(--ink-3)]">Merchant</span>
         <div className="flex items-center gap-2.5">
-          <div className="w-[30px] h-[30px] rounded-lg bg-arcora-blue/10 text-arcora-blue flex items-center justify-center mono font-bold text-[12px]">
+          <div className="w-[30px] h-[30px] rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center mono font-bold text-[12px]">
             {initials}
           </div>
           <div className="flex flex-col min-w-0">
@@ -98,7 +98,7 @@ export function MerchantSidebar({ merchantAddress }: Props) {
         )}
         <div className="px-2.5 flex items-center justify-between">
           <form action="/api/auth/logout" method="POST">
-            <button type="submit" className="text-[var(--accent)] hover:underline text-[12px]">
+            <button type="submit" className="text-[var(--ink-3)] hover:text-[var(--accent)] hover:underline text-[12px]">
               Sign out
             </button>
           </form>

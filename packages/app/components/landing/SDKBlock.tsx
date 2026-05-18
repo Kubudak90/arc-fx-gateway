@@ -74,53 +74,54 @@ export function SDKBlock() {
   const lines = CODE.split("\n");
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.3fr] gap-8 lg:gap-12 items-center">
+    <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.15fr] gap-12 lg:gap-16 items-start">
       <div>
-        <p className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.18em] uppercase text-muted-foreground">
-          Developers
-        </p>
-        <h2 className="mt-3 font-[family-name:var(--font-display)] text-[30px] sm:text-[36px] md:text-[44px] leading-[1.05] tracking-tight text-arcora-slate text-balance">
-          Four lines.<br />First settlement.
+        <p className="eyebrow mb-4">Developers</p>
+        <h2 className="font-[family-name:var(--font-display)] font-light text-[48px] sm:text-[56px] leading-[1.04] tracking-[-0.025em] text-arcora-slate text-balance">
+          Four lines.<br /><em className="not-italic italic font-[family-name:var(--font-display)]">First settlement.</em>
         </h2>
-        <p className="mt-5 text-muted-foreground leading-relaxed">
+        <p className="mt-6 text-[16px] text-arcora-muted-fg leading-[1.55] max-w-[440px]">
           Drop in the npm SDK, point a webhook at your worker, and you&apos;re collecting stablecoin volume.
           TypeScript-first, framework-agnostic, batteries included.
         </p>
-        <div className="mt-7 flex gap-2 flex-wrap">
+        <div className="mt-8 flex gap-2 flex-wrap">
           <a
             href="https://www.npmjs.com/package/@arcora/sdk"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-arcora-border bg-white text-sm font-medium text-arcora-slate hover:border-muted-foreground transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2.5 border border-arcora-border bg-white text-[13px] font-medium text-arcora-slate hover:border-arcora-muted-fg transition-colors"
           >
-            <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground tracking-wider">$</span>
+            <span className="font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg tracking-wider">$</span>
             npm install @arcora/sdk
           </a>
           <a
             href="https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/packages/sdk#readme"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center px-4 py-2.5 rounded-lg border border-arcora-border bg-transparent text-sm font-medium text-arcora-slate hover:border-muted-foreground transition-colors"
+            className="inline-flex items-center px-4 py-2.5 border border-arcora-border bg-transparent text-[13px] font-medium text-arcora-slate hover:border-arcora-muted-fg transition-colors"
           >
             Read the docs
           </a>
         </div>
       </div>
 
-      <div className="rounded-[16px] border border-arcora-border bg-white overflow-hidden shadow-[0_20px_40px_-24px_rgba(11,20,38,0.12)]">
-        <div className="flex items-center justify-between px-4 py-3 bg-arcora-gray/40 border-b border-arcora-border">
-          <div className="flex gap-1.5">
-            <span className="size-2.5 rounded-full bg-arcora-border" />
-            <span className="size-2.5 rounded-full bg-arcora-border" />
-            <span className="size-2.5 rounded-full bg-arcora-border" />
+      <div className="border border-arcora-border bg-white overflow-hidden shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
+        <div className="flex items-center justify-between px-4 py-3 bg-arcora-gray/30 border-b border-arcora-border">
+          <div className="flex">
+            {["routes/checkout.ts", ""].map((tab, i) => (
+              tab ? (
+                <span key={i} className={`font-[family-name:var(--font-mono)] text-[11px] px-4 py-1.5 border-r border-arcora-border ${i === 0 ? "text-arcora-slate bg-white border-b-0" : "text-arcora-muted-fg"}`}>
+                  {tab}
+                </span>
+              ) : null
+            ))}
           </div>
-          <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground">routes/checkout.ts</span>
-          <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground">TypeScript</span>
+          <span className="font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg">TypeScript</span>
         </div>
         <pre className="px-5 py-5 m-0 text-[12.5px] leading-[1.7] font-[family-name:var(--font-mono)] text-arcora-slate overflow-auto bg-white">
           {lines.map((l, idx) => (
             <div key={idx} className="flex gap-4">
-              <span className="text-muted-foreground/60 select-none w-5 text-right tabular-nums">{idx + 1}</span>
+              <span className="text-arcora-muted-fg/40 select-none w-5 text-right tabular-nums">{idx + 1}</span>
               <span>{highlightLine(l, String(idx))}</span>
             </div>
           ))}

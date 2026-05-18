@@ -30,7 +30,7 @@ export default function CheckoutDemoPage() {
   const [paying, setPaying]   = useState(false);
   const [quoteSecs, setQuoteSecs] = useState(90);
 
-  const merchant = { name: "Lumen Apparel", desc: "Order #ord_8124 · 2 items" };
+  const merchant = { name: "Demo Store", desc: "Order #ord_8124 · 2 items" };
   const invoice  = { amount: 49.0, currency: "USD", settle: "USDC" };
 
   // 1 EUR = ORACLE USD. So to deliver $X USDC the EURC payer needs $X / ORACLE

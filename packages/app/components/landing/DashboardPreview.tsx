@@ -31,30 +31,28 @@ export function DashboardPreview() {
   const last = points[points.length - 1]!;
 
   return (
-    <div className="rounded-[20px] border border-arcora-border bg-white shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_20px_40px_-24px_rgba(11,20,38,0.12)] overflow-hidden">
+    <div className="border border-arcora-border bg-white overflow-hidden shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
       <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-0">
         {/* Chart */}
-        <div className="p-5 sm:p-7 border-b lg:border-b-0 lg:border-r border-arcora-border">
+        <div className="p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-arcora-border">
           <div className="flex items-baseline justify-between gap-3 flex-wrap">
             <div>
-              <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
-                Volume · last 30d
+              <p className="eyebrow mb-3">Volume · last 30d</p>
+              <div className="font-[family-name:var(--font-display)] font-light text-3xl sm:text-4xl tabular-nums tracking-[-0.02em] text-arcora-slate">
+                $1,284,309<span className="text-arcora-muted-fg text-lg sm:text-xl ml-0.5">.42</span>
               </div>
-              <div className="mt-2 font-[family-name:var(--font-display)] text-3xl sm:text-4xl font-semibold tabular-nums text-arcora-slate">
-                $1,284,309<span className="text-muted-foreground text-lg sm:text-xl ml-0.5">.42</span>
-              </div>
-              <div className="mt-1 font-[family-name:var(--font-mono)] text-xs text-arcora-teal">
+              <div className="mt-1 font-[family-name:var(--font-mono)] text-[11px] text-arcora-teal tracking-[0.04em]">
                 +24.1% vs prev period
               </div>
             </div>
-            <div className="flex gap-1 shrink-0">
+            <div className="flex gap-0 border border-arcora-border shrink-0">
               {["1d", "7d", "30d", "All"].map((p, i) => (
                 <span
                   key={p}
-                  className={`font-[family-name:var(--font-mono)] text-[11px] px-2 py-1 rounded-md border ${
+                  className={`font-[family-name:var(--font-mono)] text-[11px] px-3 py-1.5 border-r last:border-r-0 border-arcora-border cursor-pointer ${
                     i === 2
-                      ? "bg-arcora-slate text-white border-arcora-slate"
-                      : "bg-transparent text-muted-foreground border-arcora-border"
+                      ? "bg-arcora-slate text-white"
+                      : "bg-transparent text-arcora-muted-fg hover:bg-arcora-gray/50"
                   }`}
                 >
                   {p}
@@ -63,7 +61,7 @@ export function DashboardPreview() {
             </div>
           </div>
 
-          <svg viewBox="0 0 400 160" preserveAspectRatio="none" className="w-full h-[160px] mt-5">
+          <svg viewBox="0 0 400 160" preserveAspectRatio="none" className="w-full h-[160px] mt-6">
             <defs>
               <linearGradient id="dash-area" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%"   stopColor="#00c2a8" stopOpacity="0.32" />
@@ -82,36 +80,34 @@ export function DashboardPreview() {
         </div>
 
         {/* Mini ledger */}
-        <div className="p-5 sm:p-7 flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] uppercase text-muted-foreground">
-              Recent settlements
-            </span>
-            <span className="inline-flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[10px] tracking-wider uppercase text-muted-foreground">
-              <span className="size-1.5 rounded-full bg-arcora-teal" />
+        <div className="p-6 sm:p-8 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <p className="eyebrow">Recent settlements</p>
+            <span className="inline-flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[10px] tracking-[0.06em] uppercase text-arcora-muted-fg">
+              <span className="size-[5px] rounded-full bg-arcora-teal" />
               Live
             </span>
           </div>
-          <ul className="space-y-1 flex-1">
+          <ul className="space-y-0 flex-1">
             {SETTLEMENTS.map((s, i) => {
               const isNeg = s.amt.startsWith("−");
               return (
                 <li
                   key={s.id}
-                  className={`grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-2.5 py-2 rounded-lg text-[13px] ${
+                  className={`grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-2.5 py-2.5 border-b last:border-b-0 border-arcora-border/60 text-[12px] ${
                     i === 0 ? "bg-arcora-teal/10" : ""
                   }`}
                 >
-                  <span className="font-[family-name:var(--font-mono)] text-muted-foreground">{s.id}</span>
+                  <span className="font-[family-name:var(--font-mono)] text-arcora-muted-fg">{s.id}</span>
                   <span className={`font-[family-name:var(--font-mono)] tabular-nums text-right ${
-                    isNeg ? "text-muted-foreground" : "text-arcora-slate"
+                    isNeg ? "text-arcora-muted-fg" : "text-arcora-slate"
                   }`}>
                     {s.amt}
                   </span>
-                  <span className="text-[10px] tracking-wider px-1.5 py-0.5 rounded font-[family-name:var(--font-mono)] uppercase bg-arcora-gray text-muted-foreground">
+                  <span className="text-[10px] tracking-[0.06em] uppercase px-1.5 py-0.5 font-[family-name:var(--font-mono)] border border-arcora-border bg-arcora-gray text-arcora-muted-fg">
                     {s.ccy}
                   </span>
-                  <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground tabular-nums">
+                  <span className="font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg tabular-nums">
                     {s.t} ago
                   </span>
                 </li>

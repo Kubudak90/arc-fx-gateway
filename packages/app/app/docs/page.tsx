@@ -19,7 +19,7 @@ export default function DocsIndex() {
         Arcora is a stablecoin checkout and settlement platform on{" "}
         <a href="https://arc.network" target="_blank" rel="noopener noreferrer">Arc Network</a>. A merchant creates an
         invoice, the customer signs <strong>one</strong> EIP-712 message, and the merchant receives their preferred
-        stablecoin within ~30 seconds — Stripe-shaped UX with on-chain settlement underneath.
+        stablecoin within ~30 seconds — checkout-grade UX with on-chain settlement underneath.
       </p>
 
       <h2>Where Arcora fits</h2>

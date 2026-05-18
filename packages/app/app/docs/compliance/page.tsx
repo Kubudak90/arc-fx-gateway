@@ -14,7 +14,7 @@ export default function ComplianceDocs() {
     >
       <p>
         Arcora has two compliance layers. Both are off-chain by design — on-chain blocklists are gas-expensive, slow, and
-        bypass the merchant relationship. Stripe does the same.
+        bypass the merchant relationship. Card processors work the same way.
       </p>
 
       <h2>Sanctions screening (Plan-5)</h2>

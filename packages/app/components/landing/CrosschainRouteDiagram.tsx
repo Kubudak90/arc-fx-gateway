@@ -33,7 +33,7 @@ export function CrosschainRouteDiagram() {
   }, []);
 
   return (
-    <div className="relative w-full mx-auto" style={{ aspectRatio: "880 / 360", maxWidth: 880 }}>
+    <div className="relative w-full mx-auto" style={{ aspectRatio: "880 / 360", maxWidth: 880 }} role="img" aria-label="Crosschain route diagram: source chains (Ethereum, Base, Arbitrum, Polygon) connecting through Arc AMM hub to a settlement node">
       <svg viewBox="0 0 880 360" className="w-full h-full" style={{ overflow: "visible" }}>
         <defs>
           <linearGradient id="ax-line-grad" x1="0" y1="0" x2="1" y2="0">

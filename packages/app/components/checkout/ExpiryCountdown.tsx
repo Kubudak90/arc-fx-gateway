@@ -30,8 +30,8 @@ export function ExpiryCountdown({ expiresAt, className }: ExpiryCountdownProps) 
     <span
       className={className}
       role="timer"
-      aria-label={label}
-      aria-live={label === "Expired" ? "assertive" : "off"}
+      aria-atomic="true"
+      aria-live={label === "Expired" ? "assertive" : "polite"}
     >
       {label}
     </span>

@@ -7,6 +7,8 @@ import { db } from "@/lib/db/client";
 import { invoices, relayerQueue, checkoutAuthorizations } from "@/lib/db/schema";
 import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
+import { expectedWitnessHash, PERMIT2_WITNESS_TYPE_STRING } from "@/lib/checkout/witness";
+import { verifyPermit2Signature, ARC_TESTNET_CHAIN_ID } from "@/lib/checkout/permit2-verify";
 
 // Audit H1 (2026-05-19): submit is one-shot per invoice; 10/60s never
 // bothers a real user while capping abuse. Fail-open on limiter outage.
@@ -17,8 +19,6 @@ const SUBMIT_WINDOW_SECONDS = 60;
  *  back, short enough that a leaked token from a logging proxy doesn't
  *  reveal post-settle details indefinitely. Audit M12. */
 const STATUS_TOKEN_TTL_MS = 30 * 60_000;
-import { expectedWitnessHash, PERMIT2_WITNESS_TYPE_STRING } from "@/lib/checkout/witness";
-import { verifyPermit2Signature, ARC_TESTNET_CHAIN_ID } from "@/lib/checkout/permit2-verify";
 
 /**
  * v0.8 customer-side submit. The customer signs a Permit2 EIP-712 message

@@ -35,6 +35,7 @@ vi.mock("@/lib/checkout/quote-server", () => ({
 const dbMod = await import("@/lib/db/client");
 const factoryMod = await import("@/lib/compliance/factory");
 const screenMod = await import("@/lib/compliance/screen");
+const limiterMod = await import("@/lib/rate/limiter");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -286,13 +287,13 @@ describe("POST /api/checkout/authorize", () => {
   });
 
   it("returns 429 with rate_limited when takeToken returns false (audit H1)", async () => {
-    const { takeToken } = await import("@/lib/rate/limiter");
-    vi.mocked(takeToken).mockResolvedValueOnce(false);
+    vi.mocked(limiterMod.takeToken).mockResolvedValueOnce(false);
 
     const res = await POST(req({ invoiceId: "0x" + "a".repeat(64), address: "0x" + "b".repeat(40) }));
     expect(res.status).toBe(429);
     const body = await res.json();
     expect(body.error).toBe("rate_limited");
     expect(res.headers.get("retry-after")).toBe("60");
+    expect(vi.mocked(limiterMod.takeToken)).toHaveBeenCalledWith("authorize:unknown", 20, 60);
   });
 });

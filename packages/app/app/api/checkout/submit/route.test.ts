@@ -98,6 +98,7 @@ vi.mock("@/lib/checkout/permit2-verify", async () => {
 import { POST } from "./route";
 import { db } from "@/lib/db/client";
 import { verifyPermit2Signature } from "@/lib/checkout/permit2-verify";
+const limiterMod = await import("@/lib/rate/limiter");
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost/api/checkout/submit", {
@@ -265,13 +266,13 @@ describe("POST /api/checkout/submit", () => {
   });
 
   it("returns 429 with rate_limited when takeToken returns false (audit H1)", async () => {
-    const { takeToken } = await import("@/lib/rate/limiter");
-    vi.mocked(takeToken).mockResolvedValueOnce(false);
+    vi.mocked(limiterMod.takeToken).mockResolvedValueOnce(false);
 
     const res = await POST(makeRequest(validBody()) as never);
     expect(res.status).toBe(429);
     const body = await res.json();
     expect(body.error).toBe("rate_limited");
     expect(res.headers.get("retry-after")).toBe("60");
+    expect(vi.mocked(limiterMod.takeToken)).toHaveBeenCalledWith("submit:unknown", 10, 60);
   });
 });

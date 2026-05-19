@@ -1,6 +1,16 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+
+/** Constant-time string compare. Returns false on length mismatch
+ *  without leaking the secret length through an early `===`. */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 /**
  * Daily housekeeping for the SIWE/rate-limit tables introduced in M9
@@ -18,7 +28,8 @@ import { db } from "@/lib/db/client";
 export async function GET(req: NextRequest) {
   const provided = req.headers.get("authorization") ?? req.headers.get("x-cron-secret") ?? "";
   const expected = process.env.CRON_SECRET ?? "";
-  if (!expected || !(provided === `Bearer ${expected}` || provided === expected)) {
+  const ok = !!expected && (safeEqual(provided, `Bearer ${expected}`) || safeEqual(provided, expected));
+  if (!ok) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

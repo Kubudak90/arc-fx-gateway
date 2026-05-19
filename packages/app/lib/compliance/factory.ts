@@ -20,7 +20,7 @@ export function resolveComplianceProvider(): ComplianceProvider {
     case "noop":
       return new NoopProvider();
     case "elliptic":
-      return new EllipticProvider({ apiKey, asset: process.env.ELLIPTIC_ASSET });
+      return new EllipticProvider({ apiKey, asset: process.env.ELLIPTIC_ASSET || undefined });
     case "trmlabs":
       return new TRMLabsProvider({ apiKey });
     default:

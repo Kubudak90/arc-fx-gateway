@@ -76,7 +76,7 @@ export function SiteFooter() {
       </div>
       <div className="border-t border-arcora-border">
         <div className="max-w-5xl mx-auto px-6 sm:px-8 py-4 flex items-center justify-between text-[11px] text-arcora-muted-fg/80 font-[family-name:var(--font-mono)] tracking-[0.06em]">
-          <span>v1.1 · gateway 0x07BAC123…aE3a3 · arc testnet</span>
+          <span>v1.2 · gateway 0x07BAC123…aE3a3 · arc testnet</span>
           <span><a href="https://docs.arcorapay.xyz" className="hover:text-arcora-link transition-colors">docs.arcorapay.xyz</a></span>
         </div>
       </div>

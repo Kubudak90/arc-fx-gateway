@@ -103,7 +103,7 @@ export default function Home() {
       <section className="px-4 sm:px-8 pt-24 pb-16 border-b border-arcora-border">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center gap-3 mb-5">
-            <span className="eyebrow">Stablecoin checkout · v1.1 live</span>
+            <span className="eyebrow">Stablecoin checkout · v1.2 live</span>
             <span className="tag">
               <span className="size-[5px] rounded-full bg-current mr-1 inline-block" />
               Arc testnet
@@ -129,7 +129,7 @@ export default function Home() {
           <div className="mt-7 flex flex-wrap items-center gap-5 text-[12px] text-arcora-muted-fg font-[family-name:var(--font-mono)] tracking-wider">
             <span>
               <span className="inline-block size-[6px] rounded-full bg-emerald-500 mr-2 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]" />
-              v1.1 · Arc testnet
+              v1.2 · Arc testnet
             </span>
             <span>
               <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="hover:text-arcora-link transition-colors">338 tests passing</a>

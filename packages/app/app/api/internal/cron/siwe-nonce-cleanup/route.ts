@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 
-/** Constant-time string compare. Returns false on length mismatch
- *  without leaking the secret length through an early `===`. */
+/** Constant-time compare of two equal-length secrets. A length-mismatch
+ *  early-return intentionally leaks whether the lengths match — acceptable
+ *  here because CRON_SECRET is a static operator secret, not user input.
+ *  timingSafeEqual requires equal-length buffers, hence the guard. */
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a, "utf8");
   const bb = Buffer.from(b, "utf8");

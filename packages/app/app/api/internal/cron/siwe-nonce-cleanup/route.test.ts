@@ -18,10 +18,11 @@ import { GET } from "./route";
 
 const SECRET = "test-cron-secret-xyz";
 
-function makeRequest(authHeader?: string): NextRequest {
-  return new NextRequest("http://localhost/api/internal/cron/siwe-nonce-cleanup", {
-    headers: authHeader ? { authorization: authHeader } : {},
-  });
+function makeRequest(authHeader?: string, xCronSecret?: string): NextRequest {
+  const headers: Record<string, string> = {};
+  if (authHeader) headers["authorization"] = authHeader;
+  if (xCronSecret) headers["x-cron-secret"] = xCronSecret;
+  return new NextRequest("http://localhost/api/internal/cron/siwe-nonce-cleanup", { headers });
 }
 
 let originalSecret: string | undefined;
@@ -67,6 +68,14 @@ describe("GET /api/internal/cron/siwe-nonce-cleanup", () => {
   it("returns 200 when the correct bare secret (no Bearer prefix) is provided", async () => {
     process.env.CRON_SECRET = SECRET;
     const res = await GET(makeRequest(SECRET));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: true });
+  });
+
+  it("returns 200 when the correct bare secret is provided in x-cron-secret header", async () => {
+    process.env.CRON_SECRET = SECRET;
+    const res = await GET(makeRequest(undefined, SECRET));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ ok: true });

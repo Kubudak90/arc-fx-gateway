@@ -35,6 +35,10 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
   const [error,   setError]           = useState<string | null>(null);
   const fetchedAt = useRef<number>(0);
   const ttlRef    = useRef<number>(30);
+  // Mirror `stale` into a ref so the mount-only interval can read the current
+  // value without requiring it in the dependency array.
+  const staleRef  = useRef(false);
+  useEffect(() => { staleRef.current = stale; }, [stale]);
 
   async function fetchQuote() {
     setLoading(true);
@@ -96,7 +100,12 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
     void fetchQuote();
     const t = setInterval(() => {
       const ageS = (Date.now() - fetchedAt.current) / 1000;
-      if (ageS > ttlRef.current && !stale) {
+      // Read staleRef.current (not the closure-captured `stale`) so the guard
+      // reflects the actual current value. Fire onStale exactly once on the
+      // false→true edge; staleRef.current is set synchronously here to prevent
+      // a tight loop double-fire before the React re-render propagates.
+      if (ageS > ttlRef.current && !staleRef.current) {
+        staleRef.current = true;
         setStale(true);
         props.onStale();
       }

@@ -157,6 +157,77 @@ describe("POST /api/invoices", () => {
     expect(writeContract).not.toHaveBeenCalled();
   });
 
+  // Audit M1 (2026-05-19): amountUsdc ceiling — values above $1,000,000 must
+  // be rejected. A JS double above ~9e15 loses integer precision and would
+  // silently corrupt the on-chain BigInt; Infinity would crash BigInt().
+  // Audit M2 (2026-05-19): metadata size — cap key count at 50 and value
+  // length at 256 chars to prevent JSONB row bloat.
+  describe("audit M1/M2 — amountUsdc ceiling + metadata size", () => {
+    async function makeMerchantReq(body: any) {
+      const apikey = await import("@/lib/auth/apikey");
+      (apikey.lookupMerchantByApiKey as any).mockResolvedValue({
+        id: "00000000-0000-0000-0000-000000000099",
+        address: "0x1111111111111111111111111111111111111111",
+        payoutToken: "0x2222222222222222222222222222222222222222",
+        allowedOrigins: [],
+      });
+      return makeReq(body, { "X-Arcora-Api-Key": "ak_live_good" });
+    }
+
+    it("rejects amountUsdc above $1,000,000 ceiling with 400 bad_body (audit M1)", async () => {
+      const res = await POST(await makeMerchantReq({ amountUsdc: 5_000_000, payInToken: "USDC" }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toBe("bad_body");
+    });
+
+    it("rejects amountUsdc: 0 with 400 bad_body (positive guard)", async () => {
+      const res = await POST(await makeMerchantReq({ amountUsdc: 0, payInToken: "USDC" }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toBe("bad_body");
+    });
+
+    it("rejects metadata with 60 keys with 400 bad_body (audit M2)", async () => {
+      const metadata: Record<string, string> = {};
+      for (let i = 0; i < 60; i++) metadata[`key${i}`] = "value";
+      const res = await POST(await makeMerchantReq({ amountUsdc: 10, payInToken: "USDC", metadata }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toBe("bad_body");
+    });
+
+    it("rejects metadata with a value of 300 characters with 400 bad_body (audit M2)", async () => {
+      const metadata = { orderId: "x".repeat(300) };
+      const res = await POST(await makeMerchantReq({ amountUsdc: 10, payInToken: "USDC", metadata }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toBe("bad_body");
+    });
+
+    it("accepts valid amountUsdc and small metadata (happy path, audit M1/M2)", async () => {
+      const apikey = await import("@/lib/auth/apikey");
+      (apikey.lookupMerchantByApiKey as any).mockResolvedValue({
+        id: "00000000-0000-0000-0000-000000000098",
+        address: "0x1111111111111111111111111111111111111111",
+        payoutToken: "0x2222222222222222222222222222222222222222",
+        allowedOrigins: [],
+      });
+      const chain = await import("@/lib/chain/client");
+      const writeContract = vi.fn().mockResolvedValue("0xtxhash");
+      (chain.getServerWalletClient as any).mockResolvedValue({ writeContract });
+
+      const res = await POST(makeReq(
+        { amountUsdc: 99.99, payInToken: "USDC", metadata: { orderId: "abc" } },
+        { "X-Arcora-Api-Key": "ak_live_good" }
+      ));
+      const body = await res.json();
+      expect(res.status).toBe(201);
+      expect(body.invoiceId).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(writeContract).toHaveBeenCalled();
+    });
+  });
+
   // Audit H1 (2026-05-05): merchant-supplied successUrl/cancelUrl is the
   // post-payment redirect target. Without an allowlist check, an attacker
   // who steals a merchant API key (or any merchant configured to be hostile)

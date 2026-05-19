@@ -20,12 +20,21 @@ import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 // successUrl is optional for standalone invoices (link sent directly to a
 // customer with no merchant site). When omitted, the invoice page itself
 // shows the paid status — no external redirect happens.
+// amountUsdc ceiling: $1,000,000 per invoice. Above ~9e15 a JS double loses
+// integer precision and Math.round(amountUsdc * 1e6) silently corrupts the
+// on-chain BigInt; an Infinity input would crash BigInt() outright. $1M is
+// well clear of both and a sane single-invoice cap. (Audit M1)
+// metadata is stored verbatim as JSONB and echoed back on GET — cap key
+// count and value length so a merchant can't bloat every row. (Audit M2)
 const Body = z.object({
-  amountUsdc: z.number().positive(),
+  amountUsdc: z.number().positive().max(1_000_000),
   payInToken: z.enum(["USDC", "EURC"]),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
-  metadata: z.record(z.string()).optional(),
+  metadata: z.record(z.string().max(256)).optional()
+    .refine((m) => !m || Object.keys(m).length <= 50, {
+      message: "metadata may not exceed 50 keys",
+    }),
 });
 
 const TOKEN_ADDR: Record<"USDC" | "EURC", Address> = {

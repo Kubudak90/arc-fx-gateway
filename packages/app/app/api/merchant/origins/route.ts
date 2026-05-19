@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { assertSafePublicUrl } from "@/lib/security/safeUrl";
 
 // Audit H1 (2026-05-05): post-bootstrap merchants update their redirect
 // allowlist via this endpoint. Bootstrap collects the initial set; this
@@ -32,6 +33,27 @@ export async function PATCH(req: NextRequest) {
     );
   } catch {
     return NextResponse.json({ error: "bad_body" }, { status: 400 });
+  }
+
+  // Audit M3 (2026-05-19): origins are redirect targets — apply the same
+  // SSRF/DNS guard webhook + bootstrap use, and require https. A merchant
+  // (or stolen session) must not be able to persist an RFC1918 / cloud-
+  // metadata origin that a future redirect-path regression could exploit.
+  for (const origin of normalized) {
+    if (!origin.startsWith("https://")) {
+      return NextResponse.json(
+        { error: "unsafe_origin", detail: `origin must be https: ${origin}` },
+        { status: 400 },
+      );
+    }
+    try {
+      await assertSafePublicUrl(origin);
+    } catch (e) {
+      return NextResponse.json(
+        { error: "unsafe_origin", detail: e instanceof Error ? e.message : String(e) },
+        { status: 400 },
+      );
+    }
   }
 
   await db.update(merchants)

@@ -7,6 +7,15 @@ import { invoices, merchants, webhookAttempts, checkoutAuthorizations } from "@/
 import { resolveComplianceProvider } from "@/lib/compliance/factory";
 import { screenWithAudit } from "@/lib/compliance/screen";
 import { estimateSwapForTarget } from "@/lib/checkout/quote-server";
+import { takeToken } from "@/lib/rate/limiter";
+import { clientIp } from "@/lib/rate/clientIp";
+
+// Audit H1 (2026-05-19): per-IP rate limit. Each authorize call hits the
+// DB and, on a compliance cache miss, an external provider + App Kit
+// estimator. 20/60s is generous for a real checkout (compliance results
+// are cached) while capping abuse. Fail-open on limiter outage.
+const AUTHORIZE_LIMIT = 20;
+const AUTHORIZE_WINDOW_SECONDS = 60;
 
 /**
  * Detect Postgres unique-violation errors from `pg` driver. Drizzle wraps
@@ -142,6 +151,20 @@ async function calculateMinAmountIn(inv: { payInToken: string; payoutToken: stri
 }
 
 export async function POST(req: NextRequest) {
+  const ip = clientIp(req);
+  let allowed = true;
+  try {
+    allowed = await takeToken(`authorize:${ip}`, AUTHORIZE_LIMIT, AUTHORIZE_WINDOW_SECONDS);
+  } catch {
+    allowed = true; // fail-open: limiter outage must not block checkout
+  }
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "rate_limited", retryAfterSeconds: AUTHORIZE_WINDOW_SECONDS },
+      { status: 429, headers: { "retry-after": String(AUTHORIZE_WINDOW_SECONDS) } },
+    );
+  }
+
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "bad_params", details: parsed.error.issues }, { status: 400 });

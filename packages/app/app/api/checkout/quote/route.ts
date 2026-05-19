@@ -5,6 +5,7 @@ import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import { generatePrivateKey } from "viem/accounts";
 import { quoteAmountIn } from "@/lib/checkout/quote-server";
 import { takeToken } from "@/lib/rate/limiter";
+import { clientIp } from "@/lib/rate/clientIp";
 
 /**
  * Per-IP rate limit protecting the App Kit KIT_KEY quota. Each client IP may
@@ -14,12 +15,6 @@ import { takeToken } from "@/lib/rate/limiter";
  */
 const QUOTE_LIMIT = 30;
 const QUOTE_WINDOW_SECONDS = 60;
-
-function clientIp(req: NextRequest): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
-}
 
 const STABLE_DECIMALS = 6;
 

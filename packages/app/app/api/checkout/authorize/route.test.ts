@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "./route";
 
+vi.mock("@/lib/rate/limiter", () => ({
+  takeToken: vi.fn(async () => true),
+}));
+
 vi.mock("@/lib/db/client", () => ({ db: {} }));
 
 vi.mock("@/lib/compliance/factory", () => ({
@@ -279,5 +283,16 @@ describe("POST /api/checkout/authorize", () => {
     expect(res.status).toBe(200);
     expect(body.decision).toBe("allow");
     expect(body.providerDegraded).toBe(true);
+  });
+
+  it("returns 429 with rate_limited when takeToken returns false (audit H1)", async () => {
+    const { takeToken } = await import("@/lib/rate/limiter");
+    vi.mocked(takeToken).mockResolvedValueOnce(false);
+
+    const res = await POST(req({ invoiceId: "0x" + "a".repeat(64), address: "0x" + "b".repeat(40) }));
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBe("rate_limited");
+    expect(res.headers.get("retry-after")).toBe("60");
   });
 });

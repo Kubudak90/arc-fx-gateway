@@ -5,6 +5,13 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { Address, Hex } from "viem";
 import { db } from "@/lib/db/client";
 import { invoices, relayerQueue, checkoutAuthorizations } from "@/lib/db/schema";
+import { takeToken } from "@/lib/rate/limiter";
+import { clientIp } from "@/lib/rate/clientIp";
+
+// Audit H1 (2026-05-19): submit is one-shot per invoice; 10/60s never
+// bothers a real user while capping abuse. Fail-open on limiter outage.
+const SUBMIT_LIMIT = 10;
+const SUBMIT_WINDOW_SECONDS = 60;
 
 /** Status token TTL — long enough for the customer to walk away and come
  *  back, short enough that a leaked token from a logging proxy doesn't
@@ -64,6 +71,20 @@ const RELAYER_ADDRESS = (process.env.NEXT_PUBLIC_RELAYER_ADDRESS ?? "") as Addre
 const MAX_AMOUNT_IN_BASE_UNITS = 10n ** 30n; // ~10^30, generous upper bound covers any sane stable transfer
 
 export async function POST(req: NextRequest) {
+  const ip = clientIp(req);
+  let allowed = true;
+  try {
+    allowed = await takeToken(`submit:${ip}`, SUBMIT_LIMIT, SUBMIT_WINDOW_SECONDS);
+  } catch {
+    allowed = true; // fail-open: limiter outage must not block checkout
+  }
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "rate_limited", retryAfterSeconds: SUBMIT_WINDOW_SECONDS },
+      { status: 429, headers: { "retry-after": String(SUBMIT_WINDOW_SECONDS) } },
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = SubmitBody.safeParse(body);
   if (!parsed.success) {

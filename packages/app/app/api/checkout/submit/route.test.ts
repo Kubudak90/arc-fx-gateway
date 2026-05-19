@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { expectedWitnessHash } from "@/lib/checkout/witness";
 
+vi.mock("@/lib/rate/limiter", () => ({
+  takeToken: vi.fn(async () => true),
+}));
+
 const TEST_INVOICE_ID = "0x" + "ab".repeat(32);
 const TEST_RELAYER = (process.env.NEXT_PUBLIC_RELAYER_ADDRESS ?? "0x9999999999999999999999999999999999999999") as `0x${string}`;
 const TEST_WITNESS = expectedWitnessHash(TEST_INVOICE_ID as `0x${string}`, TEST_RELAYER);
@@ -258,5 +262,16 @@ describe("POST /api/checkout/submit", () => {
     const res = await POST(makeRequest(validBody()) as never);
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe("duplicate_submission");
+  });
+
+  it("returns 429 with rate_limited when takeToken returns false (audit H1)", async () => {
+    const { takeToken } = await import("@/lib/rate/limiter");
+    vi.mocked(takeToken).mockResolvedValueOnce(false);
+
+    const res = await POST(makeRequest(validBody()) as never);
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBe("rate_limited");
+    expect(res.headers.get("retry-after")).toBe("60");
   });
 });

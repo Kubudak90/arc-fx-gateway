@@ -28,8 +28,10 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  await db.update(merchants).set({ webhookUrl: parsed.data.webhookUrl })
-    .where(eq(merchants.address, session.merchantAddress));
+  const updated = await db.update(merchants).set({ webhookUrl: parsed.data.webhookUrl })
+    .where(eq(merchants.address, session.merchantAddress))
+    .returning({ address: merchants.address });
+  if (updated.length === 0) return NextResponse.json({ error: "no_merchant" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
 
@@ -39,8 +41,10 @@ export async function POST() {
 
   const webhookSecret = "whsec_" + randomBytes(32).toString("hex");
   const { iv, ciphertext } = encrypt(webhookSecret);
-  await db.update(merchants)
+  const updated = await db.update(merchants)
     .set({ webhookSecretEnc: ciphertext, webhookSecretIv: iv })
-    .where(eq(merchants.address, session.merchantAddress));
+    .where(eq(merchants.address, session.merchantAddress))
+    .returning({ address: merchants.address });
+  if (updated.length === 0) return NextResponse.json({ error: "no_merchant" }, { status: 404 });
   return NextResponse.json({ webhookSecret });
 }

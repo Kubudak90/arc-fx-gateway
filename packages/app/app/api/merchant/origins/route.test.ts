@@ -35,13 +35,15 @@ const SESSION_NO_MERCHANT = {
 beforeEach(async () => {
   vi.clearAllMocks();
 
-  // Default: update().set().where() chain resolves successfully
+  // Default: update().set().where().returning() chain resolves with existing row
   const dbm = await import("@/lib/db/client");
-  const whereSpy = vi.fn().mockResolvedValue(undefined);
+  const returningSpyFn = vi.fn().mockResolvedValue([{ address: SESSION_WITH_MERCHANT.merchantAddress }]);
+  const whereSpy = vi.fn().mockReturnValue({ returning: returningSpyFn });
   const setSpy = vi.fn().mockReturnValue({ where: whereSpy });
   (dbm.db.update as any).mockReturnValue({ set: setSpy });
   (dbm.db.update as any)._setSpy = setSpy;
   (dbm.db.update as any)._whereSpy = whereSpy;
+  (dbm.db.update as any)._returningSpyFn = returningSpyFn;
 
   // Default: authenticated session
   const session = await import("@/lib/auth/session");
@@ -86,5 +88,18 @@ describe("PATCH /api/merchant/origins", () => {
     (session.getSession as any).mockResolvedValue({ ...SESSION_NO_MERCHANT });
     const res = await PATCH(makeReq({ allowedOrigins: ["https://shop.example.com"] }));
     expect(res.status).toBe(401);
+  });
+
+  it("case 5: valid https origins but returning [] (merchant row gone) → 404 { error: 'no_merchant' }", async () => {
+    const dbm = await import("@/lib/db/client");
+    const returningSpyFn = vi.fn().mockResolvedValue([]);
+    const whereSpy = vi.fn().mockReturnValue({ returning: returningSpyFn });
+    const setSpy = vi.fn().mockReturnValue({ where: whereSpy });
+    (dbm.db.update as any).mockReturnValue({ set: setSpy });
+
+    const res = await PATCH(makeReq({ allowedOrigins: ["https://shop.example.com"] }));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body).toEqual({ error: "no_merchant" });
   });
 });

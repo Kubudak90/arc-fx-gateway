@@ -56,9 +56,11 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  await db.update(merchants)
+  const updated = await db.update(merchants)
     .set({ allowedOrigins: normalized })
-    .where(eq(merchants.address, session.merchantAddress));
+    .where(eq(merchants.address, session.merchantAddress))
+    .returning({ address: merchants.address });
+  if (updated.length === 0) return NextResponse.json({ error: "no_merchant" }, { status: 404 });
 
   return NextResponse.json({ ok: true, allowedOrigins: normalized });
 }

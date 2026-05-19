@@ -1,8 +1,19 @@
 import type { NextConfig } from "next";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { securityHeaders } from "./lib/security/headers";
+
+// next.config.ts runs as an ES module; reconstruct __dirname from import.meta.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const nextConfig: NextConfig = {
   typedRoutes: true,
+  // Pin the monorepo root so Next uses the correct workspace root when tracing
+  // serverless function files.  Without this, a stray ~/package-lock.json (or
+  // any lockfile outside the pnpm workspace) causes Next to infer the wrong
+  // root and mis-trace output files. (Audit M7)
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   async headers() {
     return [
       {

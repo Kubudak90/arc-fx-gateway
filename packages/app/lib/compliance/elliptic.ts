@@ -15,6 +15,10 @@ const SANCTION_LISTS = ["OFAC", "EU"] as const;
 export interface EllipticConfig {
   apiKey: string;
   baseUrl?: string;
+  /** Chain/asset identifier sent to Elliptic. Arc wallets must NOT be
+   *  screened as "ETH" — set ELLIPTIC_ASSET once confirmed with Elliptic's
+   *  solutions team. Defaults to "ETH" only for back-compat. (Audit M5) */
+  asset?: string;
   fetch?: typeof fetch;
 }
 
@@ -29,6 +33,7 @@ export class EllipticProvider implements ComplianceProvider {
   readonly name = "elliptic" as const;
   readonly #apiKey: string;
   readonly #baseUrl: string;
+  readonly #asset: string;
   readonly #fetch: typeof fetch;
 
   constructor(config: EllipticConfig) {
@@ -37,6 +42,7 @@ export class EllipticProvider implements ComplianceProvider {
     }
     this.#apiKey = config.apiKey;
     this.#baseUrl = config.baseUrl ?? "https://aml-api.elliptic.co";
+    this.#asset = config.asset ?? "ETH";
     this.#fetch = config.fetch ?? fetch;
   }
 
@@ -51,7 +57,7 @@ export class EllipticProvider implements ComplianceProvider {
         "x-api-key": this.#apiKey,
       },
       body: JSON.stringify({
-        subject: { address, asset: "ETH" },
+        subject: { address, asset: this.#asset },
         sanctionLists: SANCTION_LISTS,
         flow: context.flow,
       }),

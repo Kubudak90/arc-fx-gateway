@@ -71,4 +71,23 @@ describe("EllipticProvider", () => {
     const p = new EllipticProvider({ apiKey: "k", fetch: fetchFail(503) });
     await expect(p.screenAddress("0xabc", { flow: "customer_pay" })).rejects.toThrow(/provider/i);
   });
+
+  // Audit M5 — configurable asset
+  it("sends the configured asset identifier in the request body", async () => {
+    const fetchMock = fetchOk({ score: 0, sanctioned: false });
+    const p = new EllipticProvider({ apiKey: "k", asset: "arc", fetch: fetchMock });
+    await p.screenAddress("0xdef", { flow: "customer_pay" });
+    const [, init] = (fetchMock as any).mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.subject.asset).toBe("arc");
+  });
+
+  it("defaults to ETH when no asset is configured (back-compat)", async () => {
+    const fetchMock = fetchOk({ score: 0, sanctioned: false });
+    const p = new EllipticProvider({ apiKey: "k", fetch: fetchMock });
+    await p.screenAddress("0xdef", { flow: "customer_pay" });
+    const [, init] = (fetchMock as any).mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.subject.asset).toBe("ETH");
+  });
 });

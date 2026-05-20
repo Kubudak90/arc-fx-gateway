@@ -47,7 +47,7 @@ footer: "arcora · 2026"
 
 <br>
 
-`v1.1.0` · live on Arc testnet · `arcorapay.xyz`
+`v1.2.0` · live on Arc testnet · `arcorapay.xyz`
 
 ---
 
@@ -122,7 +122,7 @@ arcora.openCheckout(inv);
 
 ---
 
-## What ships in v1.1
+## What ships in v1.2
 
 - **Permit2-based settlement** — customer signs *once*, no on-chain approve, no gas
 - **Custody-escrow gateway (V11)** — funds sit in the contract, not the merchant wallet, until the 7-day refund window closes
@@ -133,6 +133,7 @@ arcora.openCheckout(inv);
 - **Compliance gate** — config-flip Elliptic / TRM Labs hooks (Noop on testnet today)
 - **HMAC-signed webhooks** — `invoice.paid` / `refunded` / `failed` / `claimed` with SSRF re-validation
 - **Two npm packages + WooCommerce plugin** — Shopify next
+- **Audited surface (v1.2)** — per-IP rate limits, constant-time CRON auth, Permit2 verification unit-covered, accessible checkout countdown
 
 ---
 
@@ -223,6 +224,7 @@ Pre-revenue. Testnet. No volume claims — Arc itself is testnet, and so are we.
 |:---:|:---|:---|
 | **v1.0** <span class="pill pill-teal">live</span> | Arc-only USDC / EURC | shipped 2026-04 |
 | **v1.1** <span class="pill pill-teal">live</span> | Custody escrow, compliance hooks, Vault-isolated relayer key | shipped 2026-05 |
+| **v1.2** <span class="pill pill-teal">live</span> | Production hardening — rate limits, Permit2 verification tests, SSRF guard, a11y | shipped 2026-05 |
 | **v1.x** | Multi-stable (USDT, PYUSD, DAI, USDe) on Arc | in flight, mainnet-bound |
 | **v2.0** | Crosschain USDC via Arc App Kit Bridge (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex) | spec'd |
 | **v2.1** | Source-side aggregator — any token on the source chain (native ETH, any ERC-20) | following |

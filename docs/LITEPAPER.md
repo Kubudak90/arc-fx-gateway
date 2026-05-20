@@ -1,6 +1,6 @@
 # Arcora — Litepaper
 
-**Version 0.2 · 2026-05-13**
+**Version 0.3 · 2026-05-20**
 
 > Stablecoin checkout on Arc Network.
 > The customer pays with one signature in any supported stable. The merchant settles in the stable they want, deterministically. No bridge clicks, no custodial off-ramp, no FX gymnastics.
@@ -28,7 +28,7 @@
 
 A merchant on Arc says: "I want to be paid in EURC." A customer holds USDC. Arcora's gateway accepts the customer's pay-in token, runs an atomic on-chain swap, and deposits the merchant's chosen stable into a 7-day custody escrow that the merchant claims permissionlessly. The customer signs once — a Permit2 message, no transaction, no gas. The merchant integrates once — an API key, an invoice call, a webhook secret. Everything between those two surfaces (FX routing, key isolation, settlement, refund window, compliance gating) is the protocol.
 
-The roadmap extends this to *cross-chain*: customer pays from any chain Arc App Kit Bridge supports, merchant still settles in their preferred Arc stable. That's v2.0, spec'd but not built. The current product (v1.1) ships the Arc-side version of the same flow.
+The roadmap extends this to *cross-chain*: customer pays from any chain Arc App Kit Bridge supports, merchant still settles in their preferred Arc stable. That's v2.0, spec'd but not built. The current product (v1.2) ships the Arc-side version of the same flow.
 
 ---
 
@@ -305,7 +305,7 @@ Gateway parameters: protocol fee 30 bps, refund window 7 days, admin recovery de
 
 **Hosting.** The app runs on Vercel (Next.js App Router, Turbopack). Database is Neon Postgres in EU-Central. The three off-chain daemons (relayer, indexer, webhook) run on a single Ubuntu host with HashiCorp Vault on the same machine, listener bound to loopback.
 
-**Source.** Open development on GitHub: `Kubudak90/arc-fx-gateway`. Default branch `plan-1-protocol`. Tagged releases: `v1.0.0`, `v1.0.1`, `v1.0.2`, `v1.0.3`, `v1.1.0` (current).
+**Source.** Open development on GitHub: `Kubudak90/arc-fx-gateway`. Default branch `plan-1-protocol`. Tagged releases: `v1.0.0`, `v1.0.1`, `v1.0.2`, `v1.0.3`, `v1.1.0`, `v1.2.0` (current).
 
 ---
 
@@ -315,7 +315,9 @@ The intended end-state is *intent-based cross-chain*: customer signs one intent,
 
 **v1.0 — Arc-only checkout (shipped).** USDC and EURC, Permit2-based settlement, hosted checkout, merchant dashboard, refunds, treasury reporting, SDK + React SDK + WooCommerce plugin published to npm.
 
-**v1.1 — Custody escrow (shipped, current).** Custody-escrow gateway, refund safety net, admin recovery for abandoned merchants, compliance gate (Phase 0), Vault-backed key isolation.
+**v1.1 — Custody escrow (shipped).** Custody-escrow gateway, refund safety net, admin recovery for abandoned merchants, compliance gate (Phase 0), Vault-backed key isolation.
+
+**v1.2 — Production hardening (shipped, current).** External review + full code audit closed: per-IP rate limiting on checkout endpoints, constant-time secret comparison on the cron auth path, server-side Permit2 signature verification with unit coverage, SSRF + https-only guard on merchant origins, invoice input bounds, configurable compliance asset, working ESLint pipeline, checkout-countdown accessibility, source-tree V11 relabel and legacy cleanup.
 
 **v1.x — In-flight enhancements.**
 - Multi-stable (USDT, PYUSD, DAI, USDe) — mainnet-bound, testnet App Kit currently USDC/EURC only.

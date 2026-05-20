@@ -23,18 +23,14 @@ export async function getServerWalletClient() {
 
 export const POOL: Address = (process.env.POOL_ADDRESS ?? "0x0000000000000000000000000000000000000000") as Address;
 
-// Active custody-escrow gateway address. Prefers V11 (audit-fix bytecode,
-// deployed 2026-05-13) when configured; falls back to V10 for environments
-// that haven't been cut over yet. New invoice creation always targets this
-// address; legacy escrows on V10 stay claimable via direct calls until the
-// 7d refund + 7d recovery window closes.
-const _v11 = process.env.GATEWAY_ADDRESS_V11;
-const _v10 = process.env.GATEWAY_ADDRESS_V10;
-export const GATEWAY_ADDRESS: Address = (_v11 ?? _v10 ?? "0x0000000000000000000000000000000000000000") as Address;
-
-/** OG V10 address, exposed for indexer dual-watch / legacy escrow tools. */
-export const GATEWAY_ADDRESS_V10_LEGACY: Address =
-  (_v10 ?? "0x0000000000000000000000000000000000000000") as Address;
+// Active custody-escrow gateway address. Source is `packages/contracts/src/
+// ArcFXGateway.sol`; deployments tracked by address in
+// `packages/contracts/deployments/arc-testnet.json`. The retired pre-V11
+// addresses are no longer dual-watched — testnet was wiped 2026-05-20.
+export const GATEWAY_ADDRESS: Address =
+  (process.env.GATEWAY_ADDRESS
+    ?? process.env.GATEWAY_ADDRESS_V11
+    ?? "0x0000000000000000000000000000000000000000") as Address;
 
 // Keep GATEWAY alias for call sites that haven't migrated yet.
 export const GATEWAY = GATEWAY_ADDRESS;

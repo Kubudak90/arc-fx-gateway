@@ -28,8 +28,8 @@ import { ShieldCheck } from "lucide-react";
 // Active custody-escrow gateway: V11 (audit-fixed bytecode) preferred when
 // set, V10 as the fallback for un-migrated envs.
 const GATEWAY_ADDRESS = (
+  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ??
   process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11 ??
-  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V10 ??
   ""
 ) as Address;
 const ARC_CHAIN_ID = 5042002;

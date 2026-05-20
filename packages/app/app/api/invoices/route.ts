@@ -13,7 +13,7 @@ import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
 // Custody-escrow cutover (Plan 10, 2026-05-07; V11 redeploy 2026-05-13): the
 // gateway address comes from lib/chain/client.ts, which prefers
-// GATEWAY_ADDRESS_V11 and falls back to GATEWAY_ADDRESS_V10. Every invoice
+// GATEWAY_ADDRESS (env). Every invoice
 // also records its own `gatewayAddress`, so the gateway in force at create
 // time stays pinned to the row even across a future cutover.
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
   }
 
   // All invoices route to GATEWAY — the active custody-escrow gateway
-  // (V11 today; lib/chain/client.ts prefers GATEWAY_ADDRESS_V11 over _V10).
+  // (lib/chain/client.ts reads GATEWAY_ADDRESS from env).
   const targetGateway: Address = GATEWAY;
 
   // Audit pass 4 (2026-05-04, finding #8): we used to screen

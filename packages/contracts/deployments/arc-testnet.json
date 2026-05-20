@@ -10,9 +10,9 @@
   },
   "current": {
     "deployedAt": "2026-05-13",
-    "label": "v1.1.0 (Plan 12 — audit 2026-05-12 post-V10) — custody-escrow gateway, identical surface to v1.0.0 but with the 4 [next-version] audit fixes baked in.",
+    "label": "v1.2.0 — custody-escrow gateway. Bytecode lineage starts at v1.0.0 (2026-05-07, then retired). Carries audit-fix bytecode from 2026-05-12, with production hardening (rate limits, Permit2 verification tests, SSRF guard, a11y) layered above in v1.2.x source.",
     "contracts": {
-      "ArcFXGatewayV11": "0x07BAC123A682D24d3eC439ce454cA8AC64eAe3A3"
+      "ArcFXGateway": "0x07BAC123A682D24d3eC439ce454cA8AC64eAe3A3"
     },
     "relayer": "0x29EcFedDF31E4dA4a62b89bADe35b224cE144DAE",
     "config": {
@@ -23,114 +23,13 @@
       "permit2Spender": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
     },
     "auditFixesIncluded": [
-      "#6 — settleInvoice reverts InvalidPayInToken when relayer-supplied payInToken disagrees with inv.payIn (was silent in V10; off-chain accounting could diverge from on-chain log).",
-      "#25 — InvoicePaid emit now carries `excess` as the `fee` field instead of hardcoded 0. Indexers and downstream accounting tools see the actual protocol fee delta.",
-      "#26 — DeployV10 script logs a loud WARN when SUPPORTED_TOKENS is set but deployer != owner (the role-gated setTokenSupport call would otherwise silently no-op).",
+      "#6 — settleInvoice reverts InvalidPayInToken when relayer-supplied payInToken disagrees with inv.payIn (was silent in the prior bytecode; off-chain accounting could diverge from on-chain log).",
+      "#25 — InvoicePaid emit now carries `excess` as the `fee` field instead of hardcoded 0. Indexers and downstream accounting tools see the actual protocol-fee delta.",
+      "#26 — Deploy script logs a loud WARN when SUPPORTED_TOKENS is set but deployer != owner (the role-gated setTokenSupport call would otherwise silently no-op).",
       "#27 — withdrawFees gains nonReentrant for consistency with every other fund-moving path. CEI already prevents today's drain; modifier blocks any future fee-on-transfer token surprise."
     ],
-    "soliditySource": "Same file (`src/ArcFXGatewayV10.sol`) as v1.0.0 — the contract class name didn't bump because the ABI is byte-identical. Lineage is tracked by address: V10 = `0xc91e45ff…`, V11 = `0x07BAC123…`.",
+    "soliditySource": "src/ArcFXGateway.sol — version-neutral source. Lineage tracked by address: a new deployment with different bytecode would land at a new address recorded here.",
     "deployTx": "0x4a59990ed19331b0505bbbbc32fb46662a0f8a113c6920fc0fcea2e7b4c551e8",
-    "deployNotes": "Soft cutover: V10 stays on-chain to serve in-flight refund windows (7 days from each settle). New invoices route to V11; indexer dual-watches both contracts until V10's last escrow matures. Merchant must call registerMerchant on V11 separately."
-  },
-  "deprecated_v1.0.0": {
-    "deployedAt": "2026-05-07",
-    "label": "v1.0.0 (Plan 10) — first custody-escrow deploy. Same ABI as v1.1.0; missing the four 2026-05-12 audit fixes.",
-    "reason": "Superseded by v1.1.0 with audit-fix bytecode on 2026-05-13. V10 stays callable for any in-flight refund (REFUND_WINDOW = 7d, ADMIN_RECOVERY_DELAY = 7d). The indexer dual-watches both addresses through the deprecation window.",
-    "contracts": {
-      "ArcFXGatewayV10": "0xc91e45ffe945c0e6e2c0f8262a35477e20a5f154"
-    },
-    "deprecationWindow": "7d refund + 7d recovery from the last settle on V10; safe to retire after 2026-05-27 at earliest if no escrows are still pending."
-  },
-  "deprecated_v0.9.0": {
-    "deployedAt": "2026-05-03",
-    "label": "v0.9.0 (Plan 9) — Refund-source binding: payoutSource snapshot at settle, refundInvoice pulls from there so split-wallet merchants can refund cleanly",
-    "reason": "Superseded by v1.0.0 (V10 custody-escrow). V9 settled directly to the merchant's payout wallet; V10 routes through a contract-held escrow so refunds and admin recovery don't require merchant cooperation.",
-    "contracts": {
-      "ArcFXGatewayV9": "0xdf6233943c06d4c207d60b91ff18b9158485ea21"
-    }
-  },
-  "deprecated_v0.8.0": {
-    "deployedAt": "2026-05-01",
-    "label": "v0.8.0 — Permit2 + relayer-driven settlement (App Kit Swap orchestrator)",
-    "reason": "Superseded by v0.9 which adds payoutSource snapshot for split-wallet refund support.",
-    "contracts": {
-      "ArcFXGatewayV8": "0x6fAaD920b329d0c3eAb700f2BceE6A4ec5d507a8"
-    }
-  },
-  "deprecated_v0.6.0": {
-    "deployedAt": "2026-04-29",
-    "label": "v0.6.0 — Refunds: refundInvoice() + Refunded enum + payments mapping for exact merchantPayout/fee tracking",
-    "reason": "Superseded by v0.8 (relayer-driven Permit2 settlement, no on-chain swap pool dependency). v0.6 is the legacy on-chain-swap path. Kept for any in-flight refund of pre-v0.8 invoices.",
-    "contracts": {
-      "ArcFXGateway": "0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3",
-      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
-      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
-    },
-    "config": {
-      "protocolFeeBps": 10,
-      "maxOracleDeviationBps": 50,
-      "poolSwapFeeBps": 4,
-      "oracleDecimals": 8,
-      "oracleAnswer": 108630000,
-      "oracleAnswerHuman": "1.0863 (real EUR/USD)"
-    },
-    "deployTx": "0x78f8da52c8e41321fe022659e38db711209c09e929d75cb9fb27dbe4bea24d37"
-  },
-  "deprecated_v0.5.0": {
-    "deployedAt": "2026-04-29",
-    "label": "v0.5.0 — Iterating _estimateAmountIn (1-wei swap shortfall fix)",
-    "reason": "Replaced by v0.6.0 which adds refundInvoice() + payments mapping.",
-    "contracts": {
-      "ArcFXGateway": "0xf9537ab0934105966dce1ebfe9e9725e22cd82c0",
-      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
-      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
-    }
-  },
-  "deprecated_v0.4.0": {
-    "deployedAt": "2026-04-26",
-    "label": "v0.4.0 — Gateway v2 (namespacing + merchant updates + same-token + event split)",
-    "reason": "Replaced by v0.5.0 to fix _estimateAmountIn 1-wei shortfall that broke EURC↔USDC swap pay() in production.",
-    "contracts": {
-      "ArcFXGateway": "0xA80A5741a09bff1f43dcBF15Df7c598A23163302",
-      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
-      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
-    }
-  },
-  "deprecated_v0.3.0": {
-    "deployedAt": "2026-04-25",
-    "label": "v0.3.0 — Gateway with delegate authorization (Plan 2a)",
-    "reason": "Replaced by v0.4.0 which adds the PDF-review fixes (#3, #4, #7, #8, #9).",
-    "contracts": {
-      "ArcFXGateway": "0x54bDe75530984F4add34Ac14f3d6fd2a515E50AF",
-      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
-      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
-    }
-  },
-  "deprecated_v0.2.0": {
-    "deployedAt": "2026-04-25",
-    "label": "v0.2.0 — Gateway pre-delegate (Plan 1.5)",
-    "reason": "v0.3.0 adds backwards-compatible delegate authorization (createInvoiceFor + authorizeDelegate + revokeDelegate) so the Plan 2 server hot wallet can submit invoices on a merchant's behalf.",
-    "contracts": {
-      "ArcFXGateway": "0xaBa4fc9a11e5E39713F6D6E35a892929e261C53D",
-      "OracleAMM": "0xC2020098aF328ac9CBD274267F424822C400dD66",
-      "MockChainlinkFeed": "0xF82F7676502935c4B86AAD36F405BfF7a3CA65D3"
-    },
-    "bootstrapLiquidity": {
-      "usdc": "5000000",
-      "eurc": "4600000",
-      "addLiquidityTx": "0x71dd049205e36ae78e5cb1036c628860dbd70f19538f1c896a1f83a2b90d7816"
-    }
-  },
-  "deprecated_v0.1.0": {
-    "deployedAt": "2026-04-25",
-    "label": "Plan 1 — Saddle StableSwap (replaced; left here for reference)",
-    "reason": "StableSwap invariant assumes 1:1 peg between pooled tokens. With USDC/EURC at 1.0863 USD/EUR, the pool's implied rate stayed near 1:1 regardless of bootstrap balances, forcing the oracle to be set to parity to pass the deviation guard.",
-    "contracts": {
-      "ArcFXGateway": "0x968E5dc9B675b9BF7C4d68A1e0137ada1A95523C",
-      "StableSwapPool": "0xf3e47C06912803FFeae44d6F40aadd470704d123",
-      "LPToken": "0x555f5ce3fab4a9aa745f834448ca18d5ef9235dd",
-      "AmplificationUtils": "0x4b647D3E5c3Ed0FEE209dD9F00feC957b0157E0c",
-      "SwapUtils": "0xade733aD1e05a0C457602a8D1eab39b4F466051A"
-    }
+    "deployNotes": "Only active gateway on testnet. Prior deployments (v0.1 — v1.1) retired 2026-05-20 — addresses kept in git history."
   }
 }

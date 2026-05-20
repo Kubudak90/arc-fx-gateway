@@ -33,9 +33,8 @@ export default function DeploymentDocs() {
       <h3>App (<code>packages/app</code>)</h3>
       <pre><code>{`POSTGRES_URL_NON_POOLING   Neon non-pooling URL (used by API + indexer)
 POSTGRES_URL               Neon pooled URL (used by Vercel functions)
-GATEWAY_ADDRESS_V11        custody-escrow gateway — live (audit-fixed redeploy)
-GATEWAY_ADDRESS_V10        previous deployment — kept for in-flight refunds
-NEXT_PUBLIC_GATEWAY_ADDRESS_V11  V11 address exposed to client components
+GATEWAY_ADDRESS            custody-escrow gateway (current ArcFXGateway address)
+NEXT_PUBLIC_GATEWAY_ADDRESS    same address, exposed to client components
 USDC_ADDRESS               on Arc
 EURC_ADDRESS               on Arc
 ARC_TESTNET_RPC            https://rpc.testnet.arc.network

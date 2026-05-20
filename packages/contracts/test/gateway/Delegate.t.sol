@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
-contract V10Delegate is V10TestBase {
+contract DelegateTest is GatewayTestBase {
     address delegate = makeAddr("delegate");
 
     uint8 constant RIGHT_CI = 1 << 0; // RIGHT_CREATE_INVOICE
@@ -13,10 +13,10 @@ contract V10Delegate is V10TestBase {
     function test_CreateInvoice_HappyPath() public {
         vm.prank(merchant);
         bytes32 g = gw.createInvoice(bytes32("inv-1"), address(usdc), 100e6, uint64(block.timestamp + 1 hours));
-        (address mer, , , uint256 amt, , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(g);
+        (address mer, , , uint256 amt, , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
         assertEq(mer, merchant);
         assertEq(amt, 100e6);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Created));
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Created));
     }
 
     function test_AuthorizeDelegate_RejectsUnknownRights() public {

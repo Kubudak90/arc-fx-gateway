@@ -7,7 +7,7 @@ import { AccessControl }     from "@openzeppelin/contracts/access/AccessControl.
 import { ReentrancyGuard }   from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { Pausable }          from "@openzeppelin/contracts/utils/Pausable.sol";
 
-/// @title ArcFXGatewayV10
+/// @title ArcFXGateway
 /// @notice Custody gateway. Settled funds are held in per-invoice escrow;
 ///         refunds within the 7-day window pull from escrow (no allowance);
 ///         after the window, anyone may call claim() to push the merchant
@@ -15,7 +15,7 @@ import { Pausable }          from "@openzeppelin/contracts/utils/Pausable.sol";
 ///         merchants' escrow becomes admin-recoverable after a further
 ///         7 days. Closes audit residuals H4 (custody), M3 (fee bound),
 ///         M4 (reactivate semantics), L2 (nonReentrant on PayerRefund).
-contract ArcFXGatewayV10 is AccessControl, ReentrancyGuard, Pausable {
+contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");

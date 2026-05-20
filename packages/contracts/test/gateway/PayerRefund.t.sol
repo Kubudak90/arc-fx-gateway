@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
-contract V10PayerRefund is V10TestBase {
+contract PayerRefundTest is GatewayTestBase {
     function test_RecordPayerRefund_HappyPath() public {
         bytes32 g = _createInvoice(bytes32("inv-1"), 100e6, 1 hours);
 
         vm.prank(relayer);
         gw.recordPayerRefund(g, customer, address(usdc), 110e6, bytes32("swap_failed"));
 
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(g);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Failed));
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Failed));
     }
 
     function test_RecordPayerRefund_OnlyRelayer() public {

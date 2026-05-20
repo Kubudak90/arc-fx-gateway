@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
-contract V10Refund is V10TestBase {
+contract RefundTest is GatewayTestBase {
     address delegate = makeAddr("refund-delegate");
 
     // Cache rights as constants to avoid consuming vm.prank with external view calls
@@ -25,8 +25,8 @@ contract V10Refund is V10TestBase {
         (uint256 amt, , ) = gw.escrows(g);
         assertEq(amt, 0, "escrow deleted");
 
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(g);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Refunded));
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Refunded));
     }
 
     function test_Refund_DoesNotTouchExcess() public {

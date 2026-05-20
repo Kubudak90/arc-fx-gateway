@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
-contract V10AdminRecovery is V10TestBase {
+contract AdminRecoveryTest is GatewayTestBase {
     bytes32[] _ids;
 
     function _id(bytes32 g) internal returns (bytes32[] memory) {
@@ -43,8 +43,8 @@ contract V10AdminRecovery is V10TestBase {
         gw.adminRecoverEscrow(_id(g), sweepTo);
 
         assertEq(eurc.balanceOf(sweepTo), 100e6);
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(g);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Recovered));
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Recovered));
     }
 
     function test_Recover_OnlyAdmin() public {

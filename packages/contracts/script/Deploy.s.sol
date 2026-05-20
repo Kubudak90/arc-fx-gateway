@@ -2,9 +2,9 @@
 pragma solidity ^0.8.26;
 
 import { Script, console2 } from "forge-std/Script.sol";
-import { ArcFXGatewayV10 } from "../src/ArcFXGatewayV10.sol";
+import { ArcFXGateway } from "../src/ArcFXGateway.sol";
 
-/// @notice Deploys V10 (custody escrow gateway). Closes audit residuals
+/// @notice Deploys ArcFXGateway (custody escrow gateway). Closes audit residuals
 /// H4 (custody), M3 (fee bound — now in-constructor), M4 (admin reactivate),
 /// L2 (nonReentrant on recordPayerRefund).
 ///
@@ -18,8 +18,8 @@ import { ArcFXGatewayV10 } from "../src/ArcFXGatewayV10.sol";
 ///
 /// Optional:
 ///   SUPPORTED_TOKENS        — comma-separated 0x… addresses (USDC, EURC)
-contract DeployV10 is Script {
-    function run() external returns (ArcFXGatewayV10 gw) {
+contract Deploy is Script {
+    function run() external returns (ArcFXGateway gw) {
         uint256 pk          = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address owner       = vm.envAddress("GATEWAY_OWNER");
         address relayer_    = vm.envAddress("GATEWAY_RELAYER");
@@ -29,7 +29,7 @@ contract DeployV10 is Script {
         address[] memory tokens = vm.envOr("SUPPORTED_TOKENS", ",", new address[](0));
 
         vm.startBroadcast(pk);
-        gw = new ArcFXGatewayV10(feeBps, refundWin, recoveryDel, owner, relayer_);
+        gw = new ArcFXGateway(feeBps, refundWin, recoveryDel, owner, relayer_);
         if (tokens.length > 0) {
             // Audit #26: setTokenSupport is onlyRole(DEFAULT_ADMIN_ROLE).
             // When deployer != owner, the loop silently no-op'd in the
@@ -52,7 +52,7 @@ contract DeployV10 is Script {
         }
         vm.stopBroadcast();
 
-        console2.log("ArcFXGatewayV10:    ", address(gw));
+        console2.log("ArcFXGateway:    ", address(gw));
         console2.log("Owner:              ", owner);
         console2.log("Relayer:            ", relayer_);
         console2.log("Protocol fee (bps): ", feeBps);

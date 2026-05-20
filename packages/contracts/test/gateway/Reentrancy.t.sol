@@ -2,11 +2,11 @@
 pragma solidity ^0.8.26;
 
 import { Test } from "forge-std/Test.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 import { ReentrantToken } from "../helpers/ReentrantToken.sol";
 
-contract V10Reentrancy is Test {
-    ArcFXGatewayV10 gw;
+contract ReentrancyTest is Test {
+    ArcFXGateway gw;
     ReentrantToken token;
 
     address admin    = makeAddr("admin");
@@ -18,7 +18,7 @@ contract V10Reentrancy is Test {
     function setUp() public {
         vm.warp(1_700_000_000);
         token = new ReentrantToken();
-        gw = new ArcFXGatewayV10(30, 7 days, 7 days, admin, relayer);
+        gw = new ArcFXGateway(30, 7 days, 7 days, admin, relayer);
         vm.prank(admin); gw.setTokenSupport(address(token), true);
         vm.prank(merchant); gw.registerMerchant(payee, address(token));
     }
@@ -41,8 +41,8 @@ contract V10Reentrancy is Test {
         // we assert the outer state is consistent (single drain, status flipped once).
         gw.refundInvoice(g);
 
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(g);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Refunded), "single refund");
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Refunded), "single refund");
         assertEq(token.balanceOf(customer), 100e6, "no double drain");
     }
 }

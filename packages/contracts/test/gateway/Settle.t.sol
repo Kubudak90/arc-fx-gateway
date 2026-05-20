@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
-contract V10Settle is V10TestBase {
+contract SettleTest is GatewayTestBase {
     function test_Settle_CreatesEscrow_NoTransferToMerchant() public {
         bytes32 g = _settle(bytes32("inv-1"), 100e6, 100e6);
 
@@ -18,8 +18,8 @@ contract V10Settle is V10TestBase {
         assertEq(claimableAt, uint64(block.timestamp + REFUND_WINDOW));
 
         // Status flipped to Paid
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, address paidBy) = gw.invoices(g);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Paid));
+        (, , , , , ArcFXGateway.InvoiceStatus s, address paidBy) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
         assertEq(paidBy, customer);
 
         // No fee accrued at settle

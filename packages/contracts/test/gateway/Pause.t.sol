@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
 
-contract V10Pause is V10TestBase {
+contract PauseTest is GatewayTestBase {
     function test_Paused_BlocksCreateInvoice() public {
         vm.prank(admin); gw.pause();
         vm.prank(merchant);

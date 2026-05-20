@@ -6,11 +6,11 @@ import { Vm }                from "forge-std/Vm.sol";
 import { IERC20 }            from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IAccessControl }    from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-import { ArcFXGatewayV10 }   from "../../src/ArcFXGatewayV10.sol";
+import { ArcFXGateway }   from "../../src/ArcFXGateway.sol";
 import { MockERC20 }         from "../helpers/MockERC20.sol";
 
-abstract contract V10TestBase is Test {
-    ArcFXGatewayV10 gw;
+abstract contract GatewayTestBase is Test {
+    ArcFXGateway gw;
     MockERC20 usdc;
     MockERC20 eurc;
 
@@ -31,7 +31,7 @@ abstract contract V10TestBase is Test {
         usdc = new MockERC20("USD Coin", "USDC", 6);
         eurc = new MockERC20("Euro Coin", "EURC", 6);
 
-        gw = new ArcFXGatewayV10(FEE_BPS, REFUND_WINDOW, ADMIN_RECOVERY_DELAY, admin, relayer);
+        gw = new ArcFXGateway(FEE_BPS, REFUND_WINDOW, ADMIN_RECOVERY_DELAY, admin, relayer);
 
         vm.startPrank(admin);
         gw.setTokenSupport(address(usdc), true);
@@ -61,7 +61,7 @@ abstract contract V10TestBase is Test {
     }
 }
 
-contract V10WhitelistAndPause is V10TestBase {
+contract WhitelistAndPauseTest is GatewayTestBase {
     function test_SetTokenSupport_OnlyAdmin() public {
         MockERC20 t = new MockERC20("X", "X", 6);
         vm.expectRevert();

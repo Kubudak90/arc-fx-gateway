@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
 /// @notice Coverage for the 4 V10 test gaps surfaced by audit 2026-05-12:
 ///   - settleInvoice payInToken mismatch (paired with the validation fix #6)
 ///   - fee math invariant (was in legacy/V9, dropped in the V10 port)
 ///   - recordPayerRefund respects whenNotPaused
 ///   - adminRecoverEscrow batch atomicity on mixed-status arrays
-contract V10AuditCoverage is V10TestBase {
+contract AuditCoverageTest is GatewayTestBase {
     // -------------------------------------------------------------------------
     // #6 — settleInvoice rejects mismatched payInToken
     // -------------------------------------------------------------------------
 
     function test_Settle_RejectsPayInTokenMismatch() public {
-        // Invoice was created with USDC as payIn (V10TestBase helper).
+        // Invoice was created with USDC as payIn (GatewayTestBase helper).
         bytes32 g = _createInvoice(bytes32("mismatch-1"), 100e6, 1 hours);
         _fundRelayer(eurc, 100e6);
 
@@ -25,8 +25,8 @@ contract V10AuditCoverage is V10TestBase {
         gw.settleInvoice(g, customer, address(eurc), 100e6, 100e6, bytes32(0));
 
         // Invoice still in Created — no settle happened.
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(g);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Created));
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Created));
         assertEq(gw.protocolFeesAccrued(address(eurc)), 0);
     }
 
@@ -90,8 +90,8 @@ contract V10AuditCoverage is V10TestBase {
         gw.unpause();
         vm.prank(relayer);
         gw.recordPayerRefund(g, customer, address(usdc), 50e6, bytes32("oracle-stalled"));
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(g);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Failed));
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Failed));
     }
 
     // -------------------------------------------------------------------------
@@ -128,8 +128,8 @@ contract V10AuditCoverage is V10TestBase {
 
         // Atomicity: balance unchanged, gPaid still Paid, its escrow still there.
         assertEq(eurc.balanceOf(sweepTo), sweepBefore, "no partial recovery");
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(gPaid);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Paid));
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(gPaid);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Paid));
         (uint256 amt, , ) = gw.escrows(gPaid);
         assertEq(amt, 100e6, "gPaid escrow untouched");
     }

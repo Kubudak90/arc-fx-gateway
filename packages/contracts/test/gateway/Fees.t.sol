@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
-contract V10Fees is V10TestBase {
+contract FeesTest is GatewayTestBase {
     // I1: withdrawFees rejects zero-address `to`
     function test_WithdrawFees_RejectsZeroTo() public {
         // First accrue some fees so we don't hit NoFeesToWithdraw first

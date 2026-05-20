@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
-contract V10Claim is V10TestBase {
+contract ClaimTest is GatewayTestBase {
     function test_Claim_TooEarly_Reverts() public {
         bytes32 g = _settle(bytes32("inv-1"), 100e6, 100e6);
         bytes32[] memory ids = new bytes32[](1);
@@ -33,8 +33,8 @@ contract V10Claim is V10TestBase {
         assertEq(eurc.balanceOf(payee), expectedPayout, "payout after split");
         assertEq(gw.protocolFeesAccrued(address(eurc)), expectedFee, "fee accrued at claim");
 
-        (, , , , , ArcFXGatewayV10.InvoiceStatus s, ) = gw.invoices(g);
-        assertEq(uint8(s), uint8(ArcFXGatewayV10.InvoiceStatus.Claimed));
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Claimed));
 
         (uint256 amt, , ) = gw.escrows(g);
         assertEq(amt, 0, "escrow deleted");

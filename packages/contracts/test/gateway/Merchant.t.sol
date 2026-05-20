@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { V10TestBase } from "./V10TestBase.t.sol";
-import { ArcFXGatewayV10 } from "../../src/ArcFXGatewayV10.sol";
+import { GatewayTestBase } from "./GatewayTestBase.t.sol";
+import { ArcFXGateway } from "../../src/ArcFXGateway.sol";
 
-contract V10Merchant is V10TestBase {
+contract MerchantTest is GatewayTestBase {
     function test_Register_AlreadyRegistered_Reverts() public {
         vm.prank(merchant);
         vm.expectRevert(abi.encodeWithSignature("MerchantAlreadyRegistered()"));

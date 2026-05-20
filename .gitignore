@@ -37,3 +37,4 @@ Thumbs.db
 
 # Claude Code session state — never commit
 .claude/
+.env*.local

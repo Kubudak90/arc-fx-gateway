@@ -2,16 +2,31 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
 
+/**
+ * Strip `sslmode` from the connection-string query so our explicit `ssl`
+ * option below wins. Current pg-connection-string treats `sslmode=require`
+ * as an alias of `verify-full` and overrides any explicit `ssl` option —
+ * which Supabase's pooler (private CA chain) then rejects with
+ * SELF_SIGNED_CERT_IN_CHAIN. Removing the URL param keeps encryption on
+ * (via the explicit `ssl`) and lets us relax chain verification.
+ */
+function buildConnectionString(): string | undefined {
+  const raw = process.env.POSTGRES_URL;
+  if (!raw) return undefined;
+  try {
+    const u = new URL(raw);
+    u.searchParams.delete("sslmode");
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
 let _pool: Pool | undefined;
 export function getPool(): Pool {
   if (!_pool) {
     _pool = new Pool({
-      connectionString: process.env.POSTGRES_URL,
-      // Supabase pooler endpoint (and AWS RDS in general) presents a chain
-      // rooted in a private CA that node's default trust store rejects with
-      // SELF_SIGNED_CERT_IN_CHAIN. Encryption is still required (the
-      // connection string carries `sslmode=require`); only chain verification
-      // is relaxed. Matches Supabase's documented Node.js / pg setup.
+      connectionString: buildConnectionString(),
       ssl: { rejectUnauthorized: false },
     });
   }

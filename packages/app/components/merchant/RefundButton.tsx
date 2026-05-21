@@ -11,10 +11,10 @@ import { mapChainError } from "@/lib/chain/error-mapper";
 interface RefundButtonProps {
   invoiceId: string;
   payoutToken: string;
-  /** The gateway address this invoice lives on. V10: custody — no ERC-20
-   *  allowance needed. Falls back to NEXT_PUBLIC_GATEWAY_ADDRESS. */
+  /** The gateway address this invoice lives on. Custody-escrow model —
+   *  no ERC-20 allowance needed. Falls back to NEXT_PUBLIC_GATEWAY_ADDRESS. */
   gatewayAddress?: string | null;
-  /** V10: claimableAt from the DB row. Refunds are only valid before this
+  /** `claimableAt` from the DB row. Refunds are only valid before this
    *  timestamp (within the 7-day window). If absent, assume refundable. */
   claimableAt?: string | null;
   /** Current invoice status — only "paid" invoices are refundable. */
@@ -31,7 +31,7 @@ export function RefundButton({ invoiceId, payoutToken: _payoutToken, gatewayAddr
   const { writeContractAsync } = useWriteContract();
   const [state, setState] = useState<State>("idle");
 
-  // V10 window gating: refunds are only valid within the 7-day escrow window.
+  // Refund window: refunds are only valid within the 7-day escrow window.
   const refundEndsAt = claimableAt ? new Date(claimableAt) : null;
   const stillRefundable = (status === "paid" || status === undefined) &&
     (refundEndsAt === null || Date.now() < refundEndsAt.getTime());
@@ -50,7 +50,7 @@ export function RefundButton({ invoiceId, payoutToken: _payoutToken, gatewayAddr
     }
     setState("refunding");
     try {
-      // V10 custody: no ERC-20 allowance needed — escrow held in gateway.
+      // Custody-escrow model: no ERC-20 allowance needed — funds held in gateway.
       const refundHash = await writeContractAsync({
         address: gateway,
         abi: gatewayAbi,

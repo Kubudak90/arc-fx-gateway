@@ -15,12 +15,12 @@ const Body = z.object({
 /**
  * Update the merchant's settle currency.
  *
- * Flow: merchant signs `updatePayoutToken(newToken)` on V10 from the client.
- * After the tx confirms, the client calls this endpoint to sync the DB.
- * We don't trust client-supplied tx hashes — instead we read the merchant's
- * current `payoutToken` directly from the V10 contract and require it to
- * match the requested address. If the on-chain state doesn't agree, the DB
- * is left untouched.
+ * Flow: merchant signs `updatePayoutToken(newToken)` on the gateway from
+ * the client. After the tx confirms, the client calls this endpoint to sync
+ * the DB. We don't trust client-supplied tx hashes — instead we read the
+ * merchant's current `payoutToken` directly from the contract and require
+ * it to match the requested address. If the on-chain state doesn't agree,
+ * the DB is left untouched.
  *
  * Existing invoices are not affected: amountOut/payoutToken are frozen at
  * invoice creation. Only invoices created after this update settle in the

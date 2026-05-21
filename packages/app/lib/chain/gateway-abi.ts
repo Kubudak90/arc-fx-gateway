@@ -1,14 +1,14 @@
 /**
- * V10 gateway ABI (ArcFXGatewayV10 — custody escrow model).
- * Generated: pnpm --filter @arcora/contracts exec forge inspect ArcFXGatewayV10 abi --json
+ * Gateway ABI (ArcFXGateway — custody-escrow model).
+ * Generated: pnpm --filter @arcora/contracts exec forge inspect ArcFXGateway abi --json
  *
- * V10 key changes vs V9:
+ * Custody-escrow surface (vs. the retired pre-cutover ABI):
  *  - escrows(bytes32) replaces payments(bytes32) — stores amount + claimableAt
  *  - claim(bytes32[]) — permissionless, fee accrued at claim time
  *  - adminRecoverEscrow(bytes32[], address) — admin sweep after deactivation
  *  - reactivateMerchant(address) — admin re-enable
- *  - recordPayerRefund — nonReentrant (L2 fix)
- *  - Custody removes ERC-20 allowance dependency (H4 fix)
+ *  - recordPayerRefund — nonReentrant
+ *  - Custody removes ERC-20 allowance dependency on the refund path
  */
 export const gatewayAbi = [
   {
@@ -425,7 +425,7 @@ export const gatewayAbi = [
       {
         "name": "status",
         "type": "uint8",
-        "internalType": "enum ArcFXGatewayV10.InvoiceStatus"
+        "internalType": "enum ArcFXGateway.InvoiceStatus"
       },
       {
         "name": "paidBy",

@@ -31,9 +31,10 @@ X-Arcora-Api-Key: ak_live_...
   "metadata":    { "orderId": "123" }
 }`}</code></pre>
       <p>
-        Routes to the live custody-escrow gateway — the audit-fixed V11 deployment. The legacy
-        <code>?engine=</code> selector is gone (V8/V9 retired); every invoice records the gateway
-        address it was created against.
+        Routes to the live custody-escrow gateway (<code>ArcFXGateway</code> at{" "}
+        <code>0x07BAC123…aE3a3</code>). The legacy <code>?engine=</code> selector is gone
+        (pre-cutover gateways retired); every invoice records the gateway address it was created
+        against.
       </p>
 
       <h3>Response</h3>

@@ -7,7 +7,7 @@ import { and, eq, gt, lte } from "drizzle-orm";
 /**
  * GET /api/merchant/escrows
  *
- * Returns V10 escrow state grouped into three buckets:
+ * Returns escrow state grouped into three buckets:
  *   pending  — paid, claimableAt in the future (still within 7-day refund window)
  *   matured  — paid, claimableAt ≤ now (window elapsed, ready to claim)
  *   claimed  — already claimed

@@ -168,7 +168,7 @@ export default function TreasuryPage() {
         </div>
       )}
 
-      {/* V10 Claim section — escrows pending/matured */}
+      {/* Claim section — escrows pending/matured */}
       <section>
         <h2 className="eyebrow mb-3">Claim escrows</h2>
         <div className="glass p-4 space-y-4">

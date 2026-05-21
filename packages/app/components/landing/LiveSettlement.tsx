@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 
 /**
- * Loops a simulated, label-honest replay of the v0.8 pay flow on Arc Testnet.
- * Quote rate is illustrative (real testnet RFQ rates from App Kit Swap drift
- * 0.80–0.92 USD/EUR; the live demo /checkout-demo uses the actual quote
- * endpoint). Three scenarios cycle: same-token USDC→USDC, swap EURC→USDC,
- * swap USDC→EURC. Each walks Quote → Sign → Settled.
+ * Loops a simulated, label-honest replay of the Permit2 → settle flow on
+ * Arc Testnet. Quote rate is illustrative (real testnet RFQ rates from App
+ * Kit Swap drift 0.80–0.92 USD/EUR; the live demo /checkout-demo uses the
+ * actual quote endpoint). Three scenarios cycle: same-token USDC→USDC,
+ * swap EURC→USDC, swap USDC→EURC. Each walks Quote → Sign → Settled.
  */
 
 type Phase = "quote" | "pay" | "settled";
@@ -28,7 +28,7 @@ const SCENARIOS: Scenario[] = [
 const ORACLE = 1.0863;        // illustrative EUR/USD rate; real swap quotes come from App Kit RFQ
 const POOL_FEE_BPS = 2;       // App Kit provider fee on every swap (0.02%)
 const PROTOCOL_FEE_BPS = 30;  // Arcora gateway fee (deducted from merchant payout)
-const GATEWAY_ADDR = "0xdf6233…ea21"; // ArcFXGatewayV9 on Arc Testnet (Plan 9 — refund-source binding)
+const GATEWAY_ADDR = "0x07BAC1…aE3a3"; // Live ArcFXGateway (custody-escrow) on Arc Testnet
 
 function calcAmountIn(s: Scenario): number {
   // Same-token: customer pays exactly amountOut (no swap).

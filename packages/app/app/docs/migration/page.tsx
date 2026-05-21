@@ -13,13 +13,11 @@ export default function MigrationDocs() {
       description="How to move from v0.9 to v0.10 — the custody escrow gateway."
     >
       <p>
-        The custody-escrow gateway is canonical since 2026-05-07. The live deployment is the
-        audit-fixed <strong>V11</strong> redeploy (<code>0x07BAC123…aE3a3</code>, 2026-05-13); the
-        original v0.10 (<code>0xc91e45…f154</code>) is still watched in parallel so in-flight
-        refunds settle. v0.9 (<code>0xdf6233…ea21</code>) and earlier remain on-chain (immutable)
-        but are no longer watched. The escrow-model change documented below was the v0.9 → v0.10
-        migration; V11 is bytecode-only (audit fixes), ABI-identical, and needs nothing beyond a
-        one-time re-registration on the new address.
+        The custody-escrow gateway is canonical since 2026-05-07. The current live deployment is
+        <code>ArcFXGateway</code> at <code>0x07BAC123…aE3a3</code> (recorded in{" "}
+        <code>packages/contracts/deployments/arc-testnet.json</code>). All earlier deployments
+        (v0.6 — v1.1) remain on-chain (immutable) but are no longer watched — testnet was wiped
+        on 2026-05-20. The escrow-model change documented below was the v0.9 → v0.10 migration.
       </p>
 
       <h2>What changed</h2>

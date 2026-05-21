@@ -19,7 +19,7 @@ export interface InvoiceRow {
   status: InvoiceStatus;
   paidTx: string | null;
   gatewayAddress: string | null;
-  /** V10: ISO timestamp of when the refund window closes (= claimableAt). */
+  /** ISO timestamp of when the refund window closes (= claimableAt). */
   claimableAt?: string | null;
   createdAt: string;
 }

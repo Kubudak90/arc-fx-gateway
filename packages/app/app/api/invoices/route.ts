@@ -11,11 +11,10 @@ import { screenWithAudit } from "@/lib/compliance/screen";
 import { assertOriginAllowed, assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
-// Custody-escrow cutover (Plan 10, 2026-05-07; V11 redeploy 2026-05-13): the
-// gateway address comes from lib/chain/client.ts, which prefers
-// GATEWAY_ADDRESS (env). Every invoice
-// also records its own `gatewayAddress`, so the gateway in force at create
-// time stays pinned to the row even across a future cutover.
+// The active custody-escrow gateway address comes from lib/chain/client.ts
+// via the GATEWAY_ADDRESS env. Every invoice also records its own
+// `gatewayAddress`, so the gateway in force at create time stays pinned to
+// the row even across a future cutover.
 
 // successUrl is optional for standalone invoices (link sent directly to a
 // customer with no merchant site). When omitted, the invoice page itself

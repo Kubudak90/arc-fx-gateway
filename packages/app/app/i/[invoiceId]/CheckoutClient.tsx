@@ -32,9 +32,9 @@ export default function CheckoutClient(props: CheckoutClientProps) {
   const [status, setStatus] = useState(props.initialStatus);
   // QuoteDisplay quotes the forward direction: the customer commits to a
   // payIn upfront and the relayer's kit.swap converts it; the merchant gets
-  // >= amountOut or the settle reverts. The custody-escrow gateway (V11 today,
-  // V10 during the in-flight cutover window) is selected server-side from the
-  // invoice's stored gateway address — the checkout UI is gateway-agnostic.
+  // >= amountOut or the settle reverts. The custody-escrow gateway address
+  // is selected server-side from the invoice's stored gateway address — the
+  // checkout UI is gateway-agnostic.
   const [amountIn, setAmountIn]     = useState<bigint | null>(null);
   const [quoteStale, setQuoteStale] = useState(false);
   const [showQR, setShowQR]         = useState(false);

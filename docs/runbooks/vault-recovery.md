@@ -37,10 +37,10 @@ vault operator rekey <existing-key>
 1. Note the address of the inaccessible relayer key.
 2. Bring up a fresh Vault on a new VPS (or wipe `/var/lib/vault/data/` and re-init).
 3. Generate a new transit key → new relayer address.
-4. Submit an admin-controlled tx to V10 that grants `RELAYER_ROLE` to the new address and revokes the old role:
+4. Submit an admin-controlled tx to the gateway that grants `RELAYER_ROLE` to the new address and revokes the old role:
    ```
-   cast send <V10> "grantRole(bytes32,address)" $RELAYER_ROLE_HASH <newRelayerAddr> --private-key $ADMIN_PK
-   cast send <V10> "revokeRole(bytes32,address)" $RELAYER_ROLE_HASH <oldRelayerAddr> --private-key $ADMIN_PK
+   cast send $GATEWAY_ADDRESS "grantRole(bytes32,address)" $RELAYER_ROLE_HASH <newRelayerAddr> --private-key $ADMIN_PK
+   cast send $GATEWAY_ADDRESS "revokeRole(bytes32,address)" $RELAYER_ROLE_HASH <oldRelayerAddr> --private-key $ADMIN_PK
    ```
 5. Update `GATEWAY_RELAYER` reference if still needed; relayer systemd reloads.
 

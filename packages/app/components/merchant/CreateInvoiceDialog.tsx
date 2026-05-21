@@ -56,8 +56,8 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
     if (typeof window !== "undefined") window.localStorage.setItem("arcora.apiKey", effectiveKey);
     setBusy(true);
     try {
-      // V10 cutover (Plan 10): /api/invoices now routes V10-only; the legacy
-      // ?engine= param is gone.
+      // /api/invoices routes to the active custody-escrow gateway. The legacy
+      // ?engine= param from the pre-cutover dual-write window is gone.
       const body: Record<string, unknown> = { amountUsdc: parsedAmount.value, payInToken: payIn };
       // Standalone invoice: omit successUrl when blank so /api/invoices skips
       // the allowlist + SSRF checks. The /i/<id> page will show the paid

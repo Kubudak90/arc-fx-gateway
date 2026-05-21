@@ -47,7 +47,7 @@ const arcora = new Arcora({
 // Returns:
 // { invoiceId: '0x…',
 //   url:       'https://arcorapay.xyz/i/0x…',
-//   claimableAt?: '2026-05-20T…' }       // V11 escrow — populated once the invoice is paid`}</code></pre>
+//   claimableAt?: '2026-05-20T…' }       // custody escrow — populated once the invoice is paid`}</code></pre>
       <p>
         Throws <code>ArcoraError</code> with a typed <code>code</code> on validation, network, server, or auth failures.
         Invalid <code>amountUsdc</code> (non-finite, ≤0) is rejected client-side before the request fires.

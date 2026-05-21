@@ -11,8 +11,9 @@ const bytea = customType<{ data: Buffer; default: false }>({
 // relayer could not settle (kit.swap fail, slippage breach) after the pay-in
 // was returned to the customer off-chain. Indexer + webhook flow surface it
 // as a terminal "this won't pay" state so the row doesn't sit in `created`.
-// `claimed` and `recovered` are new in V10: escrow settled by claim (claimed)
-// or swept by admin after merchant deactivation + 14-day window (recovered).
+// `claimed` and `recovered` are custody-escrow states: escrow settled by
+// claim (claimed) or swept by admin after merchant deactivation + 14-day
+// window (recovered).
 export const invoiceStatus = pgEnum("invoice_status", ["created", "paid", "expired", "refunded", "failed", "claimed", "recovered"]);
 
 export const relayerQueueStatus = pgEnum("relayer_queue_status",
@@ -33,7 +34,7 @@ export const merchants = pgTable("merchants", {
   webhookSecretEnc: bytea("webhook_secret_enc").notNull(),
   webhookSecretIv: bytea("webhook_secret_iv").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  // V10: set when admin calls deactivateMerchant; cleared on MerchantReactivated.
+  // Set when admin calls deactivateMerchant; cleared on MerchantReactivated.
   // Surfaces "deactivated since X" copy in the dashboard.
   deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
 });
@@ -58,7 +59,6 @@ export const invoices = pgTable("invoices", {
   // Which on-chain gateway this invoice lives on. Set at create time so the
   // relayer knows which contract to call settleInvoice against, and the
   // indexer knows which gateway's events to associate. Lower-cased 0x-address.
-  // Added in Plan 9 / V9 cutover (2026-05-03).
   gatewayAddress: text("gateway_address"),
   metadata: jsonb("metadata"),
   successUrl: text("success_url").notNull(),
@@ -68,7 +68,7 @@ export const invoices = pgTable("invoices", {
   statusToken: text("status_token"),
   statusTokenExpiresAt: timestamp("status_token_expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  // V10 escrow state — set by EscrowCreated / InvoiceClaimed / EscrowRecovered events.
+  // Custody-escrow state — set by EscrowCreated / InvoiceClaimed / EscrowRecovered events.
   claimableAt: timestamp("claimable_at", { withTimezone: true }),
   claimedAt:   timestamp("claimed_at",   { withTimezone: true }),
   claimTx:     text("claim_tx"),

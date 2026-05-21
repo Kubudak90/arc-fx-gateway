@@ -3,32 +3,40 @@ import { Pool } from "pg";
 import * as schema from "./schema";
 
 /**
- * Strip `sslmode` from the connection-string query so our explicit `ssl`
- * option below wins. Current pg-connection-string treats `sslmode=require`
- * as an alias of `verify-full` and overrides any explicit `ssl` option —
- * which Supabase's pooler (private CA chain) then rejects with
- * SELF_SIGNED_CERT_IN_CHAIN. Removing the URL param keeps encryption on
- * (via the explicit `ssl`) and lets us relax chain verification.
+ * Build pool config from POSTGRES_URL. Behavior:
+ *
+ *   • If the URL declares `sslmode` (any value except `disable`), we strip
+ *     the param and pass `ssl: { rejectUnauthorized: false }`. pg's default
+ *     would otherwise treat `sslmode=require` as `verify-full`, which
+ *     Supabase's pooler rejects with SELF_SIGNED_CERT_IN_CHAIN because the
+ *     pooler uses a private CA chain. Stripping the param keeps encryption
+ *     on (via the explicit `ssl`) and relaxes chain verification.
+ *
+ *   • If the URL omits `sslmode` (or sets it to `disable`), SSL is left
+ *     off. This is the local-dev / CI path against plain Postgres, which
+ *     would otherwise fail with "the server does not support SSL
+ *     connections" if we forced an SSL handshake.
  */
-function buildConnectionString(): string | undefined {
+export function buildPoolConfig(): { connectionString?: string; ssl?: { rejectUnauthorized: false } | false } {
   const raw = process.env.POSTGRES_URL;
-  if (!raw) return undefined;
+  if (!raw) return {};
   try {
     const u = new URL(raw);
+    const sslmode = u.searchParams.get("sslmode");
     u.searchParams.delete("sslmode");
-    return u.toString();
+    if (!sslmode || sslmode === "disable") {
+      return { connectionString: u.toString(), ssl: false };
+    }
+    return { connectionString: u.toString(), ssl: { rejectUnauthorized: false } };
   } catch {
-    return raw;
+    return { connectionString: raw };
   }
 }
 
 let _pool: Pool | undefined;
 export function getPool(): Pool {
   if (!_pool) {
-    _pool = new Pool({
-      connectionString: buildConnectionString(),
-      ssl: { rejectUnauthorized: false },
-    });
+    _pool = new Pool(buildPoolConfig());
   }
   return _pool;
 }

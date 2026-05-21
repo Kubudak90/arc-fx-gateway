@@ -1,0 +1,56 @@
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { buildPoolConfig } from "./client";
+
+const ORIGINAL_URL = process.env.POSTGRES_URL;
+
+describe("buildPoolConfig", () => {
+  beforeEach(() => {
+    delete process.env.POSTGRES_URL;
+  });
+  afterEach(() => {
+    if (ORIGINAL_URL === undefined) delete process.env.POSTGRES_URL;
+    else process.env.POSTGRES_URL = ORIGINAL_URL;
+  });
+
+  it("returns no config when POSTGRES_URL is unset", () => {
+    expect(buildPoolConfig()).toEqual({});
+  });
+
+  it("disables SSL for a local URL with no sslmode (plain Postgres)", () => {
+    process.env.POSTGRES_URL = "postgres://postgres:postgres@localhost:5432/arcfx";
+    const cfg = buildPoolConfig();
+    expect(cfg.connectionString).toBe("postgres://postgres:postgres@localhost:5432/arcfx");
+    expect(cfg.ssl).toBe(false);
+  });
+
+  it("disables SSL when sslmode=disable is explicit", () => {
+    process.env.POSTGRES_URL = "postgres://u:p@localhost:5432/db?sslmode=disable";
+    const cfg = buildPoolConfig();
+    expect(cfg.ssl).toBe(false);
+    // sslmode stripped so it can't override our explicit ssl option
+    expect(cfg.connectionString).not.toContain("sslmode");
+  });
+
+  it("enables SSL with relaxed chain verification when sslmode=require", () => {
+    process.env.POSTGRES_URL =
+      "postgres://postgres:pw@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require";
+    const cfg = buildPoolConfig();
+    expect(cfg.ssl).toEqual({ rejectUnauthorized: false });
+    // sslmode stripped — see comment in client.ts
+    expect(cfg.connectionString).not.toContain("sslmode");
+    expect(cfg.connectionString).toContain("aws-0-eu-central-1.pooler.supabase.com");
+  });
+
+  it("enables SSL for any non-disable sslmode value (verify-full, prefer, …)", () => {
+    process.env.POSTGRES_URL = "postgres://u:p@host:5432/db?sslmode=verify-full";
+    expect(buildPoolConfig().ssl).toEqual({ rejectUnauthorized: false });
+  });
+
+  it("falls back to the raw URL when the connection string isn't a valid URL", () => {
+    // Pool() will surface the eventual parse error; we just don't crash here.
+    process.env.POSTGRES_URL = "not a url";
+    const cfg = buildPoolConfig();
+    expect(cfg.connectionString).toBe("not a url");
+    expect(cfg.ssl).toBeUndefined();
+  });
+});

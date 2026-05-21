@@ -24,12 +24,12 @@ export async function getServerWalletClient() {
 export const POOL: Address = (process.env.POOL_ADDRESS ?? "0x0000000000000000000000000000000000000000") as Address;
 
 // Active custody-escrow gateway address. Source is `packages/contracts/src/
-// ArcFXGateway.sol`; deployments tracked by address in
-// `packages/contracts/deployments/arc-testnet.json`. The retired pre-V11
-// addresses are no longer dual-watched — testnet was wiped 2026-05-20.
+// ArcFXGateway.sol`; the live deployment is recorded in
+// `packages/contracts/deployments/arc-testnet.json` and exposed via
+// `GATEWAY_ADDRESS` in every environment. Retired pre-V11 addresses are
+// kept in git history only — testnet was wiped 2026-05-20.
 export const GATEWAY_ADDRESS: Address =
   (process.env.GATEWAY_ADDRESS
-    ?? process.env.GATEWAY_ADDRESS_V11
     ?? "0x0000000000000000000000000000000000000000") as Address;
 
 // Keep GATEWAY alias for call sites that haven't migrated yet.

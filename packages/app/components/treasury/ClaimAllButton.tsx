@@ -7,16 +7,11 @@ import { toast } from "sonner";
 import { gatewayAbi } from "@/lib/chain/gateway-abi";
 import { mapChainError } from "@/lib/chain/error-mapper";
 
-// Read the active gateway address from public envs. NEXT_PUBLIC_GATEWAY_ADDRESS (set in env)
-// is the canonical source; the legacy NEXT_PUBLIC_GATEWAY_ADDRESS_V11 name
-// is accepted as a transitional fallback. Direct env read — importing from `@/lib/chain/client`
-// would transitively pull `pg` (server-only) into the client bundle and
-// break the build with "Module not found: 'fs' / 'net'".
-const GATEWAY_ADDRESS = (
-  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ??
-  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11 ??
-  ""
-) as Address;
+// Active custody-escrow gateway. Source-of-truth env:
+// NEXT_PUBLIC_GATEWAY_ADDRESS. Direct env read — importing from
+// `@/lib/chain/client` would transitively pull `pg` (server-only) into the
+// client bundle and break the build with "Module not found: 'fs' / 'net'".
+const GATEWAY_ADDRESS = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ?? "") as Address;
 
 interface ClaimAllButtonProps {
   globalIds: `0x${string}`[];
@@ -25,9 +20,9 @@ interface ClaimAllButtonProps {
 type Step = "idle" | "submitting" | "confirming" | "done" | "error";
 
 /**
- * Permissionless claim button for V10 matured escrows.
- * Calls claim(bytes32[]) on the V10 gateway — anyone can call this,
- * not just the merchant. Funds route to merchants[merchant].payoutAddress.
+ * Permissionless claim button for matured custody-escrow invoices.
+ * Calls claim(bytes32[]) on the gateway — anyone can call this, not just
+ * the merchant. Funds route to merchants[merchant].payoutAddress.
  */
 export function ClaimAllButton({ globalIds }: ClaimAllButtonProps) {
   const [step, setStep] = useState<Step>("idle");

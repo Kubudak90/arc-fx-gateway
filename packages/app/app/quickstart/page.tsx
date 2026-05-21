@@ -139,8 +139,8 @@ const KNOWN_ISSUES: Array<{ headline: string; detail: string }> = [
     detail: "App Kit Swap on Arc Testnet supports only USDC ⇄ EURC today. USDT, PYUSD, DAI, and USDe are mainnet-only on App Kit; we’ll list them as Arc opens those on testnet or as we move to mainnet.",
   },
   {
-    headline: "Refunds need the merchant to re-approve the gateway.",
-    detail: "The refund flow pulls the merchant’s payout-token funds back to send to the customer — so the gateway needs an ERC-20 allowance from the merchant’s wallet first. The dashboard’s refund button handles the prompt.",
+    headline: "Refunds work within a 7-day escrow window — no merchant approval needed.",
+    detail: "The custody-escrow gateway holds each settled invoice for 7 days. Refunds inside that window drain straight from the escrow without any ERC-20 allowance from the merchant. After the window closes, anyone can call claim(globalIds[]) to release matured funds to the merchant payout address.",
   },
   {
     headline: "Webhooks retry 5× over 30 minutes, then stop.",

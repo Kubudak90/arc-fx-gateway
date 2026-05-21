@@ -23,7 +23,7 @@
  *   POSTGRES_URL_NON_POOLING — Neon prod DB
  *   ARC_TESTNET_RPC          — Arc testnet RPC
  *   INDEXER_LAG_BLOCKS_MAX   — default 50
- *   GATEWAY_ADDRESS_V10      — V10 gateway address (used for indexer sanity)
+ *   GATEWAY_ADDRESS          — active gateway address (used for indexer sanity)
  */
 
 import "dotenv/config";
@@ -47,7 +47,7 @@ const ARC_RPC =
 // that's been down without false-positiving on normal tick-bursts.
 const INDEXER_LAG_MAX = Number(process.env.INDEXER_LAG_BLOCKS_MAX ?? "300");
 
-const GATEWAY = (process.env.GATEWAY_ADDRESS_V10 ?? "") as Hex;
+const GATEWAY = (process.env.GATEWAY_ADDRESS ?? "") as Hex;
 
 interface CheckResult { name: string; ok: boolean; detail?: string; }
 

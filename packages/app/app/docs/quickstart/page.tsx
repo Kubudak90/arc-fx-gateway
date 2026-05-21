@@ -98,7 +98,7 @@ export async function POST(req: Request) {
       <ul>
         <li><strong>CORS</strong> — <code>/api/invoices</code> is CORS-open by design. The hosted checkout doesn&apos;t need your origin allowlisted.</li>
         <li><strong>Quote expiry</strong> — Hosted checkout shows a TTL on the quote; if it expires, the customer has to refresh. SDK quotes are advisory; the actual rate is locked at <code>kit.swap</code> time.</li>
-        <li><strong>Refund + Permit2</strong> — The refund flow pulls the merchant&apos;s payout-token funds back to send to the customer. Approve the gateway from the merchant wallet first; the dashboard prompts this for you.</li>
+        <li><strong>Refund window</strong> — The custody-escrow gateway holds each settled invoice in per-invoice escrow for 7 days. Refunds during that window drain directly from the escrow — no ERC-20 allowance from the merchant wallet is required. After the window closes, anyone can call <code>claim(globalIds[])</code> to release the matured funds to the merchant payout address.</li>
       </ul>
     </DocsShell>
   );

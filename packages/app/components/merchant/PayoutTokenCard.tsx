@@ -8,12 +8,8 @@ import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { mapChainError } from "@/lib/chain/error-mapper";
 import { symbolForAddress } from "@/lib/ui/format";
 
-// NEXT_PUBLIC_GATEWAY_ADDRESS (set in env) preferred when set; V10 fallback for unmigrated envs.
-const GATEWAY_V10 = (
-  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ??
-  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11 ??
-  ""
-) as Address;
+// Active custody-escrow gateway. Source-of-truth env: NEXT_PUBLIC_GATEWAY_ADDRESS.
+const GATEWAY = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ?? "") as Address;
 const USDC = (process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "") as Address;
 const EURC = (process.env.NEXT_PUBLIC_EURC_ADDRESS ?? "") as Address;
 
@@ -51,14 +47,14 @@ export function PayoutTokenCard({ currentPayoutToken, onUpdated }: Props) {
 
   async function handleSave() {
     if (!address || !publicClient) return;
-    if (!GATEWAY_V10.startsWith("0x")) {
-      toast.error("V10 gateway not configured.");
+    if (!GATEWAY.startsWith("0x")) {
+      toast.error("Gateway not configured.");
       return;
     }
     setBusy(true);
     try {
       const hash = await writeContractAsync({
-        address: GATEWAY_V10,
+        address: GATEWAY,
         abi: GATEWAY_ABI,
         functionName: "updatePayoutToken",
         args: [selected],

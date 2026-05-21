@@ -7,7 +7,7 @@ import { parseAbi, type Address } from "viem";
 import { useState } from "react";
 import { toast } from "sonner";
 
-// V10 surface: bit-flag delegate rights + 3-arg authorizeDelegate.
+// Bit-flag delegate rights + 3-arg authorizeDelegate (custody-escrow gateway surface).
 const GW_ABI = parseAbi([
   "function authorizeDelegate(address delegate, uint64 expiresAt, uint8 rights) external",
   "function delegates(address merchant, address delegate) view returns (uint64 expiresAt, uint8 rights)",
@@ -15,7 +15,7 @@ const GW_ABI = parseAbi([
   "function merchants(address) view returns (address payoutAddress, address payoutToken, bool active)",
 ]);
 
-// V10 bit-flag rights (from ArcFXGatewayV10.sol):
+// Bit-flag rights (from ArcFXGateway.sol):
 //   RIGHT_CREATE_INVOICE = 1 << 0  (= 0x01)
 //   RIGHT_REFUND         = 1 << 1  (= 0x02)
 // Server delegate that submits createInvoiceFor needs CREATE_INVOICE.
@@ -26,11 +26,8 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const [busy, setBusy] = useState<"register" | "authorize" | null>(null);
-  // NEXT_PUBLIC_GATEWAY_ADDRESS (set in env) preferred when set; V10 fallback for unmigrated envs.
-  const gateway = (
-    process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ??
-    process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11
-  ) as Address;
+  // Active custody-escrow gateway. Source-of-truth env: NEXT_PUBLIC_GATEWAY_ADDRESS.
+  const gateway = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ?? "") as Address;
   const usdc = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;
 
   const { data: merchantInfo } = useReadContract({
@@ -67,7 +64,7 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
         args: [address, usdc],
       });
       await publicClient!.waitForTransactionReceipt({ hash });
-      toast.success("Registered as merchant on-chain (V10)");
+      toast.success("Registered as merchant on-chain");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? (e as { shortMessage?: string }).shortMessage ?? e.message : String(e));
     }
@@ -97,7 +94,7 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
       <CardHeader><CardTitle>On-chain authorization</CardTitle></CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="flex items-center justify-between">
-          <span>Merchant registered on V10</span>
+          <span>Merchant registered on-chain</span>
           <span className={isRegistered ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
             {isRegistered ? "Yes" : "Not yet"}
           </span>

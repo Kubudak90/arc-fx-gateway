@@ -18,19 +18,16 @@ import { ShieldCheck } from "lucide-react";
  * delegate authorization (so the relayer can submit invoices on their behalf
  * via createInvoiceFor with RIGHT_CREATE_INVOICE).
  *
- * The gateway address resolves to V11 (audit-fixed redeploy of the V10
- * custody contract) when set, with the V10 deployment as a fallback for
- * un-migrated environments.
+ * The gateway address resolves from `NEXT_PUBLIC_GATEWAY_ADDRESS`, which
+ * points at the live custody-escrow deployment recorded in
+ * `packages/contracts/deployments/arc-testnet.json`.
  *
  * Hidden once the merchant is registered on the active gateway.
  */
 
-// Active custody-escrow gateway: V11 (audit-fixed bytecode) preferred when
-// set, V10 as the fallback for un-migrated envs.
+// Active custody-escrow gateway. Source-of-truth env: NEXT_PUBLIC_GATEWAY_ADDRESS.
 const GATEWAY_ADDRESS = (
-  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ??
-  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS_V11 ??
-  ""
+  process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ?? ""
 ) as Address;
 const ARC_CHAIN_ID = 5042002;
 // Bit-flag right for createInvoiceFor (RIGHT_CREATE_INVOICE = 1 << 0)

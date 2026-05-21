@@ -1,6 +1,6 @@
 "use client";
 
-import { createConfig, http, WagmiProvider } from "wagmi";
+import { createConfig, createStorage, http, noopStorage, WagmiProvider } from "wagmi";
 import { defineChain } from "viem";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThirdwebProvider } from "thirdweb/react";
@@ -27,6 +27,16 @@ export const wagmiConfig = createConfig({
     }),
   ],
   transports: { [arcTestnet.id]: http() },
+  // SSR + explicit storage: wagmi's default storage backend tries to touch
+  // indexedDB during Next.js static generation and emits "ReferenceError:
+  // indexedDB is not defined" for every prerendered route. We give it
+  // noopStorage on the server (no persistence — there's no session to
+  // restore there anyway) and localStorage on the client. `ssr: true` is
+  // the matching hydration hint for wagmi v2.
+  ssr: true,
+  storage: createStorage({
+    storage: typeof window !== "undefined" ? window.localStorage : noopStorage,
+  }),
 });
 
 export function ChainProviders({ children }: PropsWithChildren) {

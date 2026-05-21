@@ -36,27 +36,26 @@ command or a small ops touch, but it should happen.
 
 ## Backlog — audit findings consciously deferred
 
-These are the Low-severity items the 2026-05-19 audit explicitly chose
-not to ship in v1.2. Each one is small, none of them block.
+The 2026-05-19 audit Low-severity backlog was cleared in the
+2026-05-21 sweep (commits 8fa56e2 / a25b184 / c67c6d2 / and the
+low-severity-backlog branch — env hygiene, V10/V11 doc cleanup, test
+SSL conditional, all six Low items). Two items remain:
 
-- `lib/compliance/{elliptic,trmlabs}.ts` — wrap the provider `fetch` call
-  in `AbortSignal.timeout(10_000)` so a stalled provider can't hold a
-  serverless slot open for the full function timeout. Only matters when
-  a real provider is enabled (today's prod runs `noop`).
-- `components/landing/LiveSettlement.tsx:31` — the simulator header
-  shows the retired V9 gateway address. Replace with the live address or
-  clearly mark "v0.8 replay address".
-- `components/landing/DashboardPreview.tsx:64` — the `<linearGradient>`
-  uses a static `id="dash-area"`; switch to `useId()` to keep multiple
-  instances and shared SSR streams from colliding.
-- `app/m/dashboard/page.tsx:128` — the "All" range coerces a `null`
-  `daysBack` to 0 and displays today-to-today. Branch on
-  `RANGE_DAYS[range] === null` and render "All time" instead.
-- `components/checkout/StatusScreens.tsx` — the success countdown can
-  briefly render `-1s` before the redirect; clamp with `Math.max(0, …)`.
-- `package.json` — drop unused devDependencies `supertest` +
-  `@types/supertest`. Drop unused shadcn UI components `badge.tsx`,
-  `dropdown-menu.tsx`, `skeleton.tsx` from `components/ui/`.
+- **`pnpm audit` — 11 moderate transitive advisories.** None are in
+  direct deps; the chain is wallet-stack-internal (`@metamask/*`,
+  `wagmi` connectors, `thirdweb`'s `x402` route, `vite`/`esbuild`
+  through dev deps). No known exploit path against our usage. Fix is to
+  wait for upstream wagmi / thirdweb minor bumps or add `pnpm.overrides`
+  at the workspace root once the bumps are no longer churning.
+  Acceptable for testnet; closed at pre-mainnet T-0.
+- **Wagmi SSR `indexedDB` warning.** The `lib/chain/wagmi-config.tsx`
+  side is correct (`ssr: true` + `noopStorage` on the server). The
+  residual warning comes from the WalletConnect / thirdweb client which
+  ignores wagmi's `createStorage` abstraction and touches its own
+  IndexedDB store at module-eval time. Build still exits clean; static
+  pages still generate. Proper fix is to wrap `ChainProviders` in a
+  client-only `dynamic({ ssr: false })` boundary, which is a structural
+  layout change — folded into the v2.0 redesign work.
 
 ---
 
@@ -95,5 +94,5 @@ funding round close — whichever comes first.
 
 ---
 
-*Last updated 2026-05-20. Edits go inline; this file is the only
+*Last updated 2026-05-21. Edits go inline; this file is the only
 forward-looking planning doc in the repo.*

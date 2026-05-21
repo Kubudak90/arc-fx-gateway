@@ -56,6 +56,12 @@ export class TRMLabsProvider implements ComplianceProvider {
         sanctionLists: SANCTION_LISTS,
         flow: context.flow,
       }),
+      // 10 s ceiling so a stalled provider can't hold a serverless slot open
+      // for the full function timeout. The /api/checkout/authorize path runs
+      // fail-closed and the /api/invoices path runs fail-open by default —
+      // either way we want to give up on the upstream long before the
+      // platform does.
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {

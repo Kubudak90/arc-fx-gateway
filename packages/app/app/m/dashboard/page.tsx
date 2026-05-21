@@ -125,9 +125,15 @@ export default function DashboardPage() {
 /* ---------- Header ---------- */
 function Header({ range, setRange, payoutSymbol }: { range: Range; setRange: (r: Range) => void; payoutSymbol: string }) {
   const today = new Date();
-  const daysBack = RANGE_DAYS[range] ?? 90;
-  const start = new Date(today.getTime() - daysBack * 86400_000);
+  const daysBack = RANGE_DAYS[range];
   const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  // "All" → null daysBack. The dashboard returns all invoices regardless of
+  // range; the header just renders a different period label so the user
+  // doesn't see "May 21 – May 21" for the "All" view.
+  const periodLabel =
+    daysBack === null
+      ? `All time · ${today.getFullYear()}`
+      : `${fmt(new Date(today.getTime() - daysBack * 86400_000))} – ${fmt(today)}, ${today.getFullYear()}`;
 
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-7">
@@ -136,7 +142,7 @@ function Header({ range, setRange, payoutSymbol }: { range: Range; setRange: (r:
           Overview
         </h1>
         <span className="text-arcora-muted-fg text-[13px]">
-          {fmt(start)} – {fmt(today)}, {today.getFullYear()} · settling in {payoutSymbol}
+          {periodLabel} · settling in {payoutSymbol}
         </span>
       </div>
       <div className="flex items-center gap-2">

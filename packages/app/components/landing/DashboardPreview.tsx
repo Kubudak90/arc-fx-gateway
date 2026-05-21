@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 /**
  * Marketing-side preview of the merchant dashboard. The chart shape and the
  * activity rows are deliberate placeholders — Arc testnet's real numbers are
@@ -19,6 +21,13 @@ const SETTLEMENTS = [
 ];
 
 export function DashboardPreview() {
+  // useId() so multiple instances on the same page (and concurrent SSR
+  // streams) don't collide on the static "dash-area" gradient id and
+  // accidentally point one SVG's <path fill="url(#…)"> at another's
+  // gradient.
+  const rawId = useId();
+  const gradientId = `dash-area-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+
   const max = Math.max(...CHART);
   const points = CHART.map((p, i) => ({
     x: (i / (CHART.length - 1)) * 400,
@@ -61,7 +70,7 @@ export function DashboardPreview() {
 
           <svg viewBox="0 0 400 160" preserveAspectRatio="none" className="w-full h-[160px] mt-6">
             <defs>
-              <linearGradient id="dash-area" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%"   stopColor="#00c2a8" stopOpacity="0.32" />
                 <stop offset="100%" stopColor="#00c2a8" stopOpacity="0" />
               </linearGradient>
@@ -70,7 +79,7 @@ export function DashboardPreview() {
               <line key={i} x1="0" y1={40 * (i + 1)} x2="400" y2={40 * (i + 1)}
                 stroke="rgba(11,20,38,0.06)" strokeWidth="0.5" />
             ))}
-            <path d={areaPath}  fill="url(#dash-area)" />
+            <path d={areaPath}  fill={`url(#${gradientId})`} />
             <path d={linePath}  fill="none" stroke="#00c2a8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             <circle cx={last.x} cy={last.y} r="4" fill="#00c2a8" />
             <circle cx={last.x} cy={last.y} r="8" fill="#00c2a8" opacity="0.25" />

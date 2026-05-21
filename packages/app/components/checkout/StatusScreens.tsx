@@ -29,7 +29,9 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
 
   useEffect(() => {
     if (!safe) return;
-    const t = setInterval(() => setSeconds((s) => s - 1), 1000);
+    // Clamp at 0 so the countdown can't flash a "-1s" tick between the final
+    // setInterval and the redirect setTimeout firing.
+    const t = setInterval(() => setSeconds((s) => Math.max(0, s - 1)), 1000);
     const r = setTimeout(() => { safeClientRedirect(successUrl, allowedOrigins); }, 3000);
     return () => { clearInterval(t); clearTimeout(r); };
   }, [safe, successUrl, allowedOrigins]);

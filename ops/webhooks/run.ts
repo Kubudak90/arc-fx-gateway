@@ -9,7 +9,13 @@ const BATCH     = Number(process.env.WEBHOOKS_BATCH ?? "50");
 const DELIVERY_TIMEOUT_MS = Number(process.env.WEBHOOKS_TIMEOUT_MS ?? "10000");
 const MAX_BACKOFF_HOURS  = 24;
 const TERMINAL_4XX_AFTER = 3;
-const SIG_HEADER = "X-Arcora-Signature";
+const SIG_HEADER     = "X-Arcora-Signature";       // legacy: sha256(body)
+// Audit 2026-05-24 Ops-M2 — replay protection. We dual-sign every delivery:
+// the legacy header is kept verbatim so existing receivers don't break, and
+// V2 (timestamp + sig-over-timestamp.body) lets receivers reject deliveries
+// older than their tolerance window. WP receiver prefers V2 when present.
+const SIG_HEADER_V2  = "X-Arcora-Signature-V2";    // sha256("<ts>.<body>")
+const TS_HEADER      = "X-Arcora-Timestamp";       // unix seconds, ASCII
 
 function need(k: string): string {
   const v = process.env[k];
@@ -34,6 +40,13 @@ function decryptSecret(iv: Buffer, ciphertext: Buffer): string {
 
 function sign(body: string, secret: string): string {
   return `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+}
+
+/** Audit 2026-05-24 Ops-M2: V2 signature binds timestamp + body so a
+ *  captured webhook can't be replayed beyond the receiver's timestamp
+ *  tolerance window. Dot separator matches Stripe/GitHub convention. */
+function signV2(timestamp: string, body: string, secret: string): string {
+  return `sha256=${createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex")}`;
 }
 
 const pool = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
@@ -175,9 +188,11 @@ async function deliver(row: Row): Promise<{ ok: boolean; status: number; error?:
     return { ok: false, status: 0, error: `unsafe_url:${e instanceof Error ? e.message : String(e)}` };
   }
 
-  const secret    = decryptSecret(row.webhook_secret_iv, row.webhook_secret_enc);
-  const body      = JSON.stringify(row.payload);
-  const signature = sign(body, secret);
+  const secret      = decryptSecret(row.webhook_secret_iv, row.webhook_secret_enc);
+  const body        = JSON.stringify(row.payload);
+  const timestamp   = Math.floor(Date.now() / 1000).toString();
+  const signature   = sign(body, secret);
+  const signatureV2 = signV2(timestamp, body, secret);
 
   // Manual redirect — a 3xx Location pointing at an internal IP would
   // otherwise bypass the DNS guard. Treat any 3xx as a delivery failure
@@ -187,11 +202,28 @@ async function deliver(row: Row): Promise<{ ok: boolean; status: number; error?:
   try {
     const res = await fetch(row.url, {
       method:   "POST",
-      headers:  { "content-type": "application/json", [SIG_HEADER]: signature },
+      headers:  {
+        "content-type":    "application/json",
+        [SIG_HEADER]:      signature,    // legacy — kept for back-compat
+        [TS_HEADER]:       timestamp,    // audit Ops-M2
+        [SIG_HEADER_V2]:   signatureV2,  // audit Ops-M2
+      },
       body,
       redirect: "manual",
       signal:   AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
     });
+    // Audit 2026-05-24 Ops-M1: cap response body buffering. We only read
+    // status + statusText; an unbounded body stream from a malicious or
+    // misbehaving merchant endpoint would otherwise be buffered into
+    // memory until DELIVERY_TIMEOUT_MS, and BATCH=50 concurrent deliveries
+    // can compound that into a VPS-wide memory spike. Cancel the body
+    // stream the moment we no longer need it.
+    try {
+      await res.body?.cancel();
+    } catch {
+      // Cancel is best-effort; some response shapes don't expose body
+      // (e.g. 204). Ignore — we've already extracted what we need.
+    }
     if (res.status >= 300 && res.status < 400) {
       return { ok: false, status: res.status, error: `redirects_blocked:${res.headers.get("location") ?? ""}` };
     }

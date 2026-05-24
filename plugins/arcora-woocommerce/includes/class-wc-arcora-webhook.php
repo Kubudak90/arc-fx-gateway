@@ -16,25 +16,58 @@ class WC_Arcora_Webhook {
         add_action('woocommerce_api_wc_arcora_webhook', [self::class, 'handle']);
     }
 
+    /**
+     * Audit 2026-05-24 Ops-M2: replay window tolerance (seconds either side
+     * of "now") that the V2 signature requires. Stripe ships ±5min by
+     * default; we match.
+     */
+    const TIMESTAMP_TOLERANCE_SECONDS = 300;
+
     public static function handle(): void {
         $body = file_get_contents('php://input');
-        $sig  = isset($_SERVER['HTTP_X_ARCORA_SIGNATURE']) ? sanitize_text_field((string) $_SERVER['HTTP_X_ARCORA_SIGNATURE']) : '';
+        $sigLegacy = isset($_SERVER['HTTP_X_ARCORA_SIGNATURE'])    ? sanitize_text_field((string) $_SERVER['HTTP_X_ARCORA_SIGNATURE'])    : '';
+        $sigV2     = isset($_SERVER['HTTP_X_ARCORA_SIGNATURE_V2']) ? sanitize_text_field((string) $_SERVER['HTTP_X_ARCORA_SIGNATURE_V2']) : '';
+        $tsHeader  = isset($_SERVER['HTTP_X_ARCORA_TIMESTAMP'])    ? sanitize_text_field((string) $_SERVER['HTTP_X_ARCORA_TIMESTAMP'])    : '';
         $gateway = new WC_Arcora_Gateway();
-        $secret  = (string) $gateway->get_option('webhook_secret');
+        $secret  = $gateway->get_option('webhook_secret');
 
         // Audit #21: respond() calls exit, but every guard below would
         // silently fall through if that contract ever changes (e.g. refactor
         // to throw, swap for wp_send_json which only echoes). Pair each
         // self::respond() with an explicit `return;` so the early-exit
         // semantics survive any future change to respond().
-        if ($secret === '') {
+        //
+        // Audit 2026-05-24 Ops-L3: empty() instead of `=== ''` so the
+        // boolean `false` that WC_Payment_Gateway::get_option() returns when
+        // the option row doesn't exist yet (first activation, broken DB,
+        // migration) is treated as missing — not as an empty-string secret
+        // that hash_hmac would silently coerce, leaving the receiver
+        // accepting deterministic-forgeable signatures.
+        if (empty($secret)) {
             self::respond(503, ['error' => 'webhook_secret_missing']);
             return;
         }
+        $secret = (string) $secret;
 
-        if (!self::verify_signature($body, $sig, $secret)) {
-            self::respond(401, ['error' => 'invalid_signature']);
-            return;
+        // Audit 2026-05-24 Ops-M2: prefer V2 (timestamp + sig-over-ts.body)
+        // when both headers are present so a captured legacy webhook can't
+        // be replayed. Fall back to the legacy header so existing
+        // merchant deployments mid-rollout don't break.
+        if ($sigV2 !== '' && $tsHeader !== '') {
+            $ts = (int) $tsHeader;
+            if ($ts <= 0 || abs(time() - $ts) > self::TIMESTAMP_TOLERANCE_SECONDS) {
+                self::respond(401, ['error' => 'timestamp_out_of_window']);
+                return;
+            }
+            if (!self::verify_signature_v2($body, $tsHeader, $sigV2, $secret)) {
+                self::respond(401, ['error' => 'invalid_signature']);
+                return;
+            }
+        } else {
+            if (!self::verify_signature($body, $sigLegacy, $secret)) {
+                self::respond(401, ['error' => 'invalid_signature']);
+                return;
+            }
         }
 
         $payload = json_decode($body, true);
@@ -94,7 +127,7 @@ class WC_Arcora_Webhook {
     }
 
     /**
-     * X-Arcora-Signature is `sha256=<hex>` over the raw request body.
+     * Legacy X-Arcora-Signature: `sha256=<hex>` over the raw request body.
      */
     private static function verify_signature(string $body, string $sigHeader, string $secret): bool {
         if (strpos($sigHeader, 'sha256=') !== 0) {
@@ -102,6 +135,22 @@ class WC_Arcora_Webhook {
         }
         $given = substr($sigHeader, 7);
         $expected = hash_hmac('sha256', $body, $secret);
+        return hash_equals($expected, $given);
+    }
+
+    /**
+     * V2 (audit 2026-05-24 Ops-M2): X-Arcora-Signature-V2 is
+     * `sha256=<hex>` over `"<timestamp>.<body>"`. Binding the timestamp
+     * into the signed payload means a captured webhook can't be replayed
+     * once it falls outside TIMESTAMP_TOLERANCE_SECONDS — and a forged
+     * timestamp invalidates the HMAC.
+     */
+    private static function verify_signature_v2(string $body, string $timestamp, string $sigHeader, string $secret): bool {
+        if (strpos($sigHeader, 'sha256=') !== 0) {
+            return false;
+        }
+        $given = substr($sigHeader, 7);
+        $expected = hash_hmac('sha256', $timestamp . '.' . $body, $secret);
         return hash_equals($expected, $given);
     }
 

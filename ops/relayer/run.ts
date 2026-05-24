@@ -794,11 +794,23 @@ async function main() {
     slippageBps: SLIPPAGE_BPS,
   }));
 
-  const stop = async () => { await pool.end().catch(() => {}); process.exit(0); };
-  process.on("SIGINT", stop);
-  process.on("SIGTERM", stop);
+  // Audit Ops-L-1 (2026-05-24): graceful drain. The previous handler
+  // immediately closed the pool + exited even if a processOne await was
+  // in-flight (e.g. waiting on a chain receipt between persistSwapTx and
+  // callSettle). With the persist-before-await pattern + lease reclaim the
+  // row was recoverable, but a SIGTERM during rotation restarts every 24h
+  // was a routine source of avoidable lease-reclaim cycles. Now we set a
+  // flag and let the current iteration land before tearing down.
+  let shuttingDown = false;
+  const requestShutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "relayer.shutdown_requested", signal }));
+  };
+  process.on("SIGINT",  () => requestShutdown("SIGINT"));
+  process.on("SIGTERM", () => requestShutdown("SIGTERM"));
 
-  while (true) {
+  while (!shuttingDown) {
     try {
       const row = await claimNext();
       if (row) {
@@ -811,8 +823,13 @@ async function main() {
         error: e instanceof Error ? e.message : String(e),
       }));
     }
+    if (shuttingDown) break;
     await new Promise(r => setTimeout(r, TICK_MS));
   }
+
+  console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "relayer.shutdown_complete" }));
+  await pool.end().catch(() => {});
+  process.exit(0);
 }
 
 main();

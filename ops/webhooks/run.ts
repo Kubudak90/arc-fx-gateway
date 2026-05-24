@@ -246,11 +246,21 @@ async function tick(): Promise<{ scanned: number; delivered: number; failed: num
 
 async function main() {
   console.log(JSON.stringify({ msg: "webhooks.start", tickMs: TICK_MS, batch: BATCH }));
-  const stop = async () => { await pool.end().catch(() => {}); process.exit(0); };
-  process.on("SIGINT", stop);
-  process.on("SIGTERM", stop);
 
-  while (true) {
+  // Audit Ops-L-1 (2026-05-24): finish the current tick (BATCH=50 deliveries
+  // at most) before tearing the pool down so we don't abandon a partially-
+  // delivered batch mid-fetch. Each tick is short — DELIVERY_TIMEOUT_MS×50
+  // worst-case — well under any sane SIGTERM grace window.
+  let shuttingDown = false;
+  const requestShutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "webhooks.shutdown_requested", signal }));
+  };
+  process.on("SIGINT",  () => requestShutdown("SIGINT"));
+  process.on("SIGTERM", () => requestShutdown("SIGTERM"));
+
+  while (!shuttingDown) {
     try {
       const r = await tick();
       if (r.scanned > 0) {
@@ -262,8 +272,13 @@ async function main() {
         error: e instanceof Error ? e.message : String(e),
       }));
     }
+    if (shuttingDown) break;
     await new Promise<void>(r => setTimeout(r, TICK_MS));
   }
+
+  console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "webhooks.shutdown_complete" }));
+  await pool.end().catch(() => {});
+  process.exit(0);
 }
 
 main();

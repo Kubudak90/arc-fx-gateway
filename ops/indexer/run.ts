@@ -396,11 +396,21 @@ async function main() {
   console.log(JSON.stringify({
     msg: "indexer.start", gateway: GATEWAY_V10, tickMs: TICK_MS, reorgBuffer: REORG_BUFFER.toString(),
   }));
-  const stop = async () => { await pool.end().catch(() => {}); process.exit(0); };
-  process.on("SIGINT", stop);
-  process.on("SIGTERM", stop);
+  // Audit Ops-L-1 (2026-05-24): finish the in-flight chunk before tearing
+  // the pool down. The indexer's cursor only advances after a chunk's
+  // writes commit (Ops-L-2 transactional fix), so an abandoned mid-chunk
+  // would always be picked up on next start anyway — but graceful drain
+  // avoids the noisy "ECONNREFUSED" / "client end" lines in the log.
+  let shuttingDown = false;
+  const requestShutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "indexer.shutdown_requested", signal }));
+  };
+  process.on("SIGINT",  () => requestShutdown("SIGINT"));
+  process.on("SIGTERM", () => requestShutdown("SIGTERM"));
 
-  while (true) {
+  while (!shuttingDown) {
     try {
       const r = await tick();
       if (r.created || r.paid || r.refunded || r.failed || r.claimed || r.recovered || r.backfilled || r.chunks > 1) {
@@ -418,8 +428,13 @@ async function main() {
         error: e instanceof Error ? e.message : String(e),
       }));
     }
+    if (shuttingDown) break;
     await new Promise<void>(r => setTimeout(r, TICK_MS));
   }
+
+  console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "indexer.shutdown_complete" }));
+  await pool.end().catch(() => {});
+  process.exit(0);
 }
 
 main();

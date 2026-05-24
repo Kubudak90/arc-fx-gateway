@@ -121,8 +121,13 @@ async function forceRefund(id: string): Promise<void> {
   );
   if (r.rowCount === 0) throw new Error(`row ${id} not found`);
   const row = r.rows[0]!;
-  if (row.status === "settled") {
-    throw new Error(`row already settled — cannot force-refund. Use the merchant refund flow instead.`);
+  // Audit Ops-M5 (2026-05-24): also block `refunded`. If the daemon already
+  // completed an automatic refund, calling forceRefund again would re-issue
+  // recordPayerRefund (which would revert with InvoiceNotInCreatedState) and
+  // re-stamp refund_tx_hash, destroying the evidence of the original refund
+  // before the operator noticed.
+  if (row.status === "settled" || row.status === "refunded") {
+    throw new Error(`row already ${row.status} — cannot force-refund. Use the merchant refund flow instead.`);
   }
 
   const account = await vaultSigner({

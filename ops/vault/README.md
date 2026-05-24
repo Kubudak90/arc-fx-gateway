@@ -76,7 +76,18 @@ chmod 600 /root/.vault-rotation-token
 # 10. Wire the rotation cron.
 cat > /etc/cron.d/vault-rotation <<EOF
 SHELL=/bin/bash
+MAILTO=root
 0 4 * * * root VAULT_TOKEN=\$(cat /root/.vault-rotation-token) VAULT_ADDR=http://127.0.0.1:8200 /root/arcora-ops/vault/secret-id-rotation.sh >> /var/log/vault-rotation.log 2>&1
+EOF
+
+# 11. Wire the rotation freshness check (audit Ops-M4, 2026-05-24).
+# Runs hourly; exits 1 if no successful rotation in 25h. The cron MAILTO
+# surfaces failures so a silent rotation outage (the 2026-05-12 root cause)
+# can't recur. See ops/vault/vault-rotation-health.sh for details.
+cat > /etc/cron.d/vault-rotation-health <<EOF
+SHELL=/bin/bash
+MAILTO=root
+15 * * * * root /root/arcora-ops/vault/vault-rotation-health.sh
 EOF
 ```
 
@@ -91,9 +102,15 @@ VAULT_KV_FIELD=privateKey
 GATEWAY_ADDRESS=<from forge deploy>
 ARC_TESTNET_RPC=https://rpc.testnet.arc.network
 POSTGRES_URL_NON_POOLING=postgresql://…
-RELAYER_ADAPTER_KEY=0x...    # FIXME: AppKit kit.swap still requires raw key
 KIT_KEY=KIT_KEY:...
 ```
+
+The relayer derives both the viem `LocalAccount` and the App Kit adapter
+from the single Vault-fetched private key — no separate
+`RELAYER_ADAPTER_KEY` env var (audit Ops-I-4, 2026-05-24: the stale
+"FIXME: AppKit kit.swap still requires raw key" comment that used to
+sit here documented a pre-V10 dual-key arrangement that the daemon no
+longer uses).
 
 ## Disaster recovery
 

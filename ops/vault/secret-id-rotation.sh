@@ -15,7 +15,20 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-NEW_SECRET_ID=$(vault write -field=secret_id -f auth/approle/role/relayer/secret-id)
+# Audit Ops-I-1 (2026-05-24): also pull the accessor for the new
+# secret_id. We never log the secret_id itself (would defeat the purpose
+# of rotation), but the accessor is a non-secret handle Vault writes to
+# its audit log. Capturing it on rotation gives the operator a way to
+# correlate the live secret_id with Vault's own audit trail without
+# guessing at timestamps during an incident.
+NEW_SECRET_BUNDLE=$(vault write -format=json -f auth/approle/role/relayer/secret-id)
+NEW_SECRET_ID=$(echo "$NEW_SECRET_BUNDLE" | sed -n 's/.*"secret_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+NEW_ACCESSOR=$(echo "$NEW_SECRET_BUNDLE" | sed -n 's/.*"secret_id_accessor"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+
+if [[ -z "$NEW_SECRET_ID" ]]; then
+  echo "[rotation] ERROR: vault returned an empty secret_id — refusing to rewrite env" >&2
+  exit 3
+fi
 
 # Atomic env-file rewrite — mktemp in the same directory so the final mv stays
 # on the same filesystem (rename is atomic only within a single fs).
@@ -43,4 +56,9 @@ if ! systemctl is-active --quiet arcora-relayer.service; then
   exit 2
 fi
 
-echo "[rotation] $(date -Iseconds) new secret_id rotated, relayer reloaded"
+# Audit Ops-M4 (2026-05-24): structured success line. /etc/cron.d redirects
+# the script's stdout/stderr to /var/log/vault-rotation.log; this line is
+# what the freshness monitor below greps for. The accessor is logged
+# alongside the timestamp so an operator can cross-reference with Vault's
+# audit log during an incident without having to guess.
+echo "[rotation] $(date -Iseconds) ok accessor=${NEW_ACCESSOR:-unknown}"

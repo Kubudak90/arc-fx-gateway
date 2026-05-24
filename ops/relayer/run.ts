@@ -131,6 +131,10 @@ type QueueRow = {
   swap_amount_out: string | null;
   settle_tx_hash:  string | null;
   refund_tx_hash:  string | null;
+  /** Audit 2026-05-24 H-2: surfaced for resumeRefund so the re-issued
+   *  recordPayerRefund can preserve the original swap-failure reason
+   *  instead of stamping "resumed" as the only on-chain trail. */
+  last_error:      string | null;
 };
 
 /** Plan-9 dispatch — every queue row carries the gateway address its invoice
@@ -178,7 +182,7 @@ function claimSql(where: string): string {
              returning id, invoice_id, payer, pay_in_token, amount_in, payout_token,
                        amount_out_min, permit2_data, permit2_signature, attempts,
                        permit2_tx_hash, swap_tx_hash, swap_amount_out,
-                       settle_tx_hash, refund_tx_hash
+                       settle_tx_hash, refund_tx_hash, last_error
           )
           select c.*, i.gateway_address
             from claimed c
@@ -238,6 +242,23 @@ async function persistSwapTx(id: string, tx: Hex, amountOutBaseUnits: bigint): P
 async function persistSettleTx(id: string, tx: Hex): Promise<void> {
   await pool.query(
     `update relayer_queue set settle_tx_hash = $2, updated_at = now() where id = $1`,
+    [id, tx],
+  );
+}
+
+// Audit 2026-05-24 H-2: mirror the settle/permit2 persist-before-await
+// pattern on the refund path. The customer-facing ERC-20 transfer goes out
+// before the gateway's recordPayerRefund call — if the daemon crashed
+// between transfer broadcast and the receipt wait, the tx hash was lost,
+// the reclaim re-entered refundPayer, the balance check failed (funds
+// already gone), and the customer ended up paid on-chain while the DB
+// row said `failed` and the gateway never saw recordPayerRefund. We now
+// persist refund_tx_hash the moment writeContract returns and resume
+// from this checkpoint via resumeRefund() instead of restarting the
+// refund flow.
+async function persistRefundTx(id: string, tx: Hex): Promise<void> {
+  await pool.query(
+    `update relayer_queue set refund_tx_hash = $2, updated_at = now() where id = $1`,
     [id, tx],
   );
 }
@@ -407,7 +428,23 @@ async function callSettle(
   return tx;
 }
 
-async function refundPayer(row: QueueRow, reason: string): Promise<Hex> {
+/** Build the bytes32 reasonHash field from a free-text reason string.
+ *  Audit #34: slice the encoded byte array, not the character string —
+ *  multi-byte UTF-8 chars would otherwise overflow bytes32. */
+function reasonToHash(reason: string): Hex {
+  const reasonBytes = new TextEncoder().encode(reason).slice(0, 32);
+  return ("0x" +
+    Array.from(reasonBytes)
+      .map(b => b.toString(16).padStart(2, "0")).join("")
+      .padEnd(64, "0")
+  ) as Hex;
+}
+
+async function refundPayer(
+  row: QueueRow,
+  reason: string,
+  onTransferBroadcast: (tx: Hex) => Promise<void>,
+): Promise<Hex> {
   // Best-effort: if the relayer wallet never received the pay-in (Permit2
   // call itself failed before any token movement), there's nothing to send
   // back — just record the failure.
@@ -422,6 +459,12 @@ async function refundPayer(row: QueueRow, reason: string): Promise<Hex> {
     throw new Error(`insufficient pay-in balance to refund: have ${balance}, need ${owedBack}`);
   }
 
+  // Audit 2026-05-24 H-2: persist refund_tx_hash the moment writeContract
+  // returns and BEFORE waiting for the receipt, mirroring the settle and
+  // permit2 paths. A crash inside the receipt-await window used to leave
+  // the customer paid on-chain while the DB row said `failed` and the
+  // gateway never saw recordPayerRefund. resumeRefund() picks up from
+  // this checkpoint on lease reclaim.
   const transferTx = await wallet.writeContract({
     chain: undefined,
     address: row.pay_in_token as Address,
@@ -429,20 +472,10 @@ async function refundPayer(row: QueueRow, reason: string): Promise<Hex> {
     functionName: "transfer",
     args: [row.payer as Address, owedBack],
   });
+  await onTransferBroadcast(transferTx);
   await chain.waitForTransactionReceipt({ hash: transferTx });
 
   // Tell the gateway: the indexer flips the invoice to `failed` from this event.
-  // Audit #34: previously `reason.slice(0, 32)` truncated by JS character
-  // index — a 32-char string of multi-byte UTF-8 chars (e.g. emoji or
-  // non-ASCII) encodes to more than 32 bytes, then Array.from(...) overflows
-  // bytes32 and the hex literal can exceed 64 chars (padEnd doesn't shrink).
-  // Slice the byte array, not the character string.
-  const reasonBytes = new TextEncoder().encode(reason).slice(0, 32);
-  const reasonHash = ("0x" +
-    Array.from(reasonBytes)
-      .map(b => b.toString(16).padStart(2, "0")).join("")
-      .padEnd(64, "0")
-  ) as Hex;
   const recordTx = await wallet.writeContract({
     chain: undefined,
     address: gatewayFor(row),
@@ -453,11 +486,67 @@ async function refundPayer(row: QueueRow, reason: string): Promise<Hex> {
       row.payer as Address,
       row.pay_in_token as Address,
       owedBack,
-      reasonHash,
+      reasonToHash(reason),
     ],
   });
   await chain.waitForTransactionReceipt({ hash: recordTx });
   return transferTx;
+}
+
+/** Audit 2026-05-24 H-2: resume a refund flow that crashed after the
+ *  customer-facing transfer was broadcast. refund_tx_hash being set means
+ *  the transfer reached the network; verify it landed, then call
+ *  recordPayerRefund (the contract's `inv.status == Created` guard makes
+ *  it idempotent — InvoiceNotInCreatedState revert => already recorded). */
+async function resumeRefund(row: QueueRow): Promise<{ ok: true; tx: Hex } | { ok: false; err: string }> {
+  const transferTx = row.refund_tx_hash as Hex;
+
+  let rcpt;
+  try {
+    rcpt = await chain.waitForTransactionReceipt({ hash: transferTx, timeout: 30_000 });
+  } catch (e) {
+    // Receipt not yet available — leave row in processing for next reclaim.
+    // Don't escalate to failed unless we hit MAX_ATTEMPTS so a stuck refund
+    // tx eventually surfaces for operator triage.
+    if (row.attempts >= MAX_ATTEMPTS) {
+      return { ok: false, err:
+        `refund transfer ${transferTx} stuck unconfirmed after ${row.attempts} attempts — manual reconciliation needed`,
+      };
+    }
+    throw e;  // let processOne's outer catch log + reschedule
+  }
+
+  if (rcpt.status !== "success") {
+    return { ok: false, err: `refund transfer ${transferTx} reverted — manual reconciliation needed` };
+  }
+
+  // Transfer landed. Re-issue recordPayerRefund; revert with
+  // InvoiceNotInCreatedState means it already ran on the previous attempt
+  // and we can mark the row done.
+  try {
+    const recordTx = await wallet.writeContract({
+      chain: undefined,
+      address: gatewayFor(row),
+      abi: GATEWAY_ABI,
+      functionName: "recordPayerRefund",
+      args: [
+        row.invoice_id as Hex,
+        row.payer as Address,
+        row.pay_in_token as Address,
+        BigInt(row.amount_in),
+        reasonToHash(row.last_error ?? "resumed"),
+      ],
+    });
+    await chain.waitForTransactionReceipt({ hash: recordTx });
+    return { ok: true, tx: transferTx };
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    if (/InvoiceNotInCreatedState/i.test(err)) {
+      // Gateway already saw recordPayerRefund on a prior attempt; safe to close.
+      return { ok: true, tx: transferTx };
+    }
+    return { ok: false, err: `refund record on resume: ${err}` };
+  }
 }
 
 // USDC and EURC on Arc testnet are both 6-decimal in their ERC-20 surface;
@@ -499,8 +588,27 @@ async function processOne(row: QueueRow): Promise<void> {
       permit2: !!row.permit2_tx_hash,
       swap:    !!row.swap_tx_hash,
       settle:  !!row.settle_tx_hash,
+      refund:  !!row.refund_tx_hash,
     },
   });
+
+  // Audit 2026-05-24 H-2: refund resume short-circuits everything else.
+  // refund_tx_hash being set means the prior attempt already broadcast the
+  // customer-facing transfer and we crashed inside the receipt-await
+  // window or before recordPayerRefund. Don't re-enter the swap/settle
+  // flow — finish reconciling this refund and exit.
+  if (row.refund_tx_hash) {
+    log("info", { msg: "refund.resume", tx: row.refund_tx_hash });
+    const res = await resumeRefund(row);
+    if (res.ok) {
+      await markRefunded(row.id, res.tx, "resumed after mid-flight crash");
+      log("info", { msg: "refund.resume.ok", tx: res.tx });
+    } else {
+      await markFailed(row.id, res.err);
+      log("error", { msg: "refund.resume.fail", err: res.err });
+    }
+    return;
+  }
 
   // Step 1: pull pay-in via Permit2 (skip if a previous attempt already
   // pulled — Permit2 nonce is consumed on-chain, retrying would revert).
@@ -576,7 +684,10 @@ async function processOne(row: QueueRow): Promise<void> {
       const err = e instanceof Error ? e.message : String(e);
       log("error", { msg: "swap.fail", err });
       try {
-        const refundTx = await refundPayer(row, err);
+        const refundTx = await refundPayer(row, err, async (tx) => {
+          await persistRefundTx(row.id, tx);
+          row.refund_tx_hash = tx;
+        });
         await markRefunded(row.id, refundTx, err);
         log("info", { msg: "refund.ok", tx: refundTx });
       } catch (re) {

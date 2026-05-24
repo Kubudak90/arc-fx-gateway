@@ -73,20 +73,34 @@ vault policy write approle-rotator /tmp/rotator.hcl
 vault token create -policy=approle-rotator -ttl=8760h -orphan -field=token > /root/.vault-rotation-token
 chmod 600 /root/.vault-rotation-token
 
-# 10. Wire the rotation cron.
-cat > /etc/cron.d/vault-rotation <<EOF
-SHELL=/bin/bash
-MAILTO=root
-0 4 * * * root VAULT_TOKEN=\$(cat /root/.vault-rotation-token) VAULT_ADDR=http://127.0.0.1:8200 /root/arcora-ops/vault/secret-id-rotation.sh >> /var/log/vault-rotation.log 2>&1
-EOF
+# 10. Wire the rotation cron (root user crontab, NOT /etc/cron.d).
+# Production: rotation runs from root's crontab so the VAULT_TOKEN env
+# can be sourced from the scoped operator token at /etc/arcora/rotation-
+# operator.token. The actual production layout (audit 2026-05-24
+# follow-up) is:
+#
+#   - script: /root/secret-id-rotation.sh (sync from
+#     ops/vault/secret-id-rotation.sh in the repo on each change)
+#   - token : /etc/arcora/rotation-operator.token (chmod 600, scoped
+#     policy in policy-rotation-operator.hcl — only allowed grant is
+#     `update auth/approle/role/relayer/secret-id`)
+#   - log   : /var/log/secret-id-rotation.log
+#
+crontab -e
+# Add:
+# 0 3 * * * VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=$(cat /etc/arcora/rotation-operator.token) /root/secret-id-rotation.sh >> /var/log/secret-id-rotation.log 2>&1
 
 # 11. Wire the rotation freshness check (audit Ops-M4, 2026-05-24).
 # Runs hourly; exits 1 if no successful rotation in 25h. The cron MAILTO
 # surfaces failures so a silent rotation outage (the 2026-05-12 root cause)
-# can't recur. See ops/vault/vault-rotation-health.sh for details.
+# can't recur. VAULT_ROTATION_LOG points at the log written by the cron
+# above; the script accepts both the new "ok" line and the legacy
+# "new secret_id rotated" line so this check can roll out without
+# backfilling the log.
 cat > /etc/cron.d/vault-rotation-health <<EOF
 SHELL=/bin/bash
 MAILTO=root
+VAULT_ROTATION_LOG=/var/log/secret-id-rotation.log
 15 * * * * root /root/arcora-ops/vault/vault-rotation-health.sh
 EOF
 ```

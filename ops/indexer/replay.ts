@@ -41,19 +41,21 @@ import {
 import pg from "pg";
 import { randomUUID } from "node:crypto";
 
-const RPC         = need("ARC_TESTNET_RPC");
-const GATEWAY_V10 = (process.env.GATEWAY_ADDRESS_V10 ?? "").toLowerCase() as Address;
-if (!GATEWAY_V10) throw new Error("GATEWAY_ADDRESS_V10 must be set");
-// Optional V11 (audit-fix bytecode) gateway. When set, replay scans both
-// addresses — same dual-watch semantics as ops/indexer/run.ts so that
-// indexer recovery covers the V10 retirement window. Audit 2026-05-24 Ops-M3.
+const RPC = need("ARC_TESTNET_RPC");
+
+// Matches run.ts post-V10-retirement env shape: prefer the bare
+// `GATEWAY_ADDRESS`, fall back to legacy `GATEWAY_ADDRESS_V10` for envs
+// still mid-migration, optionally additionally watch `GATEWAY_ADDRESS_V11`
+// if it's set to a distinct address (the old dual-watch transitional
+// shape). Audit 2026-05-24 Ops-M3 + post-retirement env consolidation.
+const GATEWAY_PRIMARY = (process.env.GATEWAY_ADDRESS ?? process.env.GATEWAY_ADDRESS_V10 ?? "").toLowerCase();
+if (!GATEWAY_PRIMARY) {
+  throw new Error("either GATEWAY_ADDRESS (post-retirement) or GATEWAY_ADDRESS_V10 (legacy) must be set");
+}
 const GATEWAY_V11_RAW = (process.env.GATEWAY_ADDRESS_V11 ?? "").toLowerCase();
-const GATEWAY_V11: Address | null = GATEWAY_V11_RAW
-  ? (GATEWAY_V11_RAW as Address)
-  : null;
-const WATCHED_GATEWAYS: Address[] = GATEWAY_V11
-  ? [GATEWAY_V10, GATEWAY_V11]
-  : [GATEWAY_V10];
+const WATCHED_GATEWAYS: Address[] = (GATEWAY_V11_RAW && GATEWAY_V11_RAW !== GATEWAY_PRIMARY)
+  ? [GATEWAY_PRIMARY as Address, GATEWAY_V11_RAW as Address]
+  : [GATEWAY_PRIMARY as Address];
 const PG_URL      = need("POSTGRES_URL_NON_POOLING");
 const MAX_RANGE   = 9_000n;
 

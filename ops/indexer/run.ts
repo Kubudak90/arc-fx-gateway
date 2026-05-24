@@ -5,21 +5,29 @@ import {
 import pg from "pg";
 import { randomUUID } from "node:crypto";
 
-const RPC          = need("ARC_TESTNET_RPC");
-const GATEWAY_V10  = (process.env.GATEWAY_ADDRESS_V10 ?? "").toLowerCase() as Address;
-if (!GATEWAY_V10) throw new Error("GATEWAY_ADDRESS_V10 must be set");
-// Optional V11 (audit-fix bytecode) gateway. When set, the indexer watches
-// both addresses through V10's deprecation window (7d refund + 7d recovery
-// from the last V10 settle) and tags each invoice with its source via
-// `log.address`. Drop GATEWAY_ADDRESS_V11 from env once the V10 window
-// closes and indexer-discovered V10 events stop. Audit 2026-05-13.
+const RPC = need("ARC_TESTNET_RPC");
+
+// Post-V10 retirement (2026-05-20): production .env files use the bare
+// `GATEWAY_ADDRESS` key. We still accept the legacy `GATEWAY_ADDRESS_V10`
+// + optional `GATEWAY_ADDRESS_V11` pair for backward compat with any env
+// that hasn't been migrated yet — at most one path will be populated in
+// practice, and either way we end up with `WATCHED_GATEWAYS` listing
+// every distinct gateway address.
+const GATEWAY_PRIMARY = (process.env.GATEWAY_ADDRESS ?? process.env.GATEWAY_ADDRESS_V10 ?? "").toLowerCase();
+if (!GATEWAY_PRIMARY) {
+  throw new Error("either GATEWAY_ADDRESS (post-retirement) or GATEWAY_ADDRESS_V10 (legacy) must be set");
+}
 const GATEWAY_V11_RAW = (process.env.GATEWAY_ADDRESS_V11 ?? "").toLowerCase();
-const GATEWAY_V11: Address | null = GATEWAY_V11_RAW
-  ? (GATEWAY_V11_RAW as Address)
-  : null;
-const WATCHED_GATEWAYS: Address[] = GATEWAY_V11
-  ? [GATEWAY_V10, GATEWAY_V11]
-  : [GATEWAY_V10];
+// De-dup: if the legacy V11 var is set to the same value as the primary
+// (some envs do this defensively during the cutover), don't list the
+// address twice in WATCHED_GATEWAYS — getLogs would double-emit.
+const WATCHED_GATEWAYS: Address[] = (GATEWAY_V11_RAW && GATEWAY_V11_RAW !== GATEWAY_PRIMARY)
+  ? [GATEWAY_PRIMARY as Address, GATEWAY_V11_RAW as Address]
+  : [GATEWAY_PRIMARY as Address];
+// Kept as a stable alias for the start-line log so dashboards/alerts that
+// grep for `gateway:0x…` keep matching. Points at the same primary
+// address the rest of the daemon reads.
+const GATEWAY_V10 = GATEWAY_PRIMARY as Address;
 const PG_URL       = need("POSTGRES_URL_NON_POOLING");
 const REORG_BUFFER = BigInt(process.env.INDEXER_REORG_BUFFER_BLOCKS ?? "5");
 const TICK_MS      = Number(process.env.INDEXER_TICK_MS ?? "30000");

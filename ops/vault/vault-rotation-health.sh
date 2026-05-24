@@ -29,8 +29,11 @@ if [[ ! -f "$LOG" ]]; then
   exit 1
 fi
 
-# Last "ok" line — match the trailing pattern from secret-id-rotation.sh.
-LAST_OK_LINE=$(grep -E '^\[rotation\] [^ ]+ ok' "$LOG" | tail -n 1 || true)
+# Last success line. The new (audit-2026-05-24) rotation script writes
+# "[rotation] <iso-ts> ok accessor=…"; the previous version wrote
+# "[rotation] <iso-ts> new secret_id rotated, relayer reloaded". We
+# accept both so this check can roll out without backfilling the log.
+LAST_OK_LINE=$(grep -E '^\[rotation\] [^ ]+ (ok|new secret_id rotated)' "$LOG" | tail -n 1 || true)
 if [[ -z "$LAST_OK_LINE" ]]; then
   echo "[health] CRITICAL: no successful rotation lines in $LOG" >&2
   exit 1

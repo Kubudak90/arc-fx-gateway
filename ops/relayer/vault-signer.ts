@@ -46,13 +46,27 @@ export async function fetchPrivateKeyFromVault(opts: VaultSignerOpts): Promise<H
   return fetchPrivateKey(opts.vaultUrl, token, opts.kvPath, opts.kvField);
 }
 
+// Audit 2026-05-24 H-1: Vault error response bodies can reference the
+// supplied secret_id (e.g. "secret_id expired" / "invalid secret_id"). When
+// the body was interpolated into Error.message, it ended up in node crash
+// dumps and journald via the top-level catch in run.ts. We now read the
+// body for operator visibility (structured `vault.*_fail` log) but throw a
+// status-only message so it never leaks into stack traces.
+function logVaultError(stage: "login" | "kv_read", status: number, body: string): void {
+  // eslint-disable-next-line no-console
+  console.error(JSON.stringify({ msg: `vault.${stage}_fail`, status, body }));
+}
+
 async function login(opts: VaultSignerOpts): Promise<string> {
   const res = await fetch(`${opts.vaultUrl}/v1/auth/approle/login`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ role_id: opts.roleId, secret_id: opts.secretId }),
   });
-  if (!res.ok) throw new Error(`Vault login failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    logVaultError("login", res.status, await res.text());
+    throw new Error(`Vault login failed: ${res.status}`);
+  }
   const json = await res.json() as { auth: { client_token: string } };
   return json.auth.client_token;
 }
@@ -66,7 +80,10 @@ async function fetchPrivateKey(
   const res = await fetch(`${vaultUrl}/v1/${kvPath}`, {
     headers: { "X-Vault-Token": token },
   });
-  if (!res.ok) throw new Error(`Vault KV read failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    logVaultError("kv_read", res.status, await res.text());
+    throw new Error(`Vault KV read failed: ${res.status}`);
+  }
   const json = await res.json() as { data: { data: Record<string, string> } };
   const raw = json.data?.data?.[kvField];
   if (!raw) throw new Error(`Vault KV secret '${kvPath}' has no field '${kvField}'`);

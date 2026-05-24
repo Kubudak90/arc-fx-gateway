@@ -34,6 +34,54 @@ command or a small ops touch, but it should happen.
 
 ---
 
+## V12 contracts — design carry from 2026-05-24 audit
+
+The 2026-05-24 audit's smart-contract pass found nothing exploitable on
+the deployed V11 bytecode, but it surfaced nine items that all need
+contract-source changes — i.e. they can't ship without a redeploy. None
+individually justify an emergency V12; they're collected here so the
+next planned redeploy (with multi-stable, with mainnet, or with a
+deliberate hardening cycle) carries them as a unit.
+
+The two off-chain commits that mitigate the contract-level risks until
+V12 lands are already in (the rest of the audit follow-up below):
+- The relayer's persist-before-await for refund (Ops-H2) makes the
+  customer-payout side of the contracts' refund flow recoverable
+  regardless of any contract-side issue.
+- The admin-recovery edge in the contracts H-1 finding requires admin
+  action to weaponise, which today's single-EOA `DEFAULT_ADMIN_ROLE`
+  already exposes — the pre-mainnet multisig migration on the checklist
+  below closes the same blast radius from a different angle.
+
+### V12 items
+
+| Sev | Item | Where | Why it needs V12 |
+|---|---|---|---|
+| H-1 | `adminRecoverEscrow` reads current `merchants[m].active` instead of the merchant's deactivation epoch — a reactivate→deactivate cycle lets admin sweep old escrows. | `ArcFXGateway.sol:409` | Needs `uint64 deactivatedAt` on the merchant struct + guard `escrow.claimableAt >= merchants[m].deactivatedAt`. |
+| M-1 | `claim()` and `adminRecoverEscrow()` are not `whenNotPaused`. Tests treat this as intentional; either it is (and needs NatSpec) or it isn't (and needs the guard). | `ArcFXGateway.sol:358, 409` | Either decision is a source edit. |
+| M-2 | Delegate-expiry boundary inconsistent: `createInvoiceFor` uses `<`, `refundInvoice` uses `>=`. Standardize on `>` ("expires after this block"). | `ArcFXGateway.sol:195, refund path` | One-line semantic change in each branch. |
+| L-1 | `protocolFeesAccrued` conflates relayer-submitted swap surplus with actual fees — withdrawable as one bucket, no path to refund a buggy relayer's over-submission. Either split mappings or NatSpec the conflation. | `ArcFXGateway.sol:279, 375` | Storage shape change OR doc change in source. |
+| L-2 | `revokeDelegate` emits `DelegateRevoked` for any caller with any target — indexer-log spam, no fund risk. Guard with "delegate exists" or "caller is a registered merchant" check. | `ArcFXGateway.sol:234-237` | One-line guard. |
+| L-3 | `claim()` reads `inv.merchant` from the storage pointer after the external `safeTransfer`. Currently safe (no field mutation in between) but the pattern would silently break a future edit. Cache `address merchant_ = inv.merchant` before the transfer. | `ArcFXGateway.sol:373-379` | One-line CEI nit. |
+| I-1 | `authorizeDelegate` has no upper bound on `expiresAt` — type(uint64).max creates an effectively permanent delegation. Add a `MAX_DELEGATE_WINDOW` constant + guard. | `ArcFXGateway.sol:226-231` | New constant + one revert. |
+| I-2 | `_createInvoice` accepts `expiresAt = 0` / past — invoice is immediately uncollectable. One-line `if (expiresAt <= block.timestamp) revert InvalidExpiry()`. | `ArcFXGateway.sol:200-224` | Trivial guard. |
+| I-3 | `MintableERC20` testnet faucet has no mint cap. Not a production contract today, but the file would be unsafe to copy as a stub for any mainnet wrapped-stable. Add an inline "TESTNET ONLY — DO NOT COPY" header. | `MintableERC20.sol:23` | Comment only. |
+
+### V12 cut criteria
+
+Trigger one of:
+- Multi-stable expansion (USDT / PYUSD / DAI / USDe). Adds a contract
+  axis already, V12 fixes ride along.
+- Mainnet T-0 cutover. Pairs naturally with the multisig migration on
+  the pre-mainnet checklist below.
+- A new High/Critical finding in a later audit that needs source-level
+  work anyway.
+
+Until then, V11 stays live and the off-chain fixes above are the
+mitigation surface.
+
+---
+
 ## Backlog — audit findings consciously deferred
 
 The 2026-05-19 audit Low-severity backlog was cleared in the
@@ -94,5 +142,5 @@ funding round close — whichever comes first.
 
 ---
 
-*Last updated 2026-05-21. Edits go inline; this file is the only
+*Last updated 2026-05-24. Edits go inline; this file is the only
 forward-looking planning doc in the repo.*

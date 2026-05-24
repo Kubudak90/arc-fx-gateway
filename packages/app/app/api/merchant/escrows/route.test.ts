@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { NextRequest } from "next/server";
 
 vi.mock("@/lib/auth/session", () => ({
   getSession: vi.fn(),
+}));
+
+vi.mock("@/lib/auth/apikey", () => ({
+  lookupMerchantByApiKey: vi.fn(),
 }));
 
 // Module-level result arrays — tests populate these before each scenario.
@@ -11,15 +16,20 @@ const maturedRows: any[] = [];
 const claimedRows: any[] = [];
 
 vi.mock("@/lib/db/client", () => {
-  // The route executes these DB calls in order:
-  //   1. select().from(merchants).where().limit(1)        → merchant row
-  //   2. select().from(invoices).where().limit(PAGE_SIZE+1) → pending rows
-  //   3. select().from(invoices).where().limit(PAGE_SIZE+1) → matured rows
-  //   4. select().from(invoices).where().limit(PAGE_SIZE+1) → claimed rows
+  // The route's session path issues these queries in order:
+  //   1. select().from(merchants).where().limit(1)         → merchant row
+  //   2. select().from(invoices).where().limit(PAGE_SIZE+1) → pending
+  //   3. select().from(invoices).where().limit(PAGE_SIZE+1) → matured
+  //   4. select().from(invoices).where().limit(PAGE_SIZE+1) → claimed
+  // The API-key path skips (1) (merchant resolved via lookupMerchantByApiKey).
   // Calls 2-4 are issued concurrently via Promise.all; the mock resolves them
   // deterministically by counting .where() invocations.
   let callSeq = 0;
-  (globalThis as any).__resetEscrowMock = () => { callSeq = 0; };
+  let bucketSeqStart = 1; // 1 for session path, 0 for api-key path
+  (globalThis as any).__resetEscrowMock = (apiKeyPath = false) => {
+    callSeq = 0;
+    bucketSeqStart = apiKeyPath ? 0 : 1;
+  };
 
   const builder: any = {
     select: vi.fn().mockReturnThis(),
@@ -30,12 +40,13 @@ vi.mock("@/lib/db/client", () => {
   builder.where.mockImplementation(() => {
     callSeq++;
     const seq = callSeq;
-    if (seq === 1) {
+    if (bucketSeqStart === 1 && seq === 1) {
       return { limit: (n: number) => Promise.resolve(merchantRows.slice(0, n)) };
     }
-    if (seq === 2) return { limit: (n: number) => Promise.resolve(pendingRows.slice(0, n)) };
-    if (seq === 3) return { limit: (n: number) => Promise.resolve(maturedRows.slice(0, n)) };
-    return            { limit: (n: number) => Promise.resolve(claimedRows.slice(0, n)) };
+    const bucketIdx = seq - bucketSeqStart;
+    if (bucketIdx === 1) return { limit: (n: number) => Promise.resolve(pendingRows.slice(0, n)) };
+    if (bucketIdx === 2) return { limit: (n: number) => Promise.resolve(maturedRows.slice(0, n)) };
+    return                { limit: (n: number) => Promise.resolve(claimedRows.slice(0, n)) };
   });
 
   return { db: builder };
@@ -48,6 +59,11 @@ vi.mock("drizzle-orm", async () => {
 
 import { GET } from "./route";
 
+function makeReq(headers: Record<string, string> = {}): NextRequest {
+  const h = new Headers(headers);
+  return { headers: h } as unknown as NextRequest;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   merchantRows.length = 0;
@@ -55,18 +71,18 @@ beforeEach(() => {
   maturedRows.length  = 0;
   claimedRows.length  = 0;
   merchantRows.push({ id: "merch-1", address: "0xMerchant", payoutToken: "0xUSDC" });
-  (globalThis as any).__resetEscrowMock?.();
+  (globalThis as any).__resetEscrowMock?.(false);
 });
 
 describe("GET /api/merchant/escrows", () => {
-  it("returns 401 when unauthenticated", async () => {
+  it("returns 401 when unauthenticated and no API key supplied", async () => {
     const { getSession } = await import("@/lib/auth/session");
     (getSession as any).mockResolvedValue({});
-    const res = await GET();
+    const res = await GET(makeReq());
     expect(res.status).toBe(401);
   });
 
-  it("returns pending + matured + claimed groups for the authed merchant", async () => {
+  it("returns pending + matured + claimed groups for the authed merchant (cookie path)", async () => {
     const { getSession } = await import("@/lib/auth/session");
     (getSession as any).mockResolvedValue({ merchantAddress: "0xMerchant" });
 
@@ -78,7 +94,7 @@ describe("GET /api/merchant/escrows", () => {
     maturedRows.push({ id: "0xinv-matured", status: "paid",    claimableAt: past });
     claimedRows.push({ id: "0xinv-claimed", status: "claimed", claimableAt: past });
 
-    const res = await GET();
+    const res = await GET(makeReq());
     expect(res.status).toBe(200);
     const body = await res.json();
 
@@ -91,7 +107,7 @@ describe("GET /api/merchant/escrows", () => {
     expect(body.truncated).toEqual({ pending: false, matured: false, claimed: false });
   });
 
-  it("flags truncated=true when a bucket exceeds PAGE_SIZE", async () => {
+  it("flags truncated=true when a bucket exceeds PAGE_SIZE (cookie path)", async () => {
     const { getSession } = await import("@/lib/auth/session");
     (getSession as any).mockResolvedValue({ merchantAddress: "0xMerchant" });
 
@@ -100,12 +116,52 @@ describe("GET /api/merchant/escrows", () => {
       pendingRows.push({ id: `pend-${i}`, status: "paid", claimableAt: new Date(Date.now() + 60_000) });
     }
 
-    const res = await GET();
+    const res = await GET(makeReq());
     const body = await res.json();
     expect(body.pending.length).toBe(200);
     expect(body.counts.pending).toBe(200);
     expect(body.truncated.pending).toBe(true);
     expect(body.truncated.matured).toBe(false);
     expect(body.truncated.claimed).toBe(false);
+  });
+
+  // Audit App-H1 (2026-05-24): SDK ships X-Arcora-Api-Key, not a session
+  // cookie. Before this fix, sdk.escrows() always 401'd.
+  it("authenticates via X-Arcora-Api-Key header (SDK path)", async () => {
+    const { getSession } = await import("@/lib/auth/session");
+    (getSession as any).mockResolvedValue({}); // no session
+    const { lookupMerchantByApiKey } = await import("@/lib/auth/apikey");
+    (lookupMerchantByApiKey as any).mockResolvedValue({ id: "merch-1", address: "0xMerchant" });
+    (globalThis as any).__resetEscrowMock?.(true);
+
+    pendingRows.push({ id: "0xsdk-pending", status: "paid", claimableAt: new Date(Date.now() + 60_000) });
+
+    const res = await GET(makeReq({ "x-arcora-api-key": "ak_test_123" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.pending[0].id).toBe("0xsdk-pending");
+    expect(lookupMerchantByApiKey).toHaveBeenCalledWith("ak_test_123");
+  });
+
+  it("returns 401 when the X-Arcora-Api-Key header is present but invalid", async () => {
+    const { getSession } = await import("@/lib/auth/session");
+    (getSession as any).mockResolvedValue({});
+    const { lookupMerchantByApiKey } = await import("@/lib/auth/apikey");
+    (lookupMerchantByApiKey as any).mockResolvedValue(null);
+
+    const res = await GET(makeReq({ "x-arcora-api-key": "ak_bogus" }));
+    expect(res.status).toBe(401);
+  });
+
+  it("also accepts the legacy x-api-key header alias", async () => {
+    const { getSession } = await import("@/lib/auth/session");
+    (getSession as any).mockResolvedValue({});
+    const { lookupMerchantByApiKey } = await import("@/lib/auth/apikey");
+    (lookupMerchantByApiKey as any).mockResolvedValue({ id: "merch-1", address: "0xMerchant" });
+    (globalThis as any).__resetEscrowMock?.(true);
+
+    const res = await GET(makeReq({ "x-api-key": "ak_legacy_456" }));
+    expect(res.status).toBe(200);
+    expect(lookupMerchantByApiKey).toHaveBeenCalledWith("ak_legacy_456");
   });
 });

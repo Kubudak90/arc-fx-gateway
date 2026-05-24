@@ -115,5 +115,25 @@ export function isPrivateAddress(ip: string): boolean {
     const ipv4 = v6.replace(/^::ffff:/, "");
     return isPrivateAddress(ipv4);
   }
+  // Audit App-L3 (2026-05-24): 6to4 (2002::/16) embeds an IPv4 address in
+  // bits 16–47. A dual-stack resolver returning e.g. `2002:c0a8:0101::`
+  // for a merchant-supplied hostname would have slipped past the older
+  // check; recurse on the decoded v4 so RFC1918 / loopback / link-local
+  // ranges are caught regardless of which transition mechanism wrapped
+  // them.
+  if (v6.startsWith("2002:")) {
+    const segs = v6.split(":");
+    if (segs.length >= 3) {
+      const a = (segs[1] ?? "").padStart(4, "0");
+      const b = (segs[2] ?? "").padStart(4, "0");
+      const o1 = parseInt(a.slice(0, 2), 16);
+      const o2 = parseInt(a.slice(2, 4), 16);
+      const o3 = parseInt(b.slice(0, 2), 16);
+      const o4 = parseInt(b.slice(2, 4), 16);
+      if ([o1, o2, o3, o4].every(n => Number.isFinite(n))) {
+        return isPrivateAddress(`${o1}.${o2}.${o3}.${o4}`);
+      }
+    }
+  }
   return false;
 }

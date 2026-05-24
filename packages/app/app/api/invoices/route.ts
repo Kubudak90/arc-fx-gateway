@@ -9,7 +9,25 @@ import { invoices } from "@/lib/db/schema";
 import { resolveComplianceProvider } from "@/lib/compliance/factory";
 import { screenWithAudit } from "@/lib/compliance/screen";
 import { assertOriginAllowed, assertSafePublicUrl } from "@/lib/security/safeUrl";
+import { takeToken } from "@/lib/rate/limiter";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
+
+/**
+ * Per-merchant rate limit on invoice creation. Each authenticated merchant
+ * may create at most INVOICE_LIMIT invoices per window. Audit App-M1
+ * (2026-05-24): unlike /api/checkout/quote (which is read-only RPC), every
+ * call here costs an on-chain createInvoiceFor tx — a stolen API key
+ * looping this endpoint can drain the server wallet's gas balance and
+ * exhaust RPC quota for every other merchant. Keyed on merchant.id (NOT
+ * IP), because the caller is authenticated and the right constraint is
+ * per-merchant; an IP key would penalise multi-merchant hosts.
+ *
+ * Fail-open on limiter outage so a Postgres hiccup doesn't take invoice
+ * creation down for everyone — matches the policy used by other write
+ * routes (checkout/authorize, checkout/submit).
+ */
+const INVOICE_LIMIT = 60;
+const INVOICE_WINDOW_SECONDS = 60;
 
 // The active custody-escrow gateway address comes from lib/chain/client.ts
 // via the GATEWAY_ADDRESS env. Every invoice also records its own
@@ -65,6 +83,22 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return corsResponse({ error: "missing_api_key" }, { status: 401 });
   const merchant = await lookupMerchantByApiKey(apiKey);
   if (!merchant) return corsResponse({ error: "invalid_api_key" }, { status: 401 });
+
+  // Audit App-M1 (2026-05-24): rate-limit by merchant.id AFTER auth so an
+  // unauthenticated caller's noise can't poison a merchant's bucket. Fail
+  // open on limiter outage (matches checkout/authorize, checkout/submit).
+  let allowed = true;
+  try {
+    allowed = await takeToken(`invoices:${merchant.id}`, INVOICE_LIMIT, INVOICE_WINDOW_SECONDS);
+  } catch {
+    allowed = true;
+  }
+  if (!allowed) {
+    return corsResponse(
+      { error: "rate_limited", retryAfterSeconds: INVOICE_WINDOW_SECONDS },
+      { status: 429, headers: { "retry-after": String(INVOICE_WINDOW_SECONDS) } },
+    );
+  }
 
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return corsResponse({ error: "bad_body", detail: parsed.error.format() }, { status: 400 });

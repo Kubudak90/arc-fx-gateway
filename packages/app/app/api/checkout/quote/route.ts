@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { AppKit } from "@circle-fin/app-kit";
-import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
-import { generatePrivateKey } from "viem/accounts";
+import { getThrowawayAdapter } from "@/lib/checkout/throwaway-adapter";
 import { quoteAmountIn } from "@/lib/checkout/quote-server";
 import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
@@ -65,28 +64,10 @@ const Q = z.object({
   message: "either amountIn or targetOutput is required",
 });
 
-// Throwaway key, lazily generated on first request, reused across warm Lambda
-// invocations. Adapter creation has no chain interaction → there's no nonce
-// or balance state to leak.
-//
-// ⚠️ INVARIANT: this private key MUST NEVER be funded or used for anything
-// other than App Kit's quote-estimation adapter. App Kit calls
-// `estimateSwap` with `from.adapter = getAdapter()`, which only needs an
-// adapter shape for chain context — no signature is requested, nothing is
-// broadcast. If a future refactor wires this adapter into the *actual* swap
-// execution path (e.g. swap-not-estimate), an attacker who can read warm-
-// instance memory or trigger a key dump would drain whatever balance the
-// key holds. Keep the funding-discipline check explicit; do not delete
-// this comment when touching `getAdapter`. Audit #29.
-let cachedAdapter: ReturnType<typeof createViemAdapterFromPrivateKey> | null = null;
-
-function getAdapter() {
-  if (!cachedAdapter) {
-    cachedAdapter = createViemAdapterFromPrivateKey({ privateKey: generatePrivateKey() });
-  }
-  return cachedAdapter;
-}
-
+// Throwaway adapter lives in lib/checkout/throwaway-adapter so this route
+// and lib/checkout/quote-server share the exact same singleton (audit
+// App-L2, 2026-05-24). Every use here is estimate-only — never wire this
+// into kit.swap (see the INVARIANT comment in throwaway-adapter.ts).
 const kit = new AppKit();
 
 export async function POST(req: NextRequest) {
@@ -136,7 +117,7 @@ export async function POST(req: NextRequest) {
       const customFeeBps   = Number(process.env.CUSTOM_FEE_BPS ?? "100");
       const feeRecipient   = process.env.CUSTOM_FEE_RECIPIENT;
       const probe = await kit.estimateSwap({
-        from:     { adapter: getAdapter(), chain: "Arc_Testnet" as const },
+        from:     { adapter: getThrowawayAdapter(), chain: "Arc_Testnet" as const },
         tokenIn:  payInToken,
         tokenOut: payoutToken,
         amountIn: "1.0",
@@ -170,7 +151,7 @@ export async function POST(req: NextRequest) {
     }
 
     const estimate = await kit.estimateSwap({
-      from:     { adapter: getAdapter(), chain: "Arc_Testnet" as const },
+      from:     { adapter: getThrowawayAdapter(), chain: "Arc_Testnet" as const },
       tokenIn:  payInToken,
       tokenOut: payoutToken,
       amountIn: resolvedAmountIn,

@@ -1,6 +1,5 @@
 import { AppKit } from "@circle-fin/app-kit";
-import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
-import { generatePrivateKey } from "viem/accounts";
+import { getThrowawayAdapter } from "@/lib/checkout/throwaway-adapter";
 
 /**
  * Server-side App Kit quote helper. Used by /api/checkout/authorize to
@@ -9,20 +8,18 @@ import { generatePrivateKey } from "viem/accounts";
  * fabricate a throwaway viem adapter so App Kit has a chain context;
  * estimateSwap doesn't broadcast or sign anything that hits the chain.
  *
+ * Audit App-L2 (2026-05-24): the throwaway adapter now lives in
+ * lib/checkout/throwaway-adapter so this module and the HTTP quote
+ * route share a single in-process singleton instead of each minting
+ * their own warm-instance key. Every call here is estimate-only —
+ * never wire `getThrowawayAdapter()` into kit.swap.
+ *
  * Returns the resolved customer payIn in base units (6-decimal stables on
  * Arc Testnet — USDC, EURC). Caller is expected to apply its own slack /
  * cushion before storing as min_amount_in.
  */
 
 const kit = new AppKit();
-
-let cachedAdapter: ReturnType<typeof createViemAdapterFromPrivateKey> | null = null;
-function getAdapter() {
-  if (!cachedAdapter) {
-    cachedAdapter = createViemAdapterFromPrivateKey({ privateKey: generatePrivateKey() });
-  }
-  return cachedAdapter;
-}
 
 const STABLE_DECIMALS = 6;
 
@@ -104,7 +101,7 @@ export async function estimateSwapForTarget(params: ServerQuoteParams): Promise<
   // Probe the rate with 1.0 of payInToken (matches /api/checkout/quote so
   // both clients see the same numbers within the same request burst).
   const probe = await kit.estimateSwap({
-    from:     { adapter: getAdapter(), chain: "Arc_Testnet" as const },
+    from:     { adapter: getThrowawayAdapter(), chain: "Arc_Testnet" as const },
     tokenIn:  params.payInToken,
     tokenOut: params.payoutToken,
     amountIn: "1.0",
@@ -131,7 +128,7 @@ export async function estimateSwapForTarget(params: ServerQuoteParams): Promise<
 
   // Run a second estimate with the resolved amountIn for the estimated output.
   const final = await kit.estimateSwap({
-    from:     { adapter: getAdapter(), chain: "Arc_Testnet" as const },
+    from:     { adapter: getThrowawayAdapter(), chain: "Arc_Testnet" as const },
     tokenIn:  params.payInToken,
     tokenOut: params.payoutToken,
     amountIn: recommendedHuman,

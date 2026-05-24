@@ -45,14 +45,35 @@ export async function screenWithAudit(args: ScreenWithAuditArgs): Promise<Screen
   const lower = address.toLowerCase();
 
   // Cache: latest row for (address, flow) whose expires_at is in the future.
+  //
+  // Audit App-M2 (2026-05-24): for merchant_payout the cache MUST also be
+  // scoped by merchantId. Two merchants can legitimately configure the
+  // same payout address (shared multisig, exchange deposit, etc.); without
+  // the merchantId filter, merchant B's lookup returned merchant A's row
+  // — same risk verdict, but the cached rowId pointed at a screening
+  // stamped with the wrong merchantId, polluting B's compliance dashboard
+  // join.
+  //
+  // customer_pay flow is intentionally NOT scoped by invoiceId. Same payer
+  // paying multiple invoices within the cache TTL is the common case; the
+  // sanctions/risk verdict is an address-level fact, so re-screening per
+  // invoice would burn provider credits without changing the answer. The
+  // audit trail still records a fresh complianceScreenings row each time
+  // we DO call the provider (on cache miss), and the webhook emitted on
+  // `review` decisions carries the invoice context.
+  const cacheWhere = [
+    eq(complianceScreenings.address, lower),
+    eq(complianceScreenings.flow, context.flow),
+    gt(complianceScreenings.expiresAt, new Date()),
+  ];
+  if (context.flow === "merchant_payout" && context.merchantId) {
+    cacheWhere.push(eq(complianceScreenings.merchantId, context.merchantId));
+  }
+
   const cached = await db
     .select()
     .from(complianceScreenings)
-    .where(and(
-      eq(complianceScreenings.address, lower),
-      eq(complianceScreenings.flow, context.flow),
-      gt(complianceScreenings.expiresAt, new Date()),
-    ))
+    .where(and(...cacheWhere))
     .orderBy(desc(complianceScreenings.createdAt))
     .limit(1);
 

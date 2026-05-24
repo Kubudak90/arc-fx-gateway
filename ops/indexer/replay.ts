@@ -19,6 +19,19 @@
  *
  * Run from /root/arcora-ops/indexer/ on the VPS, or locally after
  * `cd ops/indexer && pnpm install`.
+ *
+ * Audit 2026-05-24:
+ *   - Ops-M3: watch both V10 and (optional) V11 gateways, matching run.ts.
+ *     The previous V10-only scan silently dropped V11 events for any
+ *     replay covering post-V11-deployment blocks. With V10 retirement
+ *     finished, every operational replay now needs V11 coverage.
+ *   - Ops-I-3: paid_at / refunded_at / recovered_at / claimed_at now use
+ *     the on-chain block timestamp, not the daemon's wall clock. Matches
+ *     run.ts so replay-reconstructed rows have the same SLA semantics as
+ *     live-processed rows.
+ *   - Ops-L-2: each chunk now wraps its DB writes in a transaction.
+ *     Partial mid-chunk failures roll back cleanly; the daemon's
+ *     own cursor stays put (we don't touch it in replay mode anyway).
  */
 
 import {
@@ -31,6 +44,16 @@ import { randomUUID } from "node:crypto";
 const RPC         = need("ARC_TESTNET_RPC");
 const GATEWAY_V10 = (process.env.GATEWAY_ADDRESS_V10 ?? "").toLowerCase() as Address;
 if (!GATEWAY_V10) throw new Error("GATEWAY_ADDRESS_V10 must be set");
+// Optional V11 (audit-fix bytecode) gateway. When set, replay scans both
+// addresses — same dual-watch semantics as ops/indexer/run.ts so that
+// indexer recovery covers the V10 retirement window. Audit 2026-05-24 Ops-M3.
+const GATEWAY_V11_RAW = (process.env.GATEWAY_ADDRESS_V11 ?? "").toLowerCase();
+const GATEWAY_V11: Address | null = GATEWAY_V11_RAW
+  ? (GATEWAY_V11_RAW as Address)
+  : null;
+const WATCHED_GATEWAYS: Address[] = GATEWAY_V11
+  ? [GATEWAY_V10, GATEWAY_V11]
+  : [GATEWAY_V10];
 const PG_URL      = need("POSTGRES_URL_NON_POOLING");
 const MAX_RANGE   = 9_000n;
 
@@ -61,19 +84,32 @@ const MerchantReactivated = ABI[8];
 const chain = createPublicClient({ transport: http(RPC) });
 const pool  = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
 
+/** Audit 2026-05-24 Ops-I-3: cache block timestamps so a chunk with N
+ *  events from M unique blocks costs M RPC calls instead of N. */
+const blockTsCache = new Map<bigint, number>();
+async function blockTsMs(bn: bigint): Promise<number> {
+  const hit = blockTsCache.get(bn);
+  if (hit !== undefined) return hit;
+  const b = await chain.getBlock({ blockNumber: bn });
+  const ms = Number(b.timestamp) * 1000;
+  blockTsCache.set(bn, ms);
+  return ms;
+}
+
 async function enqueueWebhook(
+  client: pg.PoolClient,
   invoiceId: string,
   merchantId: string,
   eventType: string,
   extra: Record<string, unknown>,
   txHash: string | null,
 ): Promise<void> {
-  const mr = await pool.query<{ webhook_url: string | null }>(
+  const mr = await client.query<{ webhook_url: string | null }>(
     "select webhook_url from merchants where id = $1", [merchantId],
   );
   const url = mr.rows[0]?.webhook_url;
   if (!url) return;
-  await pool.query(
+  await client.query(
     `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
      values ($1, $2, $3::jsonb, 0, now(), $4)
      on conflict (invoice_id, event_type) do nothing`,
@@ -105,8 +141,10 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
     const tentEnd = cursor + MAX_RANGE - 1n;
     const end = tentEnd > to ? to : tentEnd;
     counts.scannedChunks++;
-    console.log(`[replay] chunk ${cursor}..${end}`);
+    console.log(`[replay] chunk ${cursor}..${end} gateways=${WATCHED_GATEWAYS.length}`);
 
+    // Audit 2026-05-24 Ops-M3: scan every watched gateway per chunk so V11
+    // events aren't silently dropped post-cutover.
     const [
       paidLogs,
       escrowCreatedLogs,
@@ -115,169 +153,169 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
       escrowRecoveredLogs,
       merchantReactivatedLogs,
     ] = await Promise.all([
-      chain.getLogs({ address: GATEWAY_V10, event: InvoicePaid,         fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: EscrowCreated,       fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: InvoiceRefunded,     fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: InvoiceClaimed,      fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: EscrowRecovered,     fromBlock: cursor, toBlock: end }),
-      chain.getLogs({ address: GATEWAY_V10, event: MerchantReactivated, fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: InvoicePaid,         fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: EscrowCreated,       fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: InvoiceRefunded,     fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: InvoiceClaimed,      fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: EscrowRecovered,     fromBlock: cursor, toBlock: end }),
+      chain.getLogs({ address: WATCHED_GATEWAYS, event: MerchantReactivated, fromBlock: cursor, toBlock: end }),
     ]);
 
-    for (const log of paidLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "InvoicePaid") continue;
-      const id              = d.args.globalId as Hex;
-      const payer           = d.args.payer as string;
-      const amountIn        = (d.args.amountIn        as bigint).toString();
-      const merchantPayout  = (d.args.merchantPayout  as bigint).toString();
-      const protocolFee     = (d.args.fee             as bigint).toString();
-
-      if (dryRun) {
-        console.log(`  [dry] would mark paid: ${id} (tx ${log.transactionHash})`);
-        continue;
-      }
-
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-            set status = 'paid', paid_by = $2, paid_tx = $3, paid_at = now(),
-                amount_in = $4, merchant_payout = $5, protocol_fee = $6
-          where id = $1 and status = 'created'
-          returning id, merchant_id`,
-        [id, payer, log.transactionHash, amountIn, merchantPayout, protocolFee],
-      );
-      if (upd.rowCount && upd.rowCount > 0) {
-        counts.paidUpdated++;
-        await enqueueWebhook(id, upd.rows[0]!.merchant_id, "invoice.paid",
-          { paid_by: payer }, log.transactionHash);
-        counts.webhooksQueued++;
-      }
+    if (dryRun) {
+      console.log(`  [dry] would touch: paid=${paidLogs.length} escrowCreated=${escrowCreatedLogs.length}` +
+        ` refunded=${refundedLogs.length} claimed=${claimedLogs.length}` +
+        ` recovered=${escrowRecoveredLogs.length} reactivated=${merchantReactivatedLogs.length}`);
+      cursor = end + 1n;
+      continue;
     }
 
-    // EscrowCreated → set claimable_at.
-    // Guard: only update rows still in 'paid' state with no claimable_at set
-    // (first sighting wins). On replay, already-claimed/refunded/recovered
-    // rows are left untouched, preventing spurious overwrites of terminal state.
-    for (const log of escrowCreatedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "EscrowCreated") continue;
-      const id          = d.args.globalId as Hex;
-      const claimableAt = d.args.claimableAt as bigint;
+    // Audit 2026-05-24 Ops-L-2: every chunk's DB writes are bracketed by
+    // BEGIN/COMMIT on the same client. A partial mid-chunk failure rolls
+    // back cleanly so a re-run picks up exactly where the failed chunk
+    // started — no half-applied rows.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-      if (dryRun) {
-        console.log(`  [dry] would set claimable_at for escrow: ${id}`);
-        continue;
-      }
-      await pool.query(
-        `update invoices set claimable_at = to_timestamp($2)
-           where id = $1 and status = 'paid' and claimable_at is null`,
-        [id, Number(claimableAt)],
-      );
-    }
+      for (const log of paidLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "InvoicePaid") continue;
+        const id              = d.args.globalId as Hex;
+        const payer           = d.args.payer as string;
+        const amountIn        = (d.args.amountIn        as bigint).toString();
+        const merchantPayout  = (d.args.merchantPayout  as bigint).toString();
+        const protocolFee     = (d.args.fee             as bigint).toString();
+        const paidAt          = new Date(await blockTsMs(log.blockNumber)).toISOString();
 
-    for (const log of refundedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "InvoiceRefunded") continue;
-      const id         = d.args.globalId as Hex;
-      const refundedTo = d.args.refundedTo as string;
-
-      if (dryRun) {
-        console.log(`  [dry] would mark refunded: ${id} (tx ${log.transactionHash})`);
-        continue;
-      }
-
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-            set status = 'refunded', refund_tx = $2, refunded_at = now()
-          where id = $1 and status in ('created', 'paid')
-          returning id, merchant_id`,
-        [id, log.transactionHash],
-      );
-      if (upd.rowCount && upd.rowCount > 0) {
-        counts.refundedUpdated++;
-        await enqueueWebhook(id, upd.rows[0]!.merchant_id, "invoice.refunded",
-          { refunded_to: refundedTo }, log.transactionHash);
-        counts.webhooksQueued++;
-      }
-    }
-
-    // InvoiceClaimed → flip status to 'claimed'
-    for (const log of claimedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "InvoiceClaimed") continue;
-      const id         = d.args.globalId as Hex;
-      const fee        = (d.args.fee        as bigint).toString();
-      const toMerchant = (d.args.toMerchant as bigint).toString();
-
-      if (dryRun) {
-        console.log(`  [dry] would mark claimed: ${id} (tx ${log.transactionHash})`);
-        continue;
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+              set status = 'paid', paid_by = $2, paid_tx = $3, paid_at = $7,
+                  amount_in = $4, merchant_payout = $5, protocol_fee = $6
+            where id = $1 and status = 'created'
+            returning id, merchant_id`,
+          [id, payer, log.transactionHash, amountIn, merchantPayout, protocolFee, paidAt],
+        );
+        if (upd.rowCount && upd.rowCount > 0) {
+          counts.paidUpdated++;
+          await enqueueWebhook(client, id, upd.rows[0]!.merchant_id, "invoice.paid",
+            { paid_by: payer }, log.transactionHash);
+          counts.webhooksQueued++;
+        }
       }
 
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-            set status          = 'claimed',
-                claimed_at      = now(),
-                claim_tx        = $2,
-                protocol_fee    = $3,
-                merchant_payout = $4
-          where id = $1 and status = 'paid'
-          returning id, merchant_id`,
-        [id, log.transactionHash, fee, toMerchant],
-      );
-      if (upd.rowCount && upd.rowCount > 0) {
-        counts.claimedUpdated++;
-        await enqueueWebhook(id, upd.rows[0]!.merchant_id, "invoice.claimed",
-          { fee, to_merchant: toMerchant }, log.transactionHash);
-        counts.webhooksQueued++;
-      }
-    }
+      // EscrowCreated → set claimable_at.
+      // Guard: only update rows still in 'paid' state with no claimable_at set
+      // (first sighting wins). On replay, already-claimed/refunded/recovered
+      // rows are left untouched, preventing spurious overwrites of terminal state.
+      for (const log of escrowCreatedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "EscrowCreated") continue;
+        const id          = d.args.globalId as Hex;
+        const claimableAt = d.args.claimableAt as bigint;
 
-    // EscrowRecovered → flip status to 'recovered'
-    for (const log of escrowRecoveredLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "EscrowRecovered") continue;
-      const id = d.args.globalId as Hex;
-
-      if (dryRun) {
-        console.log(`  [dry] would mark recovered: ${id} (tx ${log.transactionHash})`);
-        continue;
+        await client.query(
+          `update invoices set claimable_at = to_timestamp($2)
+             where id = $1 and status = 'paid' and claimable_at is null`,
+          [id, Number(claimableAt)],
+        );
       }
 
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-            set status       = 'recovered',
-                recovered_at = now(),
-                recovery_tx  = $2
-          where id = $1 and status = 'paid'
-          returning id, merchant_id`,
-        [id, log.transactionHash],
-      );
-      if (upd.rowCount && upd.rowCount > 0) {
-        counts.recoveredUpdated++;
-        await enqueueWebhook(id, upd.rows[0]!.merchant_id, "invoice.recovered",
-          {}, log.transactionHash);
-        counts.webhooksQueued++;
-      }
-    }
+      for (const log of refundedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "InvoiceRefunded") continue;
+        const id         = d.args.globalId as Hex;
+        const refundedTo = d.args.refundedTo as string;
+        const refundedAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
 
-    // MerchantReactivated → clear deactivated_at.
-    // Trade-off: no prior-state guard. On replay, spurious clears are
-    // acceptable because the correct on-chain state is the most recent
-    // event; if a deactivation replays after this, it will re-set the
-    // column and converge to the correct value.
-    for (const log of merchantReactivatedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "MerchantReactivated") continue;
-      const merchant = (d.args.merchant as string).toLowerCase();
-
-      if (dryRun) {
-        console.log(`  [dry] would clear deactivated_at for merchant: ${merchant}`);
-        continue;
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+              set status = 'refunded', refund_tx = $2, refunded_at = $3
+            where id = $1 and status in ('created', 'paid')
+            returning id, merchant_id`,
+          [id, log.transactionHash, refundedAt],
+        );
+        if (upd.rowCount && upd.rowCount > 0) {
+          counts.refundedUpdated++;
+          await enqueueWebhook(client, id, upd.rows[0]!.merchant_id, "invoice.refunded",
+            { refunded_to: refundedTo }, log.transactionHash);
+          counts.webhooksQueued++;
+        }
       }
-      await pool.query(
-        `update merchants set deactivated_at = null where lower(address) = $1`,
-        [merchant],
-      );
+
+      // InvoiceClaimed → flip status to 'claimed'
+      for (const log of claimedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "InvoiceClaimed") continue;
+        const id         = d.args.globalId as Hex;
+        const fee        = (d.args.fee        as bigint).toString();
+        const toMerchant = (d.args.toMerchant as bigint).toString();
+        const claimedAt  = new Date(await blockTsMs(log.blockNumber)).toISOString();
+
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+              set status          = 'claimed',
+                  claimed_at      = $5,
+                  claim_tx        = $2,
+                  protocol_fee    = $3,
+                  merchant_payout = $4
+            where id = $1 and status = 'paid'
+            returning id, merchant_id`,
+          [id, log.transactionHash, fee, toMerchant, claimedAt],
+        );
+        if (upd.rowCount && upd.rowCount > 0) {
+          counts.claimedUpdated++;
+          await enqueueWebhook(client, id, upd.rows[0]!.merchant_id, "invoice.claimed",
+            { fee, to_merchant: toMerchant }, log.transactionHash);
+          counts.webhooksQueued++;
+        }
+      }
+
+      // EscrowRecovered → flip status to 'recovered'
+      for (const log of escrowRecoveredLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "EscrowRecovered") continue;
+        const id          = d.args.globalId as Hex;
+        const recoveredAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
+
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+              set status       = 'recovered',
+                  recovered_at = $3,
+                  recovery_tx  = $2
+            where id = $1 and status = 'paid'
+            returning id, merchant_id`,
+          [id, log.transactionHash, recoveredAt],
+        );
+        if (upd.rowCount && upd.rowCount > 0) {
+          counts.recoveredUpdated++;
+          await enqueueWebhook(client, id, upd.rows[0]!.merchant_id, "invoice.recovered",
+            {}, log.transactionHash);
+          counts.webhooksQueued++;
+        }
+      }
+
+      // MerchantReactivated → clear deactivated_at.
+      // Trade-off: no prior-state guard. On replay, spurious clears are
+      // acceptable because the correct on-chain state is the most recent
+      // event; if a deactivation replays after this, it will re-set the
+      // column and converge to the correct value.
+      for (const log of merchantReactivatedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "MerchantReactivated") continue;
+        const merchant = (d.args.merchant as string).toLowerCase();
+
+        await client.query(
+          `update merchants set deactivated_at = null where lower(address) = $1`,
+          [merchant],
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw e;
+    } finally {
+      client.release();
     }
 
     cursor = end + 1n;

@@ -1,12 +1,19 @@
 /**
  * Standalone recovery tool for the arcora-indexer daemon. Two modes:
  *
- *   pnpm tsx replay.ts reset  --to-block <N>
+ *   pnpm tsx replay.ts reset  --to-block <N> --confirm-db-restored
  *     Sets indexer_state.last_processed_block = N. The running daemon picks
- *     this up on its next tick and starts walking from N+1 forward. Use this
- *     when you need to re-process a range that the daemon already passed
- *     (e.g. a DB restore from yesterday + a bug fix that needs the events
- *     re-applied).
+ *     this up on its next tick and starts walking from N+1 forward.
+ *
+ *     ⚠️  Audit Ops-L-13 (2026-05-31): reset ONLY rewinds the cursor. It does
+ *     NOT roll back invoice statuses or webhook_attempts. Every replay UPDATE
+ *     is status-conditional (`where status='created'` …), so re-walking over
+ *     rows that are already in their post-event state updates 0 rows and
+ *     still reports success — a silent no-op. reset is therefore ONLY correct
+ *     as the second half of restore-the-DB-snapshot-THEN-reset, and the
+ *     --confirm-db-restored flag is the explicit ack of that. For ordinary
+ *     forward catch-up after downtime, use `replay` (below) — it's idempotent
+ *     and never needs a restore.
  *
  *   pnpm tsx replay.ts replay --from <A> --to <B> [--dry-run]
  *     Walks blocks [A, B] in 9k-block chunks, writes any missing paid /
@@ -325,7 +332,17 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
   return counts;
 }
 
-async function reset(toBlock: bigint): Promise<void> {
+async function reset(toBlock: bigint, opts: { confirmDbRestored: boolean }): Promise<void> {
+  // Audit Ops-L-13 (2026-05-31): rewinding the cursor alone does NOT roll back
+  // invoice statuses or webhook_attempts; the status-conditional replay UPDATEs
+  // become silent no-ops unless the affected rows were first restored to their
+  // pre-event state. Refuse without an explicit ack so the only path to a reset
+  // is the intended restore-then-reset.
+  if (!opts.confirmDbRestored) {
+    throw new Error(
+      "refusing reset without --confirm-db-restored: a bare cursor rewind re-walks events, but the status-conditional UPDATEs no-op unless the affected rows were first rolled back (restore the DB snapshot, THEN reset). For forward catch-up after downtime use `replay --from <last> --to <head>` — it is idempotent and needs no restore.",
+    );
+  }
   console.log(`[reset] setting indexer_state.last_processed_block = ${toBlock}`);
   await pool.query(
     `insert into indexer_state(key, value, updated_at)
@@ -362,8 +379,8 @@ async function main() {
   try {
     if (subcommand === "reset") {
       const block = args.get("to-block");
-      if (!block) throw new Error("usage: replay.ts reset --to-block <N>");
-      await reset(BigInt(block));
+      if (!block) throw new Error("usage: replay.ts reset --to-block <N> --confirm-db-restored");
+      await reset(BigInt(block), { confirmDbRestored: args.has("confirm-db-restored") });
     } else if (subcommand === "replay") {
       const from = args.get("from"), to = args.get("to");
       if (!from || !to) throw new Error("usage: replay.ts replay --from <A> --to <B> [--dry-run]");
@@ -371,7 +388,7 @@ async function main() {
       console.log(JSON.stringify({ msg: "replay.done", ...counts }, null, 2));
     } else {
       console.error("usage:");
-      console.error("  replay.ts reset  --to-block <N>");
+      console.error("  replay.ts reset  --to-block <N> --confirm-db-restored");
       console.error("  replay.ts replay --from <A> --to <B> [--dry-run]");
       process.exitCode = 2;
     }

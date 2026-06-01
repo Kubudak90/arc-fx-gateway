@@ -39,6 +39,12 @@ const CUSTOM_FEE_BPS = Number(process.env.CUSTOM_FEE_BPS ?? "100"); // 1% defaul
 const SLIPPAGE_BPS  = Number(process.env.SLIPPAGE_BPS ?? "100");    // 1% default
 const TICK_MS       = Number(process.env.RELAYER_TICK_MS ?? "5000");
 const MAX_ATTEMPTS  = Number(process.env.RELAYER_MAX_ATTEMPTS ?? "3");
+// Audit Ops-L-11 (2026-05-31): bound EVERY receipt wait. An un-timed
+// waitForTransactionReceipt inside processOne could hang past systemd's
+// TimeoutStopSec on SIGTERM → SIGKILL mid-flight, leaving the row to a later
+// lease reclaim. 30s matches the resume path; on timeout the await throws and
+// the persist-before-send checkpoint makes the row recoverable.
+const RECEIPT_TIMEOUT_MS = 30_000;
 // A row stuck in `processing` beyond this window is treated as crashed mid-
 // flight (prev daemon died after permit2 pull / between swap + settle, etc.)
 // and reclaimed by the next claimNext call. Set generously above worst-case
@@ -358,7 +364,7 @@ async function pullViaPermit2(
     ],
   });
   await onBroadcast(tx);
-  await chain.waitForTransactionReceipt({ hash: tx });
+  await chain.waitForTransactionReceipt({ hash: tx, timeout: RECEIPT_TIMEOUT_MS });
   return tx;
 }
 
@@ -407,7 +413,7 @@ async function callSettle(
     functionName: "approve",
     args: [targetGateway, grossPayoutBaseUnits],
   });
-  await chain.waitForTransactionReceipt({ hash: approveTx });
+  await chain.waitForTransactionReceipt({ hash: approveTx, timeout: RECEIPT_TIMEOUT_MS });
 
   const tx = await wallet.writeContract({
     chain: undefined,
@@ -424,7 +430,7 @@ async function callSettle(
     ],
   });
   await onBroadcast(tx);
-  await chain.waitForTransactionReceipt({ hash: tx });
+  await chain.waitForTransactionReceipt({ hash: tx, timeout: RECEIPT_TIMEOUT_MS });
   return tx;
 }
 
@@ -473,7 +479,7 @@ async function refundPayer(
     args: [row.payer as Address, owedBack],
   });
   await onTransferBroadcast(transferTx);
-  await chain.waitForTransactionReceipt({ hash: transferTx });
+  await chain.waitForTransactionReceipt({ hash: transferTx, timeout: RECEIPT_TIMEOUT_MS });
 
   // Tell the gateway: the indexer flips the invoice to `failed` from this event.
   const recordTx = await wallet.writeContract({
@@ -489,7 +495,7 @@ async function refundPayer(
       reasonToHash(reason),
     ],
   });
-  await chain.waitForTransactionReceipt({ hash: recordTx });
+  await chain.waitForTransactionReceipt({ hash: recordTx, timeout: RECEIPT_TIMEOUT_MS });
   return transferTx;
 }
 
@@ -537,7 +543,7 @@ async function resumeRefund(row: QueueRow): Promise<{ ok: true; tx: Hex } | { ok
         reasonToHash(row.last_error ?? "resumed"),
       ],
     });
-    await chain.waitForTransactionReceipt({ hash: recordTx });
+    await chain.waitForTransactionReceipt({ hash: recordTx, timeout: RECEIPT_TIMEOUT_MS });
     return { ok: true, tx: transferTx };
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);

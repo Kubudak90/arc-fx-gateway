@@ -52,9 +52,21 @@ export async function fetchPrivateKeyFromVault(opts: VaultSignerOpts): Promise<H
 // dumps and journald via the top-level catch in run.ts. We now read the
 // body for operator visibility (structured `vault.*_fail` log) but throw a
 // status-only message so it never leaks into stack traces.
-function logVaultError(stage: "login" | "kv_read", status: number, body: string): void {
+//
+// Audit 2026-05-31 L-12: even the structured log wrote the body verbatim and
+// unbounded — on a shared, root-readable VPS journald that is still a leak if
+// Vault ever echoes the secret_id. Mask any occurrence of the live secret_id
+// and cap the length before logging.
+const MAX_VAULT_BODY_LOG = 512;
+function redactAndCap(body: string, secret?: string): string {
+  let out = body;
+  if (secret && secret.length >= 6) out = out.split(secret).join("[redacted-secret_id]");
+  return out.length > MAX_VAULT_BODY_LOG ? `${out.slice(0, MAX_VAULT_BODY_LOG)}…[truncated]` : out;
+}
+
+function logVaultError(stage: "login" | "kv_read", status: number, body: string, secret?: string): void {
   // eslint-disable-next-line no-console
-  console.error(JSON.stringify({ msg: `vault.${stage}_fail`, status, body }));
+  console.error(JSON.stringify({ msg: `vault.${stage}_fail`, status, body: redactAndCap(body, secret) }));
 }
 
 async function login(opts: VaultSignerOpts): Promise<string> {
@@ -64,7 +76,7 @@ async function login(opts: VaultSignerOpts): Promise<string> {
     body:    JSON.stringify({ role_id: opts.roleId, secret_id: opts.secretId }),
   });
   if (!res.ok) {
-    logVaultError("login", res.status, await res.text());
+    logVaultError("login", res.status, await res.text(), opts.secretId);
     throw new Error(`Vault login failed: ${res.status}`);
   }
   const json = await res.json() as { auth: { client_token: string } };

@@ -13,6 +13,11 @@ EnvironmentFile=/root/arcora-ops/relayer/.env
 ExecStart=/usr/bin/node --import tsx/esm run.ts
 Restart=always
 RestartSec=5
+# Audit Ops-L-11 (2026-05-31): give the cooperative drain room to land the
+# current iteration on SIGTERM before systemd escalates to SIGKILL. Each
+# receipt wait inside processOne is now capped at 30s (RECEIPT_TIMEOUT_MS),
+# so 45s covers a worst-case in-flight receipt plus teardown.
+TimeoutStopSec=45
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=arcora-relayer

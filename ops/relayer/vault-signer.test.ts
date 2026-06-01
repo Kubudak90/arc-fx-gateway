@@ -109,6 +109,56 @@ describe("vaultSigner (unit, mocked fetch)", () => {
     expect(logLine).toContain(sensitiveBody);
   });
 
+  // Audit 2026-05-31 L-12
+  it("redacts the secret_id out of the structured Vault error log", async () => {
+    const leakySecret = "s.AAAA-BBBB-CCCC-the-actual-secret-id";
+    const body = `invalid secret_id ${leakySecret}: expired`;
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () => body,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "role-id",
+      secretId: leakySecret,
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/^Vault login failed: 400$/);
+
+    const logLine = errSpy.mock.calls[0]![0] as string;
+    expect(logLine).toContain("vault.login_fail");
+    expect(logLine).not.toContain(leakySecret);
+    expect(logLine).toContain("[redacted-secret_id]");
+  });
+
+  // Audit 2026-05-31 L-12
+  it("caps the logged Vault error body length", async () => {
+    const huge = "x".repeat(5000);
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => huge,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(vaultSigner({
+      vaultUrl: "http://127.0.0.1:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/^Vault login failed: 500$/);
+
+    const logLine = errSpy.mock.calls[0]![0] as string;
+    expect(logLine).toContain("[truncated]");
+    expect(logLine).not.toContain(huge);
+  });
+
   // Audit 2026-05-24 H-1
   it("does not leak the Vault error body into Error.message on KV-read failure", async () => {
     const sensitiveBody = "permission denied — token does not have policy 'relayer-read'";

@@ -10,11 +10,15 @@
  *     `next_attempt`. Use after the upstream issue is fixed (e.g. App Kit
  *     liquidity restored, gateway un-paused).
  *
- *   pnpm tsx replay.ts force-refund --id <uuid>
+ *   pnpm tsx replay.ts force-refund --id <uuid> --pay-in-returned
  *     Manually mark a row `refunded` and call `gateway.recordPayerRefund`.
  *     Use when the relayer pulled funds, the swap failed, but the auto
  *     refund step couldn't run (e.g. RPC outage). The operator must have
- *     already moved the pay-in token back to the customer manually.
+ *     already moved the pay-in token back to the customer manually — the
+ *     mandatory --pay-in-returned flag is the explicit ack of that.
+ *     If the row already carries a refund_tx_hash (daemon crashed after
+ *     broadcasting), this RESUMES: it confirms the existing tx mined and
+ *     finalizes the row instead of broadcasting a second refund.
  *
  * Run from `/root/arcora-ops/relayer/` on the VPS, or locally after
  * `cd ops/relayer && pnpm install`.
@@ -107,14 +111,15 @@ async function requeue(id: string): Promise<void> {
   console.log(`[requeue] ${id} → pending`);
 }
 
-async function forceRefund(id: string): Promise<void> {
+async function forceRefund(id: string, opts: { payInReturned: boolean }): Promise<void> {
   const RPC     = need("ARC_TESTNET_RPC");
   const GATEWAY = need("GATEWAY_ADDRESS").toLowerCase() as Address;
 
   const r = await pool.query<{
-    invoice_id: string; payer: string; pay_in_token: string; amount_in: string; status: string;
+    invoice_id: string; payer: string; pay_in_token: string; amount_in: string;
+    status: string; refund_tx_hash: string | null;
   }>(
-    `select invoice_id, payer, pay_in_token, amount_in, status
+    `select invoice_id, payer, pay_in_token, amount_in, status, refund_tx_hash
        from relayer_queue
       where id = $1`,
     [id],
@@ -130,6 +135,46 @@ async function forceRefund(id: string): Promise<void> {
     throw new Error(`row already ${row.status} — cannot force-refund. Use the merchant refund flow instead.`);
   }
 
+  // Audit Ops-M-4 (2026-05-31): recordPayerRefund only ATTESTS the refund on
+  // chain; per README the operator must ALSO return the customer's pay-in token
+  // manually. Require an explicit ack so a careless force-refund can't pay the
+  // customer twice (on-chain refund + manual pay-in return).
+  if (!opts.payInReturned) {
+    throw new Error(
+      "refusing force-refund without --pay-in-returned: confirm the pay-in token was/will be returned to the customer manually (see README), then re-run with the flag",
+    );
+  }
+
+  const chain = createPublicClient({ transport: http(RPC) });
+
+  // Audit Ops-M-4 (2026-05-31): a refund tx may already be on-chain. The daemon
+  // broadcasts and writes refund_tx_hash BEFORE markRefunded, so a crash in
+  // that window leaves a `processing` row carrying a real hash. Re-issuing
+  // recordPayerRefund here would over-write that hash and risk a SECOND refund.
+  // Resume instead: confirm the recorded tx mined, then just finalize the row.
+  if (row.refund_tx_hash) {
+    const existing = row.refund_tx_hash as Hex;
+    const receipt = await chain.getTransactionReceipt({ hash: existing }).catch(() => null);
+    if (receipt && receipt.status === "success") {
+      await pool.query(
+        `update relayer_queue
+            set status = 'refunded', last_error = 'operator-force-refund (resumed)', updated_at = now()
+          where id = $1`,
+        [id],
+      );
+      console.log(`[force-refund] ${id} → refunded (resumed already-mined tx ${existing})`);
+      return;
+    }
+    if (!receipt) {
+      throw new Error(
+        `row already has refund_tx_hash ${existing} that is not yet mined — wait for it to settle (the daemon may still finalize it) before force-refunding`,
+      );
+    }
+    // receipt.status === "reverted": the recorded attempt failed on-chain, so
+    // it is safe to issue a fresh refund below.
+    console.log(`[force-refund] ${id}: recorded tx ${existing} reverted on-chain — issuing a fresh refund`);
+  }
+
   const account = await vaultSigner({
     vaultUrl: need("VAULT_URL"),
     roleId:   need("VAULT_ROLE_ID"),
@@ -138,7 +183,6 @@ async function forceRefund(id: string): Promise<void> {
     kvField:  process.env.VAULT_KV_FIELD ?? "privateKey",
   });
   const wallet = createWalletClient({ account, transport: http(RPC) });
-  const chain  = createPublicClient({ transport: http(RPC) });
 
   const reasonHash = ("0x" +
     Array.from(new TextEncoder().encode("operator-force-refund".slice(0, 32)))
@@ -186,13 +230,13 @@ async function main() {
       await requeue(id);
     } else if (subcommand === "force-refund") {
       const id = args.get("id");
-      if (!id) throw new Error("usage: replay.ts force-refund --id <uuid>");
-      await forceRefund(id);
+      if (!id) throw new Error("usage: replay.ts force-refund --id <uuid> --pay-in-returned");
+      await forceRefund(id, { payInReturned: args.get("pay-in-returned") === "true" });
     } else {
       console.error("usage:");
       console.error("  replay.ts list [--status pending|processing|settled|refunded|failed]");
       console.error("  replay.ts requeue --id <uuid>");
-      console.error("  replay.ts force-refund --id <uuid>");
+      console.error("  replay.ts force-refund --id <uuid> --pay-in-returned");
       process.exitCode = 2;
     }
   } finally {

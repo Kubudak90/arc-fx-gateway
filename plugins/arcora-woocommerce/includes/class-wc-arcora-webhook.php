@@ -49,24 +49,37 @@ class WC_Arcora_Webhook {
         }
         $secret = (string) $secret;
 
-        // Audit 2026-05-24 Ops-M2: prefer V2 (timestamp + sig-over-ts.body)
-        // when both headers are present so a captured legacy webhook can't
-        // be replayed. Fall back to the legacy header so existing
-        // merchant deployments mid-rollout don't break.
-        if ($sigV2 !== '' && $tsHeader !== '') {
-            $ts = (int) $tsHeader;
-            if ($ts <= 0 || abs(time() - $ts) > self::TIMESTAMP_TOLERANCE_SECONDS) {
-                self::respond(401, ['error' => 'timestamp_out_of_window']);
+        // Audit Ops-M-5 (2026-05-31): the scheme used to be chosen from the
+        // REQUEST headers — V2 present → V2, else legacy. An attacker holding a
+        // valid legacy-signed delivery could strip the V2 headers to force the
+        // unbounded (no-timestamp) legacy path and replay it. The choice now
+        // lives on the RECEIVER: when webhook_require_v2 is on (default), a
+        // valid in-window V2 signature is mandatory with NO legacy fallback.
+        // Arcora dual-signs every delivery since 2026-05-24, so this rejects
+        // only stripped/forged or pre-dual-sign traffic.
+        $requireV2 = $gateway->get_option('webhook_require_v2', 'yes') === 'yes';
+
+        if ($requireV2) {
+            if ($sigV2 === '' || $tsHeader === '') {
+                self::respond(401, ['error' => 'v2_signature_required']);
                 return;
             }
-            if (!self::verify_signature_v2($body, $tsHeader, $sigV2, $secret)) {
-                self::respond(401, ['error' => 'invalid_signature']);
-                return;
+            if (!self::verify_timestamped_v2($body, $tsHeader, $sigV2, $secret)) {
+                return; // verify_timestamped_v2 already emitted the 401
             }
         } else {
-            if (!self::verify_signature($body, $sigLegacy, $secret)) {
-                self::respond(401, ['error' => 'invalid_signature']);
-                return;
+            // Legacy grace-period path (Ops-M2): prefer V2 when both headers
+            // are present so a captured legacy webhook can't be replayed; fall
+            // back to legacy for a pre-dual-sign Arcora server mid-rollout.
+            if ($sigV2 !== '' && $tsHeader !== '') {
+                if (!self::verify_timestamped_v2($body, $tsHeader, $sigV2, $secret)) {
+                    return;
+                }
+            } else {
+                if (!self::verify_signature($body, $sigLegacy, $secret)) {
+                    self::respond(401, ['error' => 'invalid_signature']);
+                    return;
+                }
             }
         }
 
@@ -90,6 +103,21 @@ class WC_Arcora_Webhook {
             return;
         }
         $order = $orders[0];
+
+        // Audit Ops-M-5 (2026-05-31): dedupe accepted events by
+        // (type, invoice_id, tx_hash) so that even on the legacy grace path a
+        // replayed delivery is a no-op, not a re-applied state transition (the
+        // order-status guards below limit but don't fully close a refund→repay
+        // replay). Processed keys are recorded on the order; the count per
+        // order is naturally tiny (paid, maybe refunded).
+        $txForKey  = isset($payload['tx_hash']) ? (string) $payload['tx_hash'] : '';
+        $eventKey  = $payload['type'] . ':' . $payload['invoice_id'] . ':' . $txForKey;
+        $processed = $order->get_meta('_arcora_processed_events', true);
+        $processed = is_array($processed) ? $processed : [];
+        if (in_array($eventKey, $processed, true)) {
+            self::respond(200, ['ok' => true, 'note' => 'duplicate_event']);
+            return;
+        }
 
         switch ($payload['type']) {
             case 'invoice.paid':
@@ -123,6 +151,12 @@ class WC_Arcora_Webhook {
                 break;
         }
 
+        // Record the event key so a later replay of this exact delivery is a
+        // no-op (Audit Ops-M-5, 2026-05-31).
+        $processed[] = $eventKey;
+        $order->update_meta_data('_arcora_processed_events', $processed);
+        $order->save();
+
         self::respond(200, ['ok' => true]);
     }
 
@@ -136,6 +170,26 @@ class WC_Arcora_Webhook {
         $given = substr($sigHeader, 7);
         $expected = hash_hmac('sha256', $body, $secret);
         return hash_equals($expected, $given);
+    }
+
+    /**
+     * V2 verification including the replay window. Emits the appropriate 401
+     * and returns false on any failure; returns true only when the signature
+     * is valid AND within TIMESTAMP_TOLERANCE_SECONDS. Audit Ops-M-5
+     * (2026-05-31): factored out so the require-V2 and legacy-grace paths share
+     * one implementation.
+     */
+    private static function verify_timestamped_v2(string $body, string $timestamp, string $sigHeader, string $secret): bool {
+        $ts = (int) $timestamp;
+        if ($ts <= 0 || abs(time() - $ts) > self::TIMESTAMP_TOLERANCE_SECONDS) {
+            self::respond(401, ['error' => 'timestamp_out_of_window']);
+            return false;
+        }
+        if (!self::verify_signature_v2($body, $timestamp, $sigHeader, $secret)) {
+            self::respond(401, ['error' => 'invalid_signature']);
+            return false;
+        }
+        return true;
     }
 
     /**

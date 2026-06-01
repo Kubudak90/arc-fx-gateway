@@ -107,6 +107,20 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
                 'description' => __('The HMAC-SHA256 secret Arcora generated when you registered the webhook URL above. Stored in wp_options; used to verify each incoming webhook.', 'arcora-woocommerce'),
                 'desc_tip'    => true,
             ],
+            // Audit Ops-M-5 (2026-05-31): receiver-side enforcement of the
+            // replay-protected V2 signature. On (default) rejects any delivery
+            // without a valid, in-window V2 signature so a captured legacy
+            // webhook can't be replayed by stripping the V2 headers. Arcora
+            // dual-signs every webhook since 2026-05-24; only turn this off if
+            // you run a pre-dual-sign Arcora server during a rollout.
+            'webhook_require_v2' => [
+                'title'       => __('Require replay-protected webhooks', 'arcora-woocommerce'),
+                'type'        => 'checkbox',
+                'label'       => __('Reject webhooks without a valid timestamped (V2) signature', 'arcora-woocommerce'),
+                'description' => __('Recommended. Closes a replay path where a captured legacy-signed webhook is re-sent with the V2 headers removed.', 'arcora-woocommerce'),
+                'desc_tip'    => true,
+                'default'     => 'yes',
+            ],
         ];
     }
 

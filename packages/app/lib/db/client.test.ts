@@ -31,7 +31,7 @@ describe("buildPoolConfig", () => {
     expect(cfg.connectionString).not.toContain("sslmode");
   });
 
-  it("enables SSL with relaxed chain verification when sslmode=require", () => {
+  it("relaxes chain verification ONLY for the Supabase pooler host (M-2)", () => {
     process.env.POSTGRES_URL =
       "postgres://postgres:pw@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require";
     const cfg = buildPoolConfig();
@@ -41,9 +41,14 @@ describe("buildPoolConfig", () => {
     expect(cfg.connectionString).toContain("aws-0-eu-central-1.pooler.supabase.com");
   });
 
-  it("enables SSL for any non-disable sslmode value (verify-full, prefer, …)", () => {
-    process.env.POSTGRES_URL = "postgres://u:p@host:5432/db?sslmode=verify-full";
-    expect(buildPoolConfig().ssl).toEqual({ rejectUnauthorized: false });
+  it("FULLY verifies TLS for any non-pooler host (M-2 — no silent MITM)", () => {
+    process.env.POSTGRES_URL = "postgres://u:p@db.example.com:5432/db?sslmode=verify-full";
+    expect(buildPoolConfig().ssl).toEqual({ rejectUnauthorized: true });
+  });
+
+  it("FULLY verifies TLS for sslmode=require on a non-pooler host", () => {
+    process.env.POSTGRES_URL = "postgres://u:p@some-managed-pg.aws.com:5432/db?sslmode=require";
+    expect(buildPoolConfig().ssl).toEqual({ rejectUnauthorized: true });
   });
 
   it("falls back to the raw URL when the connection string isn't a valid URL", () => {

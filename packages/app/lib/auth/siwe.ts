@@ -25,10 +25,24 @@ const SUPPORTED_CHAIN_ID = arcTestnet.id;
  * Arcora-issued nonce could authenticate here.
  */
 function expectedSiweDomain(): string {
-  const base = process.env.PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
+  const base = process.env.PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_BASE_URL;
+  // Audit L-9 (2026-05-31): silently defaulting to 'localhost' when the base
+  // URL is unset/malformed turns the anti-phishing domain binding into a
+  // no-op in production (any host's signature would verify against
+  // 'localhost'). Fail closed in prod; keep the localhost fallback for
+  // local dev / tests only.
+  if (!base) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("PUBLIC_BASE_URL (or NEXT_PUBLIC_BASE_URL) is required in production for SIWE domain binding");
+    }
+    return "localhost";
+  }
   try {
     return new URL(base).hostname;
   } catch {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(`PUBLIC_BASE_URL is malformed, cannot derive SIWE domain: ${base}`);
+    }
     return "localhost";
   }
 }

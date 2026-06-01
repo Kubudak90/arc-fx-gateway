@@ -24,6 +24,12 @@ function safeEqual(a: string, b: string): boolean {
  *   - `rate_limit_counters` — fixed-window counters from past windows are
  *                              dead weight. Anything older than 1h is junk.
  *
+ * Despite the "siwe-nonce" name (kept to preserve the Vercel cron path), the
+ * counters DELETE below is bucket-agnostic: it is the canonical cleaner for
+ * EVERY per-IP limiter (siwe-nonce, quote, quote-v06, authorize, submit,
+ * invoices). Retiring this cron unbounds rate_limit_counters — replace it
+ * before removing it (audit App-L-8, 2026-05-31).
+ *
  * Auth: shared CRON_SECRET (matches the H4 cron pattern).
  */
 

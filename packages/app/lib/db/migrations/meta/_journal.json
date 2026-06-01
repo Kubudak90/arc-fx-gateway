@@ -134,6 +134,13 @@
       "when": 1778900000000,
       "tag": "0018_retention_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0019_rate_limit_window_idx",
+      "breakpoints": true
     }
   ]
 }

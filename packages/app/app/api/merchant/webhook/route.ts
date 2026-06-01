@@ -7,10 +7,14 @@ import { eq } from "drizzle-orm";
 import { encrypt } from "@/lib/crypto/secret";
 import { randomBytes } from "node:crypto";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
+import { isSameOrigin } from "@/lib/security/csrf";
 
 const PatchBody = z.object({ webhookUrl: z.string().url().nullable() });
 
 export async function PATCH(req: NextRequest) {
+  // Audit L-5 (2026-05-31): state-changing merchant routes now carry the same
+  // Origin/Referer CSRF guard as auth/logout, not just SameSite=Lax.
+  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
   const session = await getSession();
   if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const parsed = PatchBody.safeParse(await req.json());
@@ -35,7 +39,9 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  // Audit L-5 (2026-05-31): same CSRF guard on the signing-secret rotation.
+  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
   const session = await getSession();
   if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

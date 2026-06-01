@@ -74,6 +74,41 @@ describe("PATCH /api/merchant/webhook", () => {
     const body = await res.json();
     expect(body).toEqual({ error: "no_merchant" });
   });
+
+  it("rejects a cross-site Origin with 403 (L-5 CSRF)", async () => {
+    const prev = process.env.PUBLIC_BASE_URL;
+    process.env.PUBLIC_BASE_URL = "https://app.arcorapay.xyz";
+    try {
+      const req = new NextRequest("http://localhost/api/merchant/webhook", {
+        method: "PATCH",
+        headers: { origin: "https://evil.example.com" },
+        body: JSON.stringify({ webhookUrl: "https://shop.example.com/hook" }),
+      });
+      const res = await PATCH(req);
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toBe("csrf");
+    } finally {
+      if (prev === undefined) delete process.env.PUBLIC_BASE_URL;
+      else process.env.PUBLIC_BASE_URL = prev;
+    }
+  });
+
+  it("allows a same-origin Origin (L-5 CSRF)", async () => {
+    const prev = process.env.PUBLIC_BASE_URL;
+    process.env.PUBLIC_BASE_URL = "https://app.arcorapay.xyz";
+    try {
+      const req = new NextRequest("http://localhost/api/merchant/webhook", {
+        method: "PATCH",
+        headers: { origin: "https://app.arcorapay.xyz" },
+        body: JSON.stringify({ webhookUrl: "https://shop.example.com/hook" }),
+      });
+      const res = await PATCH(req);
+      expect(res.status).toBe(200);
+    } finally {
+      if (prev === undefined) delete process.env.PUBLIC_BASE_URL;
+      else process.env.PUBLIC_BASE_URL = prev;
+    }
+  });
 });
 
 describe("POST /api/merchant/webhook", () => {

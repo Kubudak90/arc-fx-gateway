@@ -20,10 +20,19 @@ import { clientIp } from "@/lib/rate/clientIp";
 const QUOTE_LIMIT = 30;
 const QUOTE_WINDOW_SECONDS = 60;
 
+// Audit App-L-6 (2026-05-31): amountIn used to be an unbounded coerced bigint,
+// so `?amountIn=-1` (or a uint256-sized garbage value) sailed straight into
+// readContract and surfaced as a 500 instead of a 400. Bound it to a positive,
+// sane ceiling. 1e18 base units is ~$1e12 at 6 decimals — far past any real
+// pool liquidity, so it only rejects obvious garbage.
+const MAX_QUOTE_IN = 10n ** 18n;
+
 const Q = z.object({
   from: z.enum(["USDC", "EURC"]),
   to: z.enum(["USDC", "EURC"]),
-  amountIn: z.coerce.bigint(),
+  amountIn: z.coerce.bigint().refine((v) => v > 0n && v <= MAX_QUOTE_IN, {
+    message: "amountIn out of range",
+  }),
 });
 
 const TOKEN_INDEX = { USDC: 0, EURC: 1 } as const;
@@ -50,11 +59,17 @@ export async function GET(req: NextRequest) {
   const { from, to, amountIn } = parsed.data;
   if (from === to) return NextResponse.json({ error: "same_token" }, { status: 400 });
 
-  const out = await publicClient.readContract({
-    address: POOL,
-    abi: POOL_ABI,
-    functionName: "calculateSwap",
-    args: [TOKEN_INDEX[from], TOKEN_INDEX[to], amountIn],
-  });
+  let out: bigint;
+  try {
+    out = await publicClient.readContract({
+      address: POOL,
+      abi: POOL_ABI,
+      functionName: "calculateSwap",
+      args: [TOKEN_INDEX[from], TOKEN_INDEX[to], amountIn],
+    });
+  } catch {
+    // Pool revert / RPC hiccup → 502, not an unhandled 500. (Audit App-L-6)
+    return NextResponse.json({ error: "quote_unavailable" }, { status: 502 });
+  }
   return NextResponse.json({ from, to, amountIn: amountIn.toString(), amountOut: out.toString() });
 }

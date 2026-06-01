@@ -44,7 +44,12 @@ const INVOICE_WINDOW_SECONDS = 60;
 // metadata is stored verbatim as JSONB and echoed back on GET — cap key
 // count and value length so a merchant can't bloat every row. (Audit M2)
 const Body = z.object({
-  amountUsdc: z.number().positive().max(1_000_000),
+  // Audit App-L-7 (2026-05-31): `.positive()` alone allowed sub-micro-dollar
+  // amounts (e.g. 0.0000004) that BigInt(Math.round(amountUsdc * 1e6)) rounds
+  // to 0 — a zero-value on-chain invoice that burns gas and pollutes the
+  // treasury aggregate. Floor at 1 micro-USDC (the smallest representable base
+  // unit) so the rounded amount is always >= 1.
+  amountUsdc: z.number().min(0.000001).max(1_000_000),
   payInToken: z.enum(["USDC", "EURC"]),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),

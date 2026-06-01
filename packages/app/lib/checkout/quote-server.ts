@@ -91,11 +91,30 @@ export interface ServerQuoteResult {
   estimatedOutputBaseUnits:  bigint;
 }
 
+/**
+ * Audit App-L-10 (2026-05-31): bps env vars used to be read with a bare
+ * Number(), so an empty value silently became 0 and a typo became NaN, both
+ * flowing straight into the App Kit swap config (broken / wildly-off quote).
+ * Parse strictly — empty falls back to the documented default; anything that
+ * isn't an integer in [0, 10000] bps fails fast (matching KIT_KEY's posture)
+ * so a misconfig is loud rather than producing a silently-wrong quote.
+ */
+function bpsEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw == null || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 10_000) {
+    throw new Error(`${name} must be an integer in [0,10000] bps, got: ${JSON.stringify(raw)}`);
+  }
+  return n;
+}
+
 export async function estimateSwapForTarget(params: ServerQuoteParams): Promise<ServerQuoteResult> {
   const kitKey = process.env.KIT_KEY;
   if (!kitKey) throw new Error("KIT_KEY missing");
 
-  const customFeeBps = Number(process.env.CUSTOM_FEE_BPS ?? "100");
+  const customFeeBps = bpsEnv("CUSTOM_FEE_BPS", 100);
+  const slippageBps = bpsEnv("SLIPPAGE_BPS", 100);
   const feeRecipient = process.env.CUSTOM_FEE_RECIPIENT;
 
   // Probe the rate with 1.0 of payInToken (matches /api/checkout/quote so
@@ -107,7 +126,7 @@ export async function estimateSwapForTarget(params: ServerQuoteParams): Promise<
     amountIn: "1.0",
     config:   {
       kitKey,
-      slippageBps: Number(process.env.SLIPPAGE_BPS ?? "100"),
+      slippageBps,
       ...(feeRecipient ? { customFee: { percentageBps: customFeeBps, recipientAddress: feeRecipient } } : {}),
     },
   });
@@ -132,7 +151,7 @@ export async function estimateSwapForTarget(params: ServerQuoteParams): Promise<
     tokenIn:  params.payInToken,
     tokenOut: params.payoutToken,
     amountIn: recommendedHuman,
-    config:   { kitKey, slippageBps: Number(process.env.SLIPPAGE_BPS ?? "100") },
+    config:   { kitKey, slippageBps },
   });
   const finalOut = (final as { estimatedOutput?: { amount: string } }).estimatedOutput?.amount ?? "0";
 

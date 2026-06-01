@@ -1,25 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateNonce } from "@/lib/auth/siwe";
 import { takeToken } from "@/lib/rate/limiter";
+import { clientIp } from "@/lib/rate/clientIp";
 
 /**
  * SIWE nonce issuance. Per-IP rate-limited (10/60s) so a malicious caller
  * can't flood the siwe_nonces table by hammering this unauthenticated
  * endpoint. Audit M9 (2026-05-06).
+ *
+ * Audit App-L-4 (2026-05-31): this route used to carry its own copy of
+ * clientIp() that trusted the leftmost (spoofable) x-forwarded-for hop.
+ * Replaced with the shared, Vercel-trusted lib/rate/clientIp helper.
  */
 
 const NONCE_LIMIT_PER_WINDOW = 10;
 const NONCE_WINDOW_SECONDS = 60;
-
-function clientIp(req: NextRequest): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  // Vercel populates x-real-ip; fall back to it. As a last resort use
-  // "unknown" so a missing header doesn't disable rate limiting entirely
-  // (everyone shares the bucket — annoying for legitimate users behind
-  // anonymising proxies, but not a security regression).
-  return req.headers.get("x-real-ip") ?? "unknown";
-}
 
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);

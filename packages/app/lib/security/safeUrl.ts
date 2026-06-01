@@ -110,11 +110,24 @@ export function isPrivateAddress(ip: string): boolean {
   if (v6.startsWith("fe80:")) return true;       // link-local
   if (v6.startsWith("fc") || v6.startsWith("fd")) return true; // unique local fc00::/7
   if (v6.startsWith("ff"))  return true;         // multicast
-  if (v6.startsWith("::ffff:")) {
-    // IPv4-mapped IPv6, recurse on the v4 part
-    const ipv4 = v6.replace(/^::ffff:/, "");
-    return isPrivateAddress(ipv4);
-  }
+
+  // Audit App-M-1 (2026-05-31): Teredo tunnels an IPv4 client inside
+  // 2001:0000::/32, but the embedded address is one's-complement obfuscated
+  // and split across the address — decoding it is error-prone and a Teredo
+  // address is never a legitimate webhook target, so reject the whole range.
+  if (v6.startsWith("2001:0:") || v6.startsWith("2001:0000:")) return true;
+
+  // Audit App-M-1 (2026-05-31): IPv4-mapped (::ffff:0:0/96), IPv4-compatible
+  // (::/96, deprecated) and the NAT64 well-known prefix (64:ff9b::/96) all
+  // embed an IPv4 address in the low 32 bits. The older check only matched
+  // the *dotted-quad* spelling (`::ffff:127.0.0.1`) — but Node's dns.lookup
+  // returns the HEX form (`127.0.0.1` → `::ffff:7f00:1`), which slipped past
+  // as PUBLIC. Decode the embedded v4 in either spelling and recurse so
+  // RFC1918 / loopback / metadata ranges are caught regardless of which
+  // transition mechanism wrapped them.
+  const embedded = embeddedV4(v6);
+  if (embedded) return isPrivateAddress(embedded);
+
   // Audit App-L3 (2026-05-24): 6to4 (2002::/16) embeds an IPv4 address in
   // bits 16–47. A dual-stack resolver returning e.g. `2002:c0a8:0101::`
   // for a merchant-supplied hostname would have slipped past the older
@@ -136,4 +149,38 @@ export function isPrivateAddress(ip: string): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Decode the IPv4 address embedded in an IPv6 transition form — IPv4-mapped
+ * (`::ffff:a.b.c.d` or hex `::ffff:7f00:1`), IPv4-compatible (`::a.b.c.d`,
+ * deprecated) or the NAT64 well-known prefix (`64:ff9b::a.b.c.d`). Returns the
+ * dotted-quad string, or null when `v6` is not one of those forms. `v6` is
+ * expected lowercased. Callers recurse the result back through
+ * `isPrivateAddress`, so a decoded *public* v4 correctly stays allowed.
+ */
+function embeddedV4(v6: string): string | null {
+  let rest: string;
+  if (v6.startsWith("::ffff:")) rest = v6.slice(7);
+  else if (v6.startsWith("64:ff9b::")) rest = v6.slice(9);
+  else if (v6.startsWith("::") && v6 !== "::") rest = v6.slice(2);
+  else return null;
+  if (!rest) return null;
+  // Dotted-quad spelling (e.g. ::ffff:127.0.0.1) — recurse as-is.
+  if (rest.includes(".")) return rest;
+  // Hex spelling — one or two 16-bit groups encode the 32-bit v4.
+  const groups = rest.split(":").filter(Boolean);
+  let hi: number;
+  let lo: number;
+  if (groups.length === 1) {
+    hi = 0;
+    lo = parseInt(groups[0]!, 16);
+  } else if (groups.length === 2) {
+    hi = parseInt(groups[0]!, 16);
+    lo = parseInt(groups[1]!, 16);
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(hi) || !Number.isFinite(lo)) return null;
+  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
 }

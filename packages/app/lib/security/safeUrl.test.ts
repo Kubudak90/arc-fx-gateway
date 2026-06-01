@@ -47,15 +47,44 @@ describe("isPrivateAddress", () => {
     expect(isPrivateAddress("fd12:3456::1")).toBe(true);
   });
 
-  it("flags IPv4-mapped IPv6 private addresses", () => {
+  it("flags IPv4-mapped IPv6 private addresses (dotted-quad spelling)", () => {
     expect(isPrivateAddress("::ffff:10.0.0.1")).toBe(true);
     expect(isPrivateAddress("::ffff:127.0.0.1")).toBe(true);
+  });
+
+  it("flags IPv4-mapped IPv6 private addresses in HEX spelling (M-1)", () => {
+    // dns.lookup returns the hex form, not dotted-quad.
+    expect(isPrivateAddress("::ffff:7f00:1")).toBe(true);    // 127.0.0.1
+    expect(isPrivateAddress("::ffff:a9fe:a9fe")).toBe(true); // 169.254.169.254 metadata
+    expect(isPrivateAddress("::ffff:0a00:0001")).toBe(true); // 10.0.0.1
+    expect(isPrivateAddress("::ffff:c0a8:0101")).toBe(true); // 192.168.1.1
+  });
+
+  it("flags IPv4-mapped IPv6 PUBLIC addresses in hex as public (M-1)", () => {
+    expect(isPrivateAddress("::ffff:0808:0808")).toBe(false); // 8.8.8.8
+  });
+
+  it("flags NAT64 well-known prefix wrapping a private v4 (M-1)", () => {
+    expect(isPrivateAddress("64:ff9b::a9fe:a9fe")).toBe(true);        // 169.254.169.254
+    expect(isPrivateAddress("64:ff9b::169.254.169.254")).toBe(true); // dotted spelling
+    expect(isPrivateAddress("64:ff9b::7f00:1")).toBe(true);          // 127.0.0.1
+  });
+
+  it("flags IPv4-compatible ::/96 wrapping a private v4 (M-1)", () => {
+    expect(isPrivateAddress("::7f00:1")).toBe(true); // 127.0.0.1
+    expect(isPrivateAddress("::a00:1")).toBe(true);  // 10.0.0.1
+  });
+
+  it("flags the whole Teredo range 2001:0000::/32 (M-1)", () => {
+    expect(isPrivateAddress("2001:0:4137:9e76::1")).toBe(true);
+    expect(isPrivateAddress("2001:0000:4137:9e76::1")).toBe(true);
   });
 
   it("passes public addresses", () => {
     expect(isPrivateAddress("8.8.8.8")).toBe(false);
     expect(isPrivateAddress("1.1.1.1")).toBe(false);
     expect(isPrivateAddress("2606:4700:4700::1111")).toBe(false);
+    expect(isPrivateAddress("64:ff9b::0808:0808")).toBe(false); // NAT64 wrapping public 8.8.8.8
   });
 });
 

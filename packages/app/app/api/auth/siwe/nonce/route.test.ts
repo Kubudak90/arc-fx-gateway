@@ -59,14 +59,30 @@ describe("POST /api/auth/siwe/nonce — rate limit (M9)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("uses the first IP in x-forwarded-for when there are multiple hops", async () => {
+  it("uses the RIGHTMOST x-forwarded-for hop, not the spoofable leftmost (L-4)", async () => {
+    // The leftmost (203.0.113.5) is client-supplied and must NOT be the key;
+    // the rightmost (10.0.0.2) is the hop appended by our trusted proxy.
     const req = new Request("http://localhost/api/auth/siwe/nonce", {
       method: "POST",
       headers: { "x-forwarded-for": "203.0.113.5, 10.0.0.1, 10.0.0.2" },
     });
     const res = await POST(req as never);
     expect(res.status).toBe(200);
-    expect(counts.get("siwe-nonce:203.0.113.5")).toBe(1);
+    expect(counts.get("siwe-nonce:10.0.0.2")).toBe(1);
+    expect(counts.get("siwe-nonce:203.0.113.5")).toBeUndefined();
+  });
+
+  it("prefers x-vercel-forwarded-for over a spoofed x-forwarded-for (L-4)", async () => {
+    const req = new Request("http://localhost/api/auth/siwe/nonce", {
+      method: "POST",
+      headers: {
+        "x-vercel-forwarded-for": "198.51.100.7",
+        "x-forwarded-for": "1.1.1.1, 198.51.100.7",
+      },
+    });
+    const res = await POST(req as never);
+    expect(res.status).toBe(200);
+    expect(counts.get("siwe-nonce:198.51.100.7")).toBe(1);
   });
 
   it("falls back to x-real-ip when x-forwarded-for is missing", async () => {

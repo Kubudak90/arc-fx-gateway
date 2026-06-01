@@ -67,6 +67,20 @@ V12 lands are already in (the rest of the audit follow-up below):
 | I-2 | `_createInvoice` accepts `expiresAt = 0` / past — invoice is immediately uncollectable. One-line `if (expiresAt <= block.timestamp) revert InvalidExpiry()`. | `ArcFXGateway.sol:200-224` | Trivial guard. |
 | I-3 | `MintableERC20` testnet faucet has no mint cap. Not a production contract today, but the file would be unsafe to copy as a stub for any mainnet wrapped-stable. Add an inline "TESTNET ONLY — DO NOT COPY" header. | `MintableERC20.sol:23` | Comment only. |
 
+### Additional carry from the 2026-05-31 audit
+
+The 2026-05-31 full-stack audit's contract pass found nothing exploitable on
+the live bytecode but surfaced three more source-level items (all need a
+redeploy). Folded into the same V12 unit; the "(31)" suffix disambiguates
+them from the 2026-05-24 labels above. The off-chain audit findings shipped
+in the same sweep (see commit log `[audit App-*/Ops-*/SDK-*]`).
+
+| Sev | Item | Where | Why it needs V12 |
+|---|---|---|---|
+| L-1 (31) | `registerMerchant`/`updateMerchant` validate `payoutToken` support only at registration. If an admin later `setTokenSupport(token,false)`s a stable, already-Created invoices still escrow + settle in it. Re-check `supportedTokens[inv.payoutToken]` at `settleInvoice`, or NatSpec the admin-trust intent. | `ArcFXGateway.sol:110-121, 200-224, 260-297` | settle-path source edit (or doc). |
+| L-2 (31) | `recordPayerRefund` moves no funds and emits `PayerRefunded` with caller-supplied amount/token/payer that are never reconciled against on-chain state — a compromised RELAYER_ROLE can emit arbitrary refund events that downstream consumers treat as authoritative. Document as attestation-only, or bind the event to a verifiable transfer. | `ArcFXGateway.sol:436-449` | semantics/doc or storage change in source. |
+| I-4 (31) | `_createInvoice` doesn't require `amountOut > 0`: a zero-value invoice escrows `amount:0`, emits zero-value `InvoicePaid`/`EscrowCreated`, and takes a zero fee — indexer/treasury noise (off-chain L-7 now blocks the app path, but the contract guard is missing). Add `require(amountOut > 0)` alongside the I-2 `expiresAt` guard. | `ArcFXGateway.sol:200-224, 273-285` | one-line guard (pairs with I-2). |
+
 ### V12 cut criteria
 
 Trigger one of:

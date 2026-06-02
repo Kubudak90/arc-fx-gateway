@@ -26,12 +26,15 @@ import { createPublicClient, formatUnits, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { fetchPrivateKeyFromVault } from "./vault-signer";
 
-if (!process.env.KIT_KEY || !process.env.FEE_RECIPIENT) {
-  console.error("missing env KIT_KEY or FEE_RECIPIENT — copy .env.example and fill in");
+// The relayer daemon's .env names this CUSTOM_FEE_RECIPIENT (see run.ts);
+// accept it as a fallback so a smoke run can reuse that .env unmodified.
+const FEE_RECIPIENT_ENV = process.env.FEE_RECIPIENT ?? process.env.CUSTOM_FEE_RECIPIENT;
+if (!process.env.KIT_KEY || !FEE_RECIPIENT_ENV) {
+  console.error("missing env KIT_KEY or FEE_RECIPIENT/CUSTOM_FEE_RECIPIENT — copy .env.example and fill in");
   process.exit(1);
 }
 const KIT_KEY        = process.env.KIT_KEY;
-const FEE_RECIPIENT  = process.env.FEE_RECIPIENT as `0x${string}`;
+const FEE_RECIPIENT  = FEE_RECIPIENT_ENV as `0x${string}`;
 const RPC            = process.env.ARC_TESTNET_RPC ?? "https://rpc.testnet.arc.network";
 
 async function resolvePrivateKey(): Promise<`0x${string}`> {

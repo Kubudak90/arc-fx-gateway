@@ -15,22 +15,11 @@ a separate project and is no longer part of this repo's plan.
 Small bits left over from the 2026-05-20 cutover. Each is a single
 command or a small ops touch, but it should happen.
 
-- **Rotate the Supabase DB password.** Both the old Neon password and the
-  current Supabase password ended up in the 2026-05-20 session transcript
-  through transcript-redaction misses. Vercel Dashboard → Storage →
-  `arc-fx-db` → "Sync env vars" rotates the value and re-syncs every
-  scope automatically. After rotation, mirror the new
-  `POSTGRES_URL_NON_POOLING` to the three VPS daemons (`/root/arcora-ops/
-  {indexer,relayer,webhooks}/.env`) and restart them.
 - **Delete the retired Neon project.** Disconnected from Vercel on
   2026-05-20 but the DB is still attached to the Neon account. After the
   Neon free-tier compute quota resets (monthly), pull a final pg_dump for
   the archive and run `vercel integration-resource remove
   neon-erin-umbrella --yes`.
-- **Clean the `.bak-*` env backups on the VPS.** Several backup files
-  under `/root/arcora-ops/{indexer,relayer,webhooks}/` carry the old Neon
-  password as a plaintext literal. Once the Supabase rotation above is
-  done they have no operational value and should be removed.
 
 ---
 

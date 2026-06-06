@@ -1,9 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST } from "./route";
 
-vi.mock("@/lib/auth/apikey", () => ({
-  lookupMerchantByApiKey: vi.fn(),
-}));
+vi.mock("@/lib/auth/apikey", async () => {
+  // Keep the real pure helpers (classifyKey / generators); stub only the
+  // db-backed lookups so the route's key-class routing is exercised for real.
+  const actual = await vi.importActual<typeof import("@/lib/auth/apikey")>("@/lib/auth/apikey");
+  return {
+    ...actual,
+    lookupMerchantByApiKey: vi.fn(),
+    lookupMerchantByPublishableKey: vi.fn(),
+  };
+});
 vi.mock("@/lib/chain/client", () => ({
   publicClient: {
     waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: "success" }),
@@ -225,6 +232,70 @@ describe("POST /api/invoices", () => {
       expect(res.status).toBe(201);
       expect(body.invoiceId).toMatch(/^0x[0-9a-f]{64}$/);
       expect(writeContract).toHaveBeenCalled();
+    });
+  });
+
+  // AFG-019 (2026-06-06): a browser-safe publishable key (pk_live_) may create
+  // a checkout ONLY from an allowlisted Origin, and never authorizes the
+  // privileged data routes. The secret key keeps its existing full capability.
+  describe("AFG-019 — publishable key capability", () => {
+    const PK = "pk_live_" + "p".repeat(56);
+    async function mockPublishableMerchant(allowedOrigins: string[]) {
+      const apikey = await import("@/lib/auth/apikey");
+      (apikey.lookupMerchantByPublishableKey as any).mockResolvedValue({
+        id: "00000000-0000-0000-0000-0000000000b1",
+        address: "0x1111111111111111111111111111111111111111",
+        payoutToken: "0x2222222222222222222222222222222222222222",
+        allowedOrigins,
+      });
+      const chain = await import("@/lib/chain/client");
+      const writeContract = vi.fn().mockResolvedValue("0xtxhash");
+      (chain.getServerWalletClient as any).mockResolvedValue({ writeContract });
+      return writeContract;
+    }
+
+    it("creates an invoice with a publishable key from an allowlisted origin", async () => {
+      const writeContract = await mockPublishableMerchant(["https://shop.example.com"]);
+      const res = await POST(makeReq(
+        { amountUsdc: 9.99, payInToken: "USDC" },
+        { "X-Arcora-Api-Key": PK, origin: "https://shop.example.com" },
+      ));
+      const body = await res.json();
+      expect(res.status).toBe(201);
+      expect(body.invoiceId).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(writeContract).toHaveBeenCalled();
+    });
+
+    it("rejects a publishable key when the Origin is not allowlisted (403)", async () => {
+      const writeContract = await mockPublishableMerchant(["https://shop.example.com"]);
+      const res = await POST(makeReq(
+        { amountUsdc: 9.99, payInToken: "USDC" },
+        { "X-Arcora-Api-Key": PK, origin: "https://evil.example.com" },
+      ));
+      const body = await res.json();
+      expect(res.status).toBe(403);
+      expect(body.error).toBe("publishable_origin_not_allowed");
+      expect(writeContract).not.toHaveBeenCalled();
+    });
+
+    it("rejects a publishable key with no Origin header (403)", async () => {
+      const writeContract = await mockPublishableMerchant(["https://shop.example.com"]);
+      const res = await POST(makeReq(
+        { amountUsdc: 9.99, payInToken: "USDC" },
+        { "X-Arcora-Api-Key": PK },
+      ));
+      const body = await res.json();
+      expect(res.status).toBe(403);
+      expect(body.error).toBe("publishable_origin_not_allowed");
+      expect(writeContract).not.toHaveBeenCalled();
+    });
+
+    it("rejects an unknown (non-ak/pk) key with 401", async () => {
+      const res = await POST(makeReq(
+        { amountUsdc: 9.99, payInToken: "USDC" },
+        { "X-Arcora-Api-Key": "xx_live_nope", origin: "https://shop.example.com" },
+      ));
+      expect(res.status).toBe(401);
     });
   });
 

@@ -12,6 +12,7 @@ interface MerchantInfo {
   payoutToken: string;
   webhookUrl: string | null;
   allowedOrigins?: string[];
+  publishableKey?: string;
 }
 
 export default function SettingsPage() {
@@ -56,7 +57,7 @@ export default function SettingsPage() {
           )}
         </div>
       )}
-      <ApiKeyCard hasMerchant={!!merchant} onBootstrap={refresh} />
+      <ApiKeyCard hasMerchant={!!merchant} publishableKey={merchant?.publishableKey} onBootstrap={refresh} />
       {merchant && (
         <PayoutTokenCard
           currentPayoutToken={merchant.payoutToken}

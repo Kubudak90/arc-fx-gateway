@@ -5,6 +5,8 @@ export type ArcoraErrorCode =
   | "INVALID_URL"
   | "TIMEOUT"
   | "NO_SECURE_RANDOM"
+  // AFG-019: a publishable (pk_live_) key was used on a server-only operation.
+  | "PUBLISHABLE_KEY_FORBIDDEN"
   | "UNKNOWN";
 
 export interface ArcoraErrorOptions {

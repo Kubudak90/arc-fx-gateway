@@ -29,6 +29,27 @@ function resolveBaseUrl(opts: InitOptions): string {
   return opts.baseUrl ?? ENV_BASE_URL[opts.environment ?? "testnet"];
 }
 
+// AFG-019 (2026-06-06): two key classes. A publishable `pk_live_` key is
+// browser-safe and may only create checkouts; a secret `ak_live_` key is
+// server-side only and authorizes privileged reads (escrows, private invoice
+// fields). The SDK refuses to use a publishable key on a privileged call and
+// warns if a secret key is constructed in a browser.
+function isPublishableKey(key: string): boolean {
+  return key.startsWith("pk_live_");
+}
+
+function warnIfSecretKeyInBrowser(key: string): void {
+  if (typeof window !== "undefined" && key.startsWith("ak_live_")) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[arcora] A SECRET key (ak_live_…) is being used in a browser. Secret " +
+      "keys must stay server-side — anyone can read this one from your page " +
+      "and create invoices or read your data. Use your publishable key " +
+      "(pk_live_…) in client code instead.",
+    );
+  }
+}
+
 async function doCreateInvoice(opts: InitOptions, params: CreateInvoiceParams): Promise<Invoice> {
   if (!isHttp(params.successUrl)) {
     throw new ArcoraError("INVALID_URL", `successUrl must be http(s): got ${params.successUrl}`);
@@ -77,6 +98,14 @@ async function doCreateInvoice(opts: InitOptions, params: CreateInvoiceParams): 
 }
 
 async function doEscrows(opts: InitOptions): Promise<{ pending: EscrowSummary[]; matured: EscrowSummary[]; claimed: EscrowSummary[]; }> {
+  // AFG-019: escrow listing is a privileged read — never allow a browser
+  // publishable key here, and never even send it over the wire.
+  if (isPublishableKey(opts.apiKey)) {
+    throw new ArcoraError(
+      "PUBLISHABLE_KEY_FORBIDDEN",
+      "escrows() requires your SECRET key (ak_live_…) and must run server-side; a publishable key (pk_live_…) cannot list escrows.",
+    );
+  }
   let res: Response;
   try {
     res = await fetch(`${resolveBaseUrl(opts)}/api/merchant/escrows`, {
@@ -116,6 +145,7 @@ function doOpenCheckout(invoice: { url: string }): void {
 export class Arcora {
   constructor(public readonly options: InitOptions) {
     if (!options.apiKey) throw new ArcoraError("INVALID_API_KEY", "apiKey required");
+    warnIfSecretKeyInBrowser(options.apiKey);
   }
 
   async createInvoice(params: CreateInvoiceParams): Promise<Invoice> {

@@ -24,12 +24,31 @@ export default function SdkDocs() {
       </table>
       <p>Webhook verification is signature-only and stays out of the SDK on purpose — three lines of <code>crypto.createHmac</code> work in any runtime; see <a href="/docs/webhooks">/docs/webhooks</a> for the snippet.</p>
 
+      <h2>Two key types — publishable vs secret</h2>
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Prefix</th><th>Where it goes</th><th>Capability</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Publishable</td><td><code>pk_live_…</code></td><td>Browser / client code — <strong>safe to embed</strong></td><td>Create a checkout from one of your allowlisted origins</td></tr>
+          <tr><td>Secret</td><td><code>ak_live_…</code></td><td><strong>Server-side only — never ship to the browser</strong></td><td>Everything: create invoices, list escrows, read private invoice data</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Anyone who loads your page can read a key embedded in it. Embed only the
+        <strong> publishable</strong> key in browser code; keep the <strong>secret</strong>
+        key on your server. Privileged reads like <code>escrows()</code> require the
+        secret key and only work server-side. Both keys are shown in
+        <a href="/m/settings"> /m/settings</a>; set your allowed origins there so
+        publishable-key checkouts are accepted.
+      </p>
+
       <h2><code>@arcora/sdk</code></h2>
       <h3><code>new Arcora(options)</code></h3>
       <pre><code>{`import { Arcora } from '@arcora/sdk';
 
 const arcora = new Arcora({
-  apiKey:      string,                     // required — issued at /m/settings (ak_test_… or ak_live_…)
+  apiKey:      string,                     // required — publishable pk_live_… in the browser, secret ak_live_… on a server
   environment?: 'testnet' | 'mainnet',    // default 'testnet'; selects the base URL
   baseUrl?:    string,                     // override for self-hosted deployments
 });`}</code></pre>
@@ -63,7 +82,7 @@ const arcora = new Arcora({
 // pending: paid invoices still within the 7-day refund window
 // matured: paid, window elapsed, ready to claim()
 // claimed: already withdrawn to the merchant payout wallet`}</code></pre>
-      <p>Authenticated against the merchant whose <code>apiKey</code> the instance was constructed with. Three buckets cap at 200 rows each; a <code>truncated</code> flag tells the caller when to narrow filters.</p>
+      <p><strong>Server-side only — requires your secret <code>ak_live_</code> key.</strong> Calling <code>escrows()</code> with a publishable key throws <code>PUBLISHABLE_KEY_FORBIDDEN</code> without making a request. Authenticated against the merchant whose <code>apiKey</code> the instance was constructed with. Three buckets cap at 200 rows each; a <code>truncated</code> flag tells the caller when to narrow filters.</p>
 
       <h3>Errors</h3>
       <pre><code>{`import { Arcora, ArcoraError } from '@arcora/sdk';
@@ -73,7 +92,8 @@ try {
 } catch (e) {
   if (e instanceof ArcoraError) {
     // e.code is one of: 'INVALID_API_KEY' | 'NETWORK' | 'SERVER_ERROR'
-    //                   | 'INVALID_URL'    | 'TIMEOUT' | 'NO_SECURE_RANDOM' | 'UNKNOWN'
+    //                   | 'INVALID_URL'    | 'TIMEOUT' | 'NO_SECURE_RANDOM'
+    //                   | 'PUBLISHABLE_KEY_FORBIDDEN' | 'UNKNOWN'
     // e.retryAfter (seconds) is set on SERVER_ERROR when the server returned Retry-After
   }
 }`}</code></pre>
@@ -84,7 +104,7 @@ try {
 
 function PayButton() {
   const { checkout, loading, error, refundEndsAt } = useCheckout({
-    apiKey: process.env.NEXT_PUBLIC_ARCORA_KEY!,
+    apiKey: process.env.NEXT_PUBLIC_ARCORA_PUBLISHABLE_KEY!, // pk_live_… — safe to inline in the browser
     environment: 'testnet',
   });
 
@@ -108,7 +128,7 @@ function PayButton() {
       <pre><code>{`import { CheckoutButton } from '@arcora/sdk-react';
 
 <CheckoutButton
-  apiKey={process.env.NEXT_PUBLIC_ARCORA_KEY!}
+  apiKey={process.env.NEXT_PUBLIC_ARCORA_PUBLISHABLE_KEY!}
   environment="testnet"
   invoice={{ amountUsdc: 49.99, payInToken: 'EURC', successUrl: '...' }}
   className="btn-primary"

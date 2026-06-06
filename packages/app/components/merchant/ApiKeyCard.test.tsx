@@ -1,10 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { ApiKeyCard } from "./ApiKeyCard";
 
 beforeEach(() => {
   global.fetch = vi.fn() as any;
 });
+
+// The secret-key warning + section render on every mount; without unmounting
+// between tests, getByText would match across leftover DOM. (AFG-019)
+afterEach(() => cleanup());
 
 describe("ApiKeyCard", () => {
   it("disables Generate until at least one valid origin is provided, then calls bootstrap with allowedOrigins", async () => {
@@ -35,5 +39,14 @@ describe("ApiKeyCard", () => {
     render(<ApiKeyCard hasMerchant={true} onBootstrap={vi.fn()} />);
     fireEvent.click(screen.getByText(/Rotate key/));
     await waitFor(() => expect((global.fetch as any).mock.calls[0][0]).toBe("/api/merchant/api-key"));
+  });
+
+  // AFG-019 (2026-06-06): the publishable key is shown persistently as
+  // browser-safe, alongside a "secret key — server-side only" warning.
+  it("renders the publishable key as browser-safe with a secret-key warning", () => {
+    render(<ApiKeyCard hasMerchant={true} publishableKey="pk_live_demo123" onBootstrap={vi.fn()} />);
+    expect(screen.getByText("pk_live_demo123")).toBeTruthy();
+    expect(screen.getByText(/Browser-safe/i)).toBeTruthy();
+    expect(screen.getByText(/Never put your secret key in browser code/i)).toBeTruthy();
   });
 });

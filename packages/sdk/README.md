@@ -12,14 +12,31 @@ pnpm add @arcora/sdk
 
 For React: `npm install @arcora/sdk-react`
 
+## Two key types — read this first
+
+Your dashboard gives you **two** keys:
+
+| Key | Prefix | Where it goes | Can do |
+|-----|--------|---------------|--------|
+| **Publishable** | `pk_live_…` | Browser / client code — **safe to embed** | Create a checkout from one of your allowlisted origins |
+| **Secret** | `ak_live_…` | **Server-side only — never ship to the browser** | Everything: create invoices, list escrows, read private invoice data |
+
+Use the **publishable** key in any code that runs in a browser (the `<script>`
+tag, React components, anything bundled into your site). Keep the **secret**
+key on your server — anyone who views your page can read a key embedded in it,
+and a secret key lets them create invoices and read your merchant data.
+`escrows()` and other privileged reads require the secret key and only work
+server-side. Set your allowed origins in the dashboard so publishable-key
+checkouts are accepted.
+
 ### Drop-in `<script>` tag (no build step)
 
-For sites without a bundler — static HTML, simple WordPress themes, anything that can host a script tag — use the IIFE bundle from a CDN:
+For sites without a bundler — static HTML, simple WordPress themes, anything that can host a script tag — use the IIFE bundle from a CDN with your **publishable** key:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/@arcora/sdk@1.1/dist/arcora.global.js"></script>
 <script>
-  Arcora.init({ apiKey: "ak_live_…", environment: "testnet" });
+  Arcora.init({ apiKey: "pk_live_…", environment: "testnet" }); // publishable key — safe in the browser
   document.getElementById("pay").addEventListener("click", async () => {
     const inv = await Arcora.createInvoice({
       amountUsdc: 49.99,
@@ -39,7 +56,8 @@ Same surface as the npm package, flattened onto a global `Arcora`. Works in any 
 ```ts
 import { Arcora } from "@arcora/sdk";
 
-Arcora.init({ apiKey: "ak_live_...", environment: "testnet" });
+// Browser code → publishable key. (On a server, use your secret ak_live_ key.)
+Arcora.init({ apiKey: "pk_live_...", environment: "testnet" });
 
 const invoice = await Arcora.createInvoice({
   amountUsdc: 49.99,
@@ -56,7 +74,7 @@ Arcora.openCheckout(invoice);
 import { CheckoutButton } from "@arcora/sdk-react";
 
 <CheckoutButton
-  apiKey="ak_live_..."
+  apiKey="pk_live_..." /* publishable key — this runs in the browser */
   environment="testnet"
   invoice={{
     amountUsdc: 49.99,
@@ -73,7 +91,7 @@ import { CheckoutButton } from "@arcora/sdk-react";
 ```tsx
 import { useCheckout } from "@arcora/sdk-react";
 
-const { checkout, loading, error } = useCheckout({ apiKey: "ak_live_..." });
+const { checkout, loading, error } = useCheckout({ apiKey: "pk_live_..." }); // publishable key
 
 <button onClick={() => checkout({ amountUsdc: 49.99, payInToken: "EURC", successUrl: "..." })}>
   {loading ? "Loading..." : "Pay €49.99"}
@@ -100,12 +118,22 @@ const { checkout, loading, error } = useCheckout({ apiKey: "ak_live_..." });
 | `cancelUrl` | `string` | no |
 | `metadata` | `Record<string, string>` | no |
 
+Works with either a publishable (`pk_live_`) or secret (`ak_live_`) key. From
+the browser, always use the publishable key.
+
 Throws `ArcoraError` on failure with discriminated `code`:
 - `INVALID_API_KEY` — 401 from server
 - `SERVER_ERROR` — 5xx (includes `retryAfter` if Retry-After header set)
 - `NETWORK` — fetch failed
 - `INVALID_URL` — non-http(s) successUrl/cancelUrl
+- `PUBLISHABLE_KEY_FORBIDDEN` — a publishable key was used on a server-only call (e.g. `escrows()`)
 - `TIMEOUT`, `UNKNOWN`
+
+### `Arcora.escrows()` → `Promise<{ pending, matured, claimed }>`
+
+Lists escrow state for the merchant. **Server-side only — requires your secret
+`ak_live_` key.** Calling it with a publishable key throws
+`PUBLISHABLE_KEY_FORBIDDEN` without making a request.
 
 ### `Arcora.openCheckout(invoice)`
 

@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { generateApiKey, hashApiKey, verifyApiKey, lookupMerchantByApiKey } from "./apikey";
+import {
+  generateApiKey,
+  generatePublishableKey,
+  classifyKey,
+  hashApiKey,
+  verifyApiKey,
+  lookupMerchantByApiKey,
+  lookupMerchantByPublishableKey,
+} from "./apikey";
 import { db } from "@/lib/db/client";
 import { merchants, invoices, webhookAttempts } from "@/lib/db/schema";
 import { randomBytes } from "node:crypto";
@@ -60,5 +68,75 @@ describe("api key", () => {
     // Wrong-prefix random key: should still return null fast.
     const bogus = "ak_live_ZZZZZZZZZZZZZZZZ" + "A".repeat(40);
     expect(await lookupMerchantByApiKey(bogus)).toBeNull();
+  });
+});
+
+// AFG-019 (2026-06-06): a separate, browser-safe publishable key (pk_live_)
+// with no data-read capability, distinct from the privileged secret key.
+describe("publishable api key (AFG-019)", () => {
+  it("generatePublishableKey returns prefixed 64-char string", () => {
+    expect(generatePublishableKey()).toMatch(/^pk_live_[A-Za-z0-9]{56}$/);
+  });
+
+  it("classifyKey distinguishes secret, publishable, and unknown", () => {
+    expect(classifyKey(generateApiKey())).toBe("secret");
+    expect(classifyKey(generatePublishableKey())).toBe("publishable");
+    expect(classifyKey("nope")).toBeNull();
+    expect(classifyKey("")).toBeNull();
+  });
+
+  it("lookupMerchantByPublishableKey returns the merchant on exact match", async () => {
+    const pk = generatePublishableKey();
+    await db.insert(merchants).values({
+      address: "0x" + "c".repeat(40),
+      payoutToken: "0x" + "d".repeat(40),
+      apiKeyHash: await hashApiKey(generateApiKey()),
+      apiKeyPrefix: "ak_live_AAAA",
+      publishableKey: pk,
+      publishableKeyPrefix: pk.slice(0, 12),
+      webhookSecretEnc: Buffer.alloc(48),
+      webhookSecretIv: Buffer.alloc(12),
+    });
+    const m = await lookupMerchantByPublishableKey(pk);
+    expect(m).not.toBeNull();
+    expect(m!.address).toBe("0x" + "c".repeat(40));
+  });
+
+  it("lookupMerchantByPublishableKey returns null for a secret key (no privilege crossover)", async () => {
+    expect(await lookupMerchantByPublishableKey(generateApiKey())).toBeNull();
+  });
+
+  it("lookupMerchantByApiKey returns null for a publishable key (browser key can't reach secret routes)", async () => {
+    // The whole AFG-019 boundary depends on this: even if a merchant row has a
+    // publishable key, lookupMerchantByApiKey (used by escrows + private invoice
+    // fields) must reject pk_ keys so a browser credential can't read data.
+    const pk = generatePublishableKey();
+    await db.insert(merchants).values({
+      address: "0x" + "9".repeat(40),
+      payoutToken: "0x" + "8".repeat(40),
+      apiKeyHash: await hashApiKey(generateApiKey()),
+      apiKeyPrefix: "ak_live_CCCC",
+      publishableKey: pk,
+      publishableKeyPrefix: pk.slice(0, 12),
+      webhookSecretEnc: Buffer.alloc(48),
+      webhookSecretIv: Buffer.alloc(12),
+    });
+    expect(await lookupMerchantByApiKey(pk)).toBeNull();
+  });
+
+  it("lookupMerchantByPublishableKey returns null when the prefix matches but the full key differs", async () => {
+    const pk = generatePublishableKey();
+    const samePrefixDifferentKey = pk.slice(0, 12) + "Z".repeat(52); // 12 + 52 = 64 chars
+    await db.insert(merchants).values({
+      address: "0x" + "e".repeat(40),
+      payoutToken: "0x" + "f".repeat(40),
+      apiKeyHash: await hashApiKey(generateApiKey()),
+      apiKeyPrefix: "ak_live_BBBB",
+      publishableKey: samePrefixDifferentKey,
+      publishableKeyPrefix: pk.slice(0, 12),
+      webhookSecretEnc: Buffer.alloc(48),
+      webhookSecretIv: Buffer.alloc(12),
+    });
+    expect(await lookupMerchantByPublishableKey(pk)).toBeNull();
   });
 });

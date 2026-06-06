@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
-import { lookupMerchantByApiKey } from "@/lib/auth/apikey";
+import { classifyKey, lookupMerchantByApiKey, lookupMerchantByPublishableKey } from "@/lib/auth/apikey";
 import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { GATEWAY, getServerWalletClient, publicClient } from "@/lib/chain/client";
 import { db } from "@/lib/db/client";
@@ -86,8 +86,36 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   const apiKey = req.headers.get("X-Arcora-Api-Key") ?? "";
   if (!apiKey) return corsResponse({ error: "missing_api_key" }, { status: 401 });
-  const merchant = await lookupMerchantByApiKey(apiKey);
+
+  // AFG-019 (2026-06-06): two credential classes reach this route.
+  //   - secret `ak_live_`     → full capability (server-side only).
+  //   - publishable `pk_live_`→ browser-safe; may ONLY create a checkout, and
+  //                             only from an origin the merchant declared.
+  // An unknown prefix authorizes nothing. The privileged data routes
+  // (/api/merchant/escrows, GET /api/invoices/[id] private fields) call
+  // lookupMerchantByApiKey, which rejects pk_ keys outright — so a browser key
+  // can never list escrows or read private invoice data.
+  const keyKind = classifyKey(apiKey);
+  const merchant =
+    keyKind === "publishable" ? await lookupMerchantByPublishableKey(apiKey)
+    : keyKind === "secret"    ? await lookupMerchantByApiKey(apiKey)
+    : null;
   if (!merchant) return corsResponse({ error: "invalid_api_key" }, { status: 401 });
+
+  // Publishable keys are bound to the merchant's allowlisted origins. This is
+  // defense-in-depth (a scraped pk_ can be replayed with a spoofed Origin from
+  // a non-browser client), but combined with the per-merchant rate limit below
+  // and the zero data-read capability it keeps the browser credential narrow.
+  if (keyKind === "publishable") {
+    const originHeader = req.headers.get("origin") ?? "";
+    const allowed = (merchant as { allowedOrigins?: string[] }).allowedOrigins ?? [];
+    let originOk = false;
+    try { originOk = !!originHeader && allowed.includes(new URL(originHeader).origin); }
+    catch { originOk = false; }
+    if (!originOk) {
+      return corsResponse({ error: "publishable_origin_not_allowed" }, { status: 403 });
+    }
+  }
 
   // Audit App-M1 (2026-05-24): rate-limit by merchant.id AFTER auth so an
   // unauthenticated caller's noise can't poison a merchant's bucket. Fail

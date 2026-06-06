@@ -12,6 +12,12 @@ pnpm add @arcora/sdk-react @arcora/sdk
 
 `@arcora/sdk` is a peer dependency.
 
+> **Use your publishable key here.** These components run in the browser, so
+> pass your **publishable** key (`pk_live_…`) — it is safe to embed in client
+> code. Never put your **secret** key (`ak_live_…`) in a React component or any
+> browser-shipped code; keep it on your server. Configure your allowed origins
+> in the dashboard so publishable-key checkouts are accepted.
+
 ## Quick start
 
 ```tsx
@@ -20,7 +26,7 @@ import { CheckoutButton } from "@arcora/sdk-react";
 export function Checkout() {
   return (
     <CheckoutButton
-      apiKey="ak_live_..."
+      apiKey="pk_live_..." /* publishable key — safe in the browser */
       environment="testnet"
       invoice={{
         amountUsdc: 49.99,
@@ -43,7 +49,7 @@ import { useCheckout } from "@arcora/sdk-react";
 
 function Pay() {
   const { checkout, loading, error } = useCheckout({
-    apiKey: "ak_live_...",
+    apiKey: "pk_live_...", // publishable key — safe in the browser
     environment: "testnet",
   });
 

@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { generateApiKey, hashApiKey, PREFIX_LEN } from "@/lib/auth/apikey";
+import { generateApiKey, generatePublishableKey, hashApiKey, PREFIX_LEN } from "@/lib/auth/apikey";
 import { encrypt } from "@/lib/crypto/secret";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { randomBytes } from "node:crypto";
@@ -73,6 +73,10 @@ export async function POST(req: NextRequest) {
 
   const apiKey = generateApiKey();
   const apiKeyHash = await hashApiKey(apiKey);
+  // AFG-019 (2026-06-06): also mint a browser-safe publishable key. Stored in
+  // plaintext (it's public) and returned so the merchant can embed it in
+  // client code instead of the secret key.
+  const publishableKey = generatePublishableKey();
   const webhookSecret = "whsec_" + randomBytes(32).toString("hex");
   const { iv, ciphertext } = encrypt(webhookSecret);
 
@@ -82,6 +86,8 @@ export async function POST(req: NextRequest) {
     webhookUrl: parsed.data.webhookUrl ?? null,
     apiKeyHash,
     apiKeyPrefix: apiKey.slice(0, PREFIX_LEN),
+    publishableKey,
+    publishableKeyPrefix: publishableKey.slice(0, PREFIX_LEN),
     allowedOrigins,
     webhookSecretEnc: ciphertext,
     webhookSecretIv: iv,
@@ -90,7 +96,7 @@ export async function POST(req: NextRequest) {
   await session.save();
 
   return NextResponse.json(
-    { apiKey, webhookSecret },
+    { apiKey, publishableKey, webhookSecret },
     { status: 201 },
   );
 }

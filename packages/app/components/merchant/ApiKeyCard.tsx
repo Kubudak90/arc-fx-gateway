@@ -27,10 +27,17 @@ function parseOriginLines(raw: string): { ok: string[]; bad: string[] } {
   return { ok, bad };
 }
 
-export function ApiKeyCard({ hasMerchant, onBootstrap }: { hasMerchant: boolean; onBootstrap: () => Promise<void> }) {
+export function ApiKeyCard({ hasMerchant, publishableKey, onBootstrap }: { hasMerchant: boolean; publishableKey?: string; onBootstrap: () => Promise<void> }) {
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [originsRaw, setOriginsRaw] = useState("");
+
+  async function copyPublishable() {
+    if (publishableKey) {
+      await navigator.clipboard.writeText(publishableKey);
+      toast.success("Publishable key copied");
+    }
+  }
 
   const parsed = useMemo(() => parseOriginLines(originsRaw), [originsRaw]);
   const canBootstrap = hasMerchant || parsed.ok.length >= 1;
@@ -66,9 +73,26 @@ export function ApiKeyCard({ hasMerchant, onBootstrap }: { hasMerchant: boolean;
   return (
     <Card>
       <CardHeader>
-        <CardTitle>API key</CardTitle>
+        <CardTitle>API keys</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {publishableKey && (
+          <div className="space-y-2 pb-4 border-b border-arcora-border">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Publishable key</span>
+              <span className="text-[11px] uppercase tracking-wide text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5">Browser-safe</span>
+            </div>
+            <code className="block p-3 bg-arcora-gray rounded font-mono text-xs break-all">{publishableKey}</code>
+            <p className="text-xs text-muted-foreground">
+              Safe to embed in client-side code (storefront, SDK <code>&lt;CheckoutButton&gt;</code>, CDN script). Checkouts are accepted from your allowed origins.
+            </p>
+            <Button onClick={copyPublishable} size="sm" variant="outline"><Copy className="size-4 mr-2" />Copy publishable key</Button>
+          </div>
+        )}
+        <div className="text-sm font-medium">Secret key</div>
+        <p className="rounded border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+          <strong>Server-side only.</strong> Never put your secret key in browser code — anyone could read it and create invoices or access your data. Use the publishable key above in client code.
+        </p>
         {revealedKey ? (
           <>
             <code className="block p-3 bg-arcora-gray rounded font-mono text-xs break-all">{revealedKey}</code>

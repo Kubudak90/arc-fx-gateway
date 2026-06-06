@@ -14,6 +14,7 @@ vi.mock("@/lib/security/safeUrl", () => ({
 }));
 vi.mock("@/lib/auth/apikey", () => ({
   generateApiKey: () => "ak_live_AAAABBBBCCCC1111111111",
+  generatePublishableKey: () => "pk_live_" + "P".repeat(56),
   hashApiKey: vi.fn().mockResolvedValue("$2a$10$hashhashhashhash"),
   PREFIX_LEN: 12,
 }));
@@ -93,6 +94,23 @@ describe("POST /api/merchant/bootstrap allowed_origins", () => {
       "https://shop.example.com",
       "https://staging.example.com",
     ]);
+  });
+
+  it("generates and returns a publishable key alongside the secret key (AFG-019)", async () => {
+    const dbm = await import("@/lib/db/client");
+    const res = await POST(makeReq({
+      payoutToken: VALID_PAYOUT_TOKEN,
+      allowedOrigins: ["https://shop.example.com"],
+    }));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.apiKey).toMatch(/^ak_live_/);
+    expect(body.publishableKey).toMatch(/^pk_live_/);
+
+    const valuesSpy = (dbm.db.insert as any)._valuesSpy as ReturnType<typeof vi.fn>;
+    const inserted = valuesSpy.mock.calls[0]![0];
+    expect(inserted.publishableKey).toBe(body.publishableKey);
+    expect(inserted.publishableKeyPrefix).toBe(body.publishableKey.slice(0, 12));
   });
 
   it("rejects unsupported payoutToken (Audit L5)", async () => {

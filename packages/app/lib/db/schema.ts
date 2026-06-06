@@ -30,6 +30,12 @@ export const merchants = pgTable("merchants", {
   // fast-path lookup index so we don't bcrypt-compare every merchant row
   // on each authenticated request. Audit H2 (2026-05-05).
   apiKeyPrefix: text("api_key_prefix").notNull().default(""),
+  // AFG-019 (2026-06-06): browser-safe publishable key (pk_live_…). Stored in
+  // plaintext — it is meant to be embedded in client code and carries only the
+  // narrow "create checkout from an allowlisted origin" capability. The secret
+  // api_key above stays server-side. publishable_key_prefix indexes the lookup.
+  publishableKey: text("publishable_key").notNull().default(""),
+  publishableKeyPrefix: text("publishable_key_prefix").notNull().default(""),
   allowedOrigins: text("allowed_origins").array().notNull().default(sql`'{}'::text[]`),
   webhookSecretEnc: bytea("webhook_secret_enc").notNull(),
   webhookSecretIv: bytea("webhook_secret_iv").notNull(),

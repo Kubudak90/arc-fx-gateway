@@ -135,3 +135,40 @@ describe("Arcora.escrows() — V10 escrow listing", () => {
     await expect(Arcora.escrows()).rejects.toMatchObject({ code: "INVALID_API_KEY" });
   });
 });
+
+// AFG-019 (2026-06-06): publishable keys (pk_live_) are browser-safe but must
+// never reach the privileged data routes; the secret key must never be shipped
+// to a browser. The SDK guards both.
+describe("AFG-019 — key-class guards", () => {
+  it("escrows() rejects a publishable key without hitting the network", async () => {
+    const a = new Arcora({ apiKey: "pk_live_" + "p".repeat(56), environment: "testnet" });
+    await expect(a.escrows()).rejects.toMatchObject({ code: "PUBLISHABLE_KEY_FORBIDDEN" });
+    expect((globalThis.fetch as any)).not.toHaveBeenCalled();
+  });
+
+  it("createInvoice() works with a publishable key (browser-safe path)", async () => {
+    (globalThis.fetch as any).mockResolvedValue(
+      new Response(JSON.stringify({ invoiceId: "0xabc", url: "https://x/i/0xabc" }), {
+        status: 201, headers: { "content-type": "application/json" },
+      })
+    );
+    const a = new Arcora({ apiKey: "pk_live_" + "p".repeat(56), environment: "testnet" });
+    const inv = await a.createInvoice({ amountUsdc: 9.99, payInToken: "USDC", successUrl: "https://m.test/ok" });
+    expect(inv.invoiceId).toBe("0xabc");
+    const call = (globalThis.fetch as any).mock.calls[0];
+    expect(call[1].headers["X-Arcora-Api-Key"]).toMatch(/^pk_live_/);
+  });
+
+  it("warns when a secret key is constructed in a browser environment", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const hadWindow = "window" in globalThis;
+    Object.defineProperty(globalThis, "window", { value: {}, configurable: true, writable: true });
+    try {
+      new Arcora({ apiKey: "ak_live_" + "s".repeat(56), environment: "testnet" });
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      if (!hadWindow) delete (globalThis as any).window;
+    }
+  });
+});

@@ -14,8 +14,10 @@ interface RefundButtonProps {
   /** The gateway address this invoice lives on. Custody-escrow model —
    *  no ERC-20 allowance needed. Falls back to NEXT_PUBLIC_GATEWAY_ADDRESS. */
   gatewayAddress?: string | null;
-  /** `claimableAt` from the DB row. Refunds are only valid before this
-   *  timestamp (within the 7-day window). If absent, assume refundable. */
+  /** `claimableAt` from the DB row — the end of the 7-day escrow window. This is
+   *  a SOFT window (AFG-013): refundInvoice() stays callable on-chain until
+   *  someone calls claim() (which flips status off "paid"). After claimableAt,
+   *  claim() is permissionless, so a refund then RACES a claim (first tx wins). */
   claimableAt?: string | null;
   /** Current invoice status — only "paid" invoices are refundable. */
   status?: string;
@@ -31,16 +33,19 @@ export function RefundButton({ invoiceId, payoutToken: _payoutToken, gatewayAddr
   const { writeContractAsync } = useWriteContract();
   const [state, setState] = useState<State>("idle");
 
-  // Refund window: refunds are only valid within the 7-day escrow window.
+  // AFG-013: refunds stay valid until the escrow is CLAIMED (status leaves
+  // "paid"), not at claimableAt. Gate on status only; once the window elapses,
+  // claim() is permissionless so a refund races it (first tx wins) — surface
+  // that instead of hiding the button as if the window were a hard cutoff.
   const refundEndsAt = claimableAt ? new Date(claimableAt) : null;
-  const stillRefundable = (status === "paid" || status === undefined) &&
-    (refundEndsAt === null || Date.now() < refundEndsAt.getTime());
+  const isPaid = status === "paid" || status === undefined;
+  const windowElapsed = refundEndsAt !== null && Date.now() >= refundEndsAt.getTime();
 
   const fallbackGateway = process.env.NEXT_PUBLIC_GATEWAY_ADDRESS as Address;
   const gateway = (gatewayAddress ?? fallbackGateway) as Address;
   const arcId = 5042002;
 
-  if (!stillRefundable) return null;
+  if (!isPaid) return null;
 
   async function handleClick() {
     if (!address) return;
@@ -48,6 +53,12 @@ export function RefundButton({ invoiceId, payoutToken: _payoutToken, gatewayAddr
       toast.error("Switch to Arc Testnet to continue");
       return;
     }
+    // AFG-013: after the window, a claim() can land first and the refund will
+    // revert. Make the race explicit before sending.
+    if (windowElapsed && !window.confirm(
+      "The 7-day refund window has elapsed. Anyone can now claim this escrow — " +
+      "if a claim lands before your refund, the refund will revert. Continue?",
+    )) return;
     setState("refunding");
     try {
       // Custody-escrow model: no ERC-20 allowance needed — funds held in gateway.
@@ -86,6 +97,9 @@ export function RefundButton({ invoiceId, payoutToken: _payoutToken, gatewayAddr
       variant="ghost"
       onClick={handleClick}
       disabled={!address || inFlight || state === "success"}
+      title={windowElapsed
+        ? "7-day window elapsed — anyone can now claim this escrow; a refund only succeeds if it lands before a claim."
+        : undefined}
       className="text-arcora-link hover:bg-arcora-gray"
     >
       {label[state]}

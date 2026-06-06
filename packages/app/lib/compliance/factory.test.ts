@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { resolveComplianceProvider } from "./factory";
+import { resolveComplianceProvider, complianceRequired } from "./factory";
 import { NoopProvider } from "./noop";
 import { EllipticProvider } from "./elliptic";
 import { TRMLabsProvider } from "./trmlabs";
 
-const ENV_KEYS = ["COMPLIANCE_PROVIDER", "COMPLIANCE_API_KEY"];
+const ENV_KEYS = ["COMPLIANCE_PROVIDER", "COMPLIANCE_API_KEY", "COMPLIANCE_REQUIRED"];
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -48,5 +48,37 @@ describe("resolveComplianceProvider", () => {
   it("rejects unknown provider names", () => {
     process.env.COMPLIANCE_PROVIDER = "chainalysis";
     expect(() => resolveComplianceProvider()).toThrow(/unknown_provider/i);
+  });
+});
+
+// AFG-005 (2026-06-06): in a compliance-required deployment (mainnet pre-flight),
+// the noop provider must be forbidden so a misconfig fails closed at startup.
+describe("AFG-005 — COMPLIANCE_REQUIRED forbids fail-open config", () => {
+  it("complianceRequired() is false by default (testnet), true only when set", () => {
+    expect(complianceRequired()).toBe(false);
+    process.env.COMPLIANCE_REQUIRED = "true";
+    expect(complianceRequired()).toBe(true);
+  });
+
+  it("throws when COMPLIANCE_REQUIRED=true and provider defaults to noop", () => {
+    process.env.COMPLIANCE_REQUIRED = "true";
+    expect(() => resolveComplianceProvider()).toThrow(/compliance_required/i);
+  });
+
+  it("throws when COMPLIANCE_REQUIRED=true and provider is explicitly noop", () => {
+    process.env.COMPLIANCE_REQUIRED = "true";
+    process.env.COMPLIANCE_PROVIDER = "noop";
+    expect(() => resolveComplianceProvider()).toThrow(/compliance_required/i);
+  });
+
+  it("allows a real provider when COMPLIANCE_REQUIRED=true", () => {
+    process.env.COMPLIANCE_REQUIRED = "true";
+    process.env.COMPLIANCE_PROVIDER = "trmlabs";
+    process.env.COMPLIANCE_API_KEY = "k";
+    expect(resolveComplianceProvider()).toBeInstanceOf(TRMLabsProvider);
+  });
+
+  it("still defaults to Noop on testnet (COMPLIANCE_REQUIRED unset)", () => {
+    expect(resolveComplianceProvider()).toBeInstanceOf(NoopProvider);
   });
 });

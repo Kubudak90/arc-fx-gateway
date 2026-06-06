@@ -6,7 +6,7 @@ import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { GATEWAY, getServerWalletClient, publicClient } from "@/lib/chain/client";
 import { db } from "@/lib/db/client";
 import { invoices } from "@/lib/db/schema";
-import { resolveComplianceProvider } from "@/lib/compliance/factory";
+import { resolveComplianceProvider, complianceRequired } from "@/lib/compliance/factory";
 import { screenWithAudit } from "@/lib/compliance/screen";
 import { assertOriginAllowed, assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { takeToken } from "@/lib/rate/limiter";
@@ -213,7 +213,9 @@ export async function POST(req: NextRequest) {
     // on this gateway yet — fall through; createInvoiceFor below will revert
     // with the right error and we won't have wasted a provider call here.
   } catch (e: any) {
-    const failOpen = (process.env.COMPLIANCE_FAIL_OPEN_FOR_INVOICE ?? "true") !== "false";
+    // AFG-005: when compliance is required (mainnet), never fail open — the
+    // COMPLIANCE_FAIL_OPEN_FOR_INVOICE escape hatch only applies on testnet.
+    const failOpen = !complianceRequired() && (process.env.COMPLIANCE_FAIL_OPEN_FOR_INVOICE ?? "true") !== "false";
     if (!failOpen) {
       return corsResponse({
         error: "payout_read_failed",
@@ -239,7 +241,9 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     // Default fail-open for invoice creation: a provider outage shouldn't
     // block legitimate merchants. Override via COMPLIANCE_FAIL_OPEN_FOR_INVOICE=false.
-    const failOpen = (process.env.COMPLIANCE_FAIL_OPEN_FOR_INVOICE ?? "true") !== "false";
+    // AFG-005: when compliance is required (mainnet), never fail open — the
+    // COMPLIANCE_FAIL_OPEN_FOR_INVOICE escape hatch only applies on testnet.
+    const failOpen = !complianceRequired() && (process.env.COMPLIANCE_FAIL_OPEN_FOR_INVOICE ?? "true") !== "false";
     if (!failOpen) {
       return corsResponse({ error: "compliance_unavailable" }, { status: 503 });
     }

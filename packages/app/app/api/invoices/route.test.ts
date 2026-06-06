@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { POST } from "./route";
 
 vi.mock("@/lib/auth/apikey", async () => {
@@ -42,6 +42,7 @@ vi.mock("@/lib/db/client", () => ({
 }));
 vi.mock("@/lib/compliance/factory", () => ({
   resolveComplianceProvider: vi.fn(),
+  complianceRequired: () => process.env.COMPLIANCE_REQUIRED === "true",
 }));
 vi.mock("@/lib/compliance/screen", () => ({
   screenWithAudit: vi.fn(),
@@ -232,6 +233,35 @@ describe("POST /api/invoices", () => {
       expect(res.status).toBe(201);
       expect(body.invoiceId).toMatch(/^0x[0-9a-f]{64}$/);
       expect(writeContract).toHaveBeenCalled();
+    });
+  });
+
+  // AFG-005 (2026-06-06): when COMPLIANCE_REQUIRED=true, a provider/RPC error
+  // must fail CLOSED (503) instead of creating the invoice.
+  describe("AFG-005 — fail-closed when compliance is required", () => {
+    afterEach(() => { delete process.env.COMPLIANCE_REQUIRED; });
+
+    it("returns 503 on provider error instead of minting the invoice", async () => {
+      process.env.COMPLIANCE_REQUIRED = "true";
+      const apikey = await import("@/lib/auth/apikey");
+      (apikey.lookupMerchantByApiKey as any).mockResolvedValue({
+        id: "00000000-0000-0000-0000-0000000000c1",
+        address: "0x1111111111111111111111111111111111111111",
+        payoutToken: "0x2222222222222222222222222222222222222222",
+        allowedOrigins: [],
+      });
+      const screen = await import("@/lib/compliance/screen");
+      (screen.screenWithAudit as any).mockRejectedValue(new Error("provider down"));
+      const chain = await import("@/lib/chain/client");
+      const writeContract = vi.fn();
+      (chain.getServerWalletClient as any).mockResolvedValue({ writeContract });
+
+      const res = await POST(makeReq(
+        { amountUsdc: 10, payInToken: "USDC" },
+        { "X-Arcora-Api-Key": "ak_live_good" },
+      ));
+      expect(res.status).toBe(503);
+      expect(writeContract).not.toHaveBeenCalled();
     });
   });
 

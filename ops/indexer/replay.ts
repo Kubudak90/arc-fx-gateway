@@ -46,6 +46,7 @@ import {
   type Address, type Hex,
 } from "viem";
 import pg from "pg";
+import { buildOpsPoolConfig } from "./db";
 import { randomUUID } from "node:crypto";
 
 const RPC = need("ARC_TESTNET_RPC");
@@ -91,7 +92,7 @@ const EscrowRecovered     = ABI[7];
 const MerchantReactivated = ABI[8];
 
 const chain = createPublicClient({ transport: http(RPC) });
-const pool  = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
+const pool  = new pg.Pool(buildOpsPoolConfig(PG_URL)); // AFG-011: verify-full TLS
 
 /** Audit 2026-05-24 Ops-I-3: cache block timestamps so a chunk with N
  *  events from M unique blocks costs M RPC calls instead of N. */

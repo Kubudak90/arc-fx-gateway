@@ -4,6 +4,7 @@ import {
 } from "viem";
 import pg from "pg";
 import { randomUUID } from "node:crypto";
+import { buildOpsPoolConfig, describeDbTls, assertSecureDbTls } from "./db";
 
 const RPC = need("ARC_TESTNET_RPC");
 
@@ -61,7 +62,11 @@ const EscrowRecovered    = ABI[7];
 const MerchantReactivated = ABI[8];
 
 const chain = createPublicClient({ transport: http(RPC) });
-const pool  = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
+// AFG-011: verify-full TLS (pinned Supabase CA) — no disabled cert checks.
+const _poolCfg = buildOpsPoolConfig(PG_URL);
+assertSecureDbTls(_poolCfg);
+console.log(`[indexer] DB TLS: ${describeDbTls(_poolCfg)}`);
+const pool  = new pg.Pool(_poolCfg);
 
 async function getLastBlock(): Promise<bigint> {
   const r = await pool.query<{ value: string }>(

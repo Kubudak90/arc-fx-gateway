@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { buildPoolConfig } from "./client";
+import { SUPABASE_CA } from "./supabase-ca";
 
 const ORIGINAL_URL = process.env.POSTGRES_URL;
 
@@ -31,11 +32,12 @@ describe("buildPoolConfig", () => {
     expect(cfg.connectionString).not.toContain("sslmode");
   });
 
-  it("relaxes chain verification ONLY for the Supabase pooler host (M-2)", () => {
+  it("pins the Supabase CA + verify-full for the pooler host (AFG-011)", () => {
     process.env.POSTGRES_URL =
       "postgres://postgres:pw@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require";
     const cfg = buildPoolConfig();
-    expect(cfg.ssl).toEqual({ rejectUnauthorized: false });
+    // No longer rejectUnauthorized:false — we pin the CA and fully verify.
+    expect(cfg.ssl).toEqual({ ca: SUPABASE_CA, rejectUnauthorized: true });
     // sslmode stripped — see comment in client.ts
     expect(cfg.connectionString).not.toContain("sslmode");
     expect(cfg.connectionString).toContain("aws-0-eu-central-1.pooler.supabase.com");

@@ -28,6 +28,8 @@ import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import pg from "pg";
 import { fetchPrivateKeyFromVault } from "./vault-signer";
+import { buildOpsPoolConfig, describeDbTls, assertSecureDbTls } from "./db";
+import { buildGatewayAllowlist, resolveGateway } from "./gateway-allowlist";
 
 const RPC           = need("ARC_TESTNET_RPC");
 const PG_URL        = need("POSTGRES_URL_NON_POOLING");
@@ -105,7 +107,15 @@ const adapter = createViemAdapterFromPrivateKey({ privateKey: _relayerKey });
 const chain = createPublicClient({ transport: http(RPC) });
 const kit   = new AppKit();
 
-const pool = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
+// AFG-011: verify-full TLS (pinned Supabase CA) — no disabled cert checks.
+const _poolCfg = buildOpsPoolConfig(PG_URL);
+assertSecureDbTls(_poolCfg);
+console.log(`[relayer] DB TLS: ${describeDbTls(_poolCfg)}`);
+const pool = new pg.Pool(_poolCfg);
+
+// AFG-010: constrain the row gateway (approve spender + settle target) to an
+// allowlist so a tampered DB value can't redirect funds.
+const GATEWAY_ALLOWLIST = buildGatewayAllowlist(GATEWAY, process.env.GATEWAY_ALLOWLIST);
 
 // ── Queue row shape ─────────────────────────────────────────────────
 
@@ -147,8 +157,9 @@ type QueueRow = {
  *  was created against. settleInvoice + recordPayerRefund get routed there.
  *  Legacy rows without gateway_address fall back to the daemon's default. */
 function gatewayFor(row: QueueRow): Address {
-  const addr = (row.gateway_address ?? GATEWAY).toLowerCase();
-  return addr as Address;
+  // AFG-010: reject any row whose gateway_address isn't allowlisted instead of
+  // trusting the mutable DB value as the approve spender / settle target.
+  return resolveGateway(row.gateway_address, GATEWAY, GATEWAY_ALLOWLIST);
 }
 
 // ── Token symbol resolution for kit.swap ────────────────────────────

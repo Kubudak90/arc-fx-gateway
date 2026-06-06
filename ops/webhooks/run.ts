@@ -1,6 +1,7 @@
 import pg from "pg";
 import { createHmac, createDecipheriv } from "node:crypto";
 import dns from "node:dns/promises";
+import { buildOpsPoolConfig, describeDbTls, assertSecureDbTls } from "./db";
 
 const PG_URL    = need("POSTGRES_URL_NON_POOLING");
 const MASTER_B64 = need("MASTER_KEY");
@@ -49,7 +50,11 @@ function signV2(timestamp: string, body: string, secret: string): string {
   return `sha256=${createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex")}`;
 }
 
-const pool = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
+// AFG-011: verify-full TLS (pinned Supabase CA) — no disabled cert checks.
+const _poolCfg = buildOpsPoolConfig(PG_URL);
+assertSecureDbTls(_poolCfg);
+console.log(`[webhooks] DB TLS: ${describeDbTls(_poolCfg)}`);
+const pool = new pg.Pool(_poolCfg);
 
 type Row = {
   id: string;

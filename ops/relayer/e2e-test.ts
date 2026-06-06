@@ -32,6 +32,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import pg from "pg";
+import { buildOpsPoolConfig } from "./db";
 import { randomBytes } from "node:crypto";
 
 const RPC          = need("ARC_TESTNET_RPC");
@@ -70,7 +71,7 @@ const GATEWAY_ABI = parseAbi([
 const account = privateKeyToAccount(PRIVATE_KEY);
 const chain = createPublicClient({ transport: http(RPC) });
 const wallet = createWalletClient({ account, transport: http(RPC) });
-const pool = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
+const pool = new pg.Pool(buildOpsPoolConfig(PG_URL)); // AFG-011: verify-full TLS
 
 async function ensurePermit2Approval() {
   const allowance = await chain.readContract({

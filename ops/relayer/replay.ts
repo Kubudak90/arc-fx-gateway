@@ -34,6 +34,7 @@ import {
 } from "viem";
 import pg from "pg";
 import { vaultSigner } from "./vault-signer";
+import { buildOpsPoolConfig } from "./db";
 
 const PG_URL      = need("POSTGRES_URL_NON_POOLING");
 
@@ -43,7 +44,7 @@ function need(k: string): string {
   return v;
 }
 
-const pool = new pg.Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
+const pool = new pg.Pool(buildOpsPoolConfig(PG_URL)); // AFG-011: verify-full TLS
 
 const GATEWAY_ABI = parseAbi([
   "function recordPayerRefund(bytes32 globalId, address payer, address payInToken, uint256 amount, bytes32 reasonHash)",

@@ -8,8 +8,17 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-WorkingDirectory=/root/arcora-ops/relayer
-EnvironmentFile=/root/arcora-ops/relayer/.env
+# AFG-021 (2026-06-06): dedicated unprivileged user, runs from /opt (not root
+# from /root). One-time VPS migration: useradd --system arcora-ops; cp -a the
+# daemon dirs to /opt/arcora-ops; chown -R arcora-ops:arcora-ops; chmod 600 the
+# .env files. Vault AppRole creds live in the .env (read over HTTP at boot), so
+# no extra filesystem reconciliation is needed.
+User=arcora-ops
+Group=arcora-ops
+WorkingDirectory=/opt/arcora-ops/relayer
+EnvironmentFile=/opt/arcora-ops/relayer/.env
+Environment=NODE_ENV=production
+Environment=HOME=/opt/arcora-ops/relayer
 ExecStart=/usr/bin/node --import tsx/esm run.ts
 Restart=always
 RestartSec=5
@@ -22,13 +31,29 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=arcora-relayer
 
-# Audit #37 — dedicated unprivileged user. Not enabled yet (requires VPS
-# migration: useradd arcora-ops; chown -R arcora-ops:arcora-ops
-# /root/arcora-ops; mv working-dir into /opt or /var/lib so the user can
-# actually read it; reconcile Vault AppRole + env-file perms). Track in
-# the Plan-11 mainnet pre-flight.
-# User=arcora-ops
-# Group=arcora-ops
+# AFG-021 sandboxing. MemoryDenyWriteExecute deliberately omitted (V8 JIT needs
+# W+X). tsx/esbuild needs a writable HOME + working dir (ReadWritePaths).
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/arcora-ops/relayer
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
 
 [Install]
 WantedBy=multi-user.target

@@ -2,6 +2,7 @@ import pg from "pg";
 import { createHmac, createDecipheriv } from "node:crypto";
 import dns from "node:dns/promises";
 import { buildOpsPoolConfig, describeDbTls, assertSecureDbTls } from "./db";
+import { assertAddressesPublic, postPinned } from "./ssrf";
 
 const PG_URL    = need("POSTGRES_URL_NON_POOLING");
 const MASTER_B64 = need("MASTER_KEY");
@@ -127,31 +128,11 @@ async function markFailed(id: string, attempts: number, lastError: string, statu
 // app-side validation: existing rows from before the validator landed,
 // direct DB edits, DNS rebinding between bootstrap and delivery time,
 // resolver reconfig, redirects.
-function isPrivateAddress(ip: string): boolean {
-  const v4 = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (v4) {
-    const a = Number(v4[1]);
-    const b = Number(v4[2]);
-    if (a === 0)   return true;
-    if (a === 10)  return true;
-    if (a === 127) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    if (a >= 224)  return true;
-    return false;
-  }
-  const v6 = ip.toLowerCase();
-  if (v6 === "::1" || v6 === "::") return true;
-  if (v6.startsWith("fe80:")) return true;
-  if (v6.startsWith("fc") || v6.startsWith("fd")) return true;
-  if (v6.startsWith("ff")) return true;
-  if (v6.startsWith("::ffff:")) {
-    return isPrivateAddress(v6.replace(/^::ffff:/, ""));
-  }
-  return false;
-}
+//
+// AFG-002 (2026-06-06): the hand-rolled IPv6 classifier that used to live here
+// missed hex v4-mapped / expanded / NAT64 / 6to4 forms. Classification now lives
+// in ./ssrf (ipaddr.js, normalize-then-deny) and is shared with the pinned
+// connect-time lookup.
 
 // Audit M7 (2026-05-06): dns.lookup has no native timeout. Wrap in a 3-second
 // race so a stalled resolver doesn't block the daemon loop indefinitely.
@@ -171,17 +152,18 @@ async function assertSafeAtDelivery(url: string): Promise<void> {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("unsupported_scheme");
   }
-  if (process.env.NODE_ENV === "production" && parsed.protocol !== "https:") {
+  // AFG-001: require HTTPS by default — only plain http when explicitly in
+  // development. Closes the gap where the checked-in service never set
+  // NODE_ENV=production, leaving the https-only branch off.
+  if (parsed.protocol !== "https:" && process.env.NODE_ENV !== "development") {
     throw new Error("https_required");
   }
   const records = await dnsLookupWithTimeout(parsed.hostname).catch((e: Error) => {
     throw new Error(e.message === "dns_timeout" ? "dns_timeout" : "dns_lookup_failed");
   });
-  for (const r of records) {
-    if (isPrivateAddress(r.address)) {
-      throw new Error(`private_address_blocked:${r.address}`);
-    }
-  }
+  // Early/friendly pre-check. The authoritative guard is the pinned lookup in
+  // postPinned, which binds the socket to a validated address (no rebinding).
+  assertAddressesPublic(records);
 }
 
 async function deliver(row: Row): Promise<{ ok: boolean; status: number; error?: string }> {
@@ -199,40 +181,29 @@ async function deliver(row: Row): Promise<{ ok: boolean; status: number; error?:
   const signature   = sign(body, secret);
   const signatureV2 = signV2(timestamp, body, secret);
 
-  // Manual redirect — a 3xx Location pointing at an internal IP would
-  // otherwise bypass the DNS guard. Treat any 3xx as a delivery failure
-  // and let the merchant fix their endpoint.
-  // Timeout via AbortSignal so a slow/hung peer doesn't pin a relayer
-  // tick forever.
+  // AFG-001: deliver over a connection PINNED to a pre-validated IP (postPinned
+  // uses a custom net lookup), so the address we vet is the address the socket
+  // uses — no second, unchecked DNS resolution (rebinding TOCTOU). Redirects are
+  // never followed by http(s).request, so a 3xx Location to an internal IP can't
+  // be chased; treat any 3xx as a delivery failure. The response body is
+  // destroyed unread (Ops-M1: no buffering of a hostile/large body).
   try {
-    const res = await fetch(row.url, {
-      method:   "POST",
-      headers:  {
-        "content-type":    "application/json",
-        [SIG_HEADER]:      signature,    // legacy — kept for back-compat
-        [TS_HEADER]:       timestamp,    // audit Ops-M2
-        [SIG_HEADER_V2]:   signatureV2,  // audit Ops-M2
+    const { status } = await postPinned(
+      row.url,
+      {
+        "content-type":  "application/json",
+        [SIG_HEADER]:    signature,    // legacy — kept for back-compat
+        [TS_HEADER]:     timestamp,    // audit Ops-M2
+        [SIG_HEADER_V2]: signatureV2,  // audit Ops-M2
       },
       body,
-      redirect: "manual",
-      signal:   AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
-    });
-    // Audit 2026-05-24 Ops-M1: cap response body buffering. We only read
-    // status + statusText; an unbounded body stream from a malicious or
-    // misbehaving merchant endpoint would otherwise be buffered into
-    // memory until DELIVERY_TIMEOUT_MS, and BATCH=50 concurrent deliveries
-    // can compound that into a VPS-wide memory spike. Cancel the body
-    // stream the moment we no longer need it.
-    try {
-      await res.body?.cancel();
-    } catch {
-      // Cancel is best-effort; some response shapes don't expose body
-      // (e.g. 204). Ignore — we've already extracted what we need.
+      DELIVERY_TIMEOUT_MS,
+    );
+    if (status >= 300 && status < 400) {
+      return { ok: false, status, error: "redirects_blocked" };
     }
-    if (res.status >= 300 && res.status < 400) {
-      return { ok: false, status: res.status, error: `redirects_blocked:${res.headers.get("location") ?? ""}` };
-    }
-    return { ok: res.ok, status: res.status, error: res.ok ? undefined : `${res.status} ${res.statusText}` };
+    const ok = status >= 200 && status < 300;
+    return { ok, status, error: ok ? undefined : `http_${status}` };
   } catch (e) {
     return { ok: false, status: 0, error: e instanceof Error ? e.message : "network" };
   }
@@ -250,7 +221,10 @@ async function tick(): Promise<{ scanned: number; delivered: number; failed: num
 }
 
 async function main() {
-  console.log(JSON.stringify({ msg: "webhooks.start", tickMs: TICK_MS, batch: BATCH }));
+  // AFG-001: surface the delivery TLS policy. https is enforced unless
+  // NODE_ENV=development; deliveries are pinned to a validated IP.
+  const httpsRequired = process.env.NODE_ENV !== "development";
+  console.log(JSON.stringify({ msg: "webhooks.start", tickMs: TICK_MS, batch: BATCH, httpsRequired }));
 
   // Audit Ops-L-1 (2026-05-24): finish the current tick (BATCH=50 deliveries
   // at most) before tearing the pool down so we don't abandon a partially-

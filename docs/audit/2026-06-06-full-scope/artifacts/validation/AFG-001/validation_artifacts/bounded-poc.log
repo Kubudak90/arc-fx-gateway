@@ -1,0 +1,3 @@
+{"safetyLookup":[{"address":"93.184.216.34","family":4}]}
+{"internalServerReached":true,"method":"POST","host":"afg001-rebind.invalid:49662","body":"{\"type\":\"invoice.paid\"}"}
+{"fetchStatus":204,"safetyLookups":1,"fetchLookups":1}

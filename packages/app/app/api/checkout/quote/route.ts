@@ -5,6 +5,7 @@ import { getThrowawayAdapter } from "@/lib/checkout/throwaway-adapter";
 import { quoteAmountIn } from "@/lib/checkout/quote-server";
 import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
+import { decimalAmount } from "@/lib/validation/amount";
 
 /**
  * Per-IP rate limit protecting the App Kit KIT_KEY quota. Each client IP may
@@ -52,8 +53,8 @@ function humanize(baseUnits: bigint, decimals: number): string {
 const Q = z.object({
   payInToken:   z.enum(["USDC", "EURC"]),
   payoutToken:  z.enum(["USDC", "EURC"]),
-  amountIn:     z.string().regex(/^\d+(\.\d+)?$/).optional(),
-  targetOutput: z.string().regex(/^\d+(\.\d+)?$/).optional(),
+  amountIn:     decimalAmount().optional(),   // AFG-009: length/precision capped before BigInt
+  targetOutput: decimalAmount().optional(),
   /** Slippage buffer added to the recommended payIn in targetOutput mode.
    *  Default 100 bps (1%) — stable→stable rates rarely move >1% within a
    *  signature TTL on Arc. Customer commits exactly the cushioned amount;

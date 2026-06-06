@@ -9,6 +9,7 @@ import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
 import { expectedWitnessHash, PERMIT2_WITNESS_TYPE_STRING } from "@/lib/checkout/witness";
 import { verifyPermit2Signature, ARC_TESTNET_CHAIN_ID } from "@/lib/checkout/permit2-verify";
+import { integerAmount } from "@/lib/validation/amount";
 
 // Audit H1 (2026-05-19): submit is one-shot per invoice; 10/60s never
 // bothers a real user while capping abuse. Fail-open on limiter outage.
@@ -57,7 +58,7 @@ const SubmitBody = z.object({
   invoiceId:        HEX32,
   payer:            ADDR,
   payInToken:       ADDR,
-  amountIn:         z.string().regex(/^\d+$/, "amountIn must be a base-units integer string"),
+  amountIn:         integerAmount("amountIn must be a base-units integer string"), // AFG-009: length-capped
   permit2Data: z.object({
     nonce:             z.string().regex(/^\d+$/),
     deadline:          z.string().regex(/^\d+$/),

@@ -90,6 +90,24 @@ describe("PATCH /api/merchant/origins", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects a cross-site Origin with 403 (AFG-006 CSRF)", async () => {
+    const prev = process.env.PUBLIC_BASE_URL;
+    process.env.PUBLIC_BASE_URL = "https://app.arcorapay.xyz";
+    try {
+      const req = new NextRequest("http://localhost/api/merchant/origins", {
+        method: "PATCH",
+        headers: { origin: "https://evil.example.com" },
+        body: JSON.stringify({ allowedOrigins: ["https://shop.example.com"] }),
+      });
+      const res = await PATCH(req);
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toBe("csrf");
+    } finally {
+      if (prev === undefined) delete process.env.PUBLIC_BASE_URL;
+      else process.env.PUBLIC_BASE_URL = prev;
+    }
+  });
+
   it("case 5: valid https origins but returning [] (merchant row gone) → 404 { error: 'no_merchant' }", async () => {
     const dbm = await import("@/lib/db/client");
     const returningSpyFn = vi.fn().mockResolvedValue([]);

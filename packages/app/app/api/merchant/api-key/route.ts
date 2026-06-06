@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateApiKey, hashApiKey, PREFIX_LEN } from "@/lib/auth/apikey";
+import { isSameOrigin } from "@/lib/security/csrf";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  // AFG-006 (2026-06-06): same Origin/Referer CSRF guard the webhook route uses.
+  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
   const session = await getSession();
   if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

@@ -96,6 +96,24 @@ describe("POST /api/merchant/bootstrap allowed_origins", () => {
     ]);
   });
 
+  it("rejects a cross-site Origin with 403 (AFG-006 CSRF)", async () => {
+    const prev = process.env.PUBLIC_BASE_URL;
+    process.env.PUBLIC_BASE_URL = "https://app.arcorapay.xyz";
+    try {
+      const req = new Request("http://localhost/api/merchant/bootstrap", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://evil.example.com" },
+        body: JSON.stringify({ payoutToken: VALID_PAYOUT_TOKEN, allowedOrigins: ["https://shop.example.com"] }),
+      }) as any;
+      const res = await POST(req);
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toBe("csrf");
+    } finally {
+      if (prev === undefined) delete process.env.PUBLIC_BASE_URL;
+      else process.env.PUBLIC_BASE_URL = prev;
+    }
+  });
+
   it("generates and returns a publishable key alongside the secret key (AFG-019)", async () => {
     const dbm = await import("@/lib/db/client");
     const res = await POST(makeReq({

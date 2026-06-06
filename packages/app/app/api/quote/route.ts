@@ -4,6 +4,7 @@ import { POOL_ABI } from "@/lib/chain/pool-abi";
 import { publicClient, POOL } from "@/lib/chain/client";
 import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
+import { integerAmount } from "@/lib/validation/amount";
 
 /**
  * v0.6 quote endpoint. Reads our own on-chain pool (calculateSwap).
@@ -30,9 +31,11 @@ const MAX_QUOTE_IN = 10n ** 18n;
 const Q = z.object({
   from: z.enum(["USDC", "EURC"]),
   to: z.enum(["USDC", "EURC"]),
-  amountIn: z.coerce.bigint().refine((v) => v > 0n && v <= MAX_QUOTE_IN, {
-    message: "amountIn out of range",
-  }),
+  // AFG-009: validate (length-capped) string BEFORE BigInt, then transform —
+  // z.coerce.bigint() would BigInt() an unbounded string during coercion.
+  amountIn: integerAmount("amountIn out of range")
+    .transform((s) => BigInt(s))
+    .refine((v) => v > 0n && v <= MAX_QUOTE_IN, { message: "amountIn out of range" }),
 });
 
 const TOKEN_INDEX = { USDC: 0, EURC: 1 } as const;

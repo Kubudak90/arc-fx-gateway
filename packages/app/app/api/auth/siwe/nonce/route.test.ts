@@ -94,4 +94,21 @@ describe("POST /api/auth/siwe/nonce — rate limit (M9)", () => {
     expect(res.status).toBe(200);
     expect(counts.get("siwe-nonce:198.51.100.10")).toBe(1);
   });
+
+  it("rejects a cross-site Origin with 403 before rate-limiting (AFG-006 login-CSRF)", async () => {
+    const prev = process.env.PUBLIC_BASE_URL;
+    process.env.PUBLIC_BASE_URL = "https://app.arcorapay.xyz";
+    try {
+      const req = new Request("http://localhost/api/auth/siwe/nonce", {
+        method: "POST",
+        headers: { origin: "https://evil.example.com", "x-forwarded-for": "9.9.9.9" },
+      });
+      const res = await POST(req as never);
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toBe("csrf");
+    } finally {
+      if (prev === undefined) delete process.env.PUBLIC_BASE_URL;
+      else process.env.PUBLIC_BASE_URL = prev;
+    }
+  });
 });

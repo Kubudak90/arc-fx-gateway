@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateNonce } from "@/lib/auth/siwe";
 import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
+import { isSameOrigin } from "@/lib/security/csrf";
 
 /**
  * SIWE nonce issuance. Per-IP rate-limited (10/60s) so a malicious caller
@@ -17,6 +18,9 @@ const NONCE_LIMIT_PER_WINDOW = 10;
 const NONCE_WINDOW_SECONDS = 60;
 
 export async function POST(req: NextRequest) {
+  // AFG-006 (2026-06-07): pair the verify-route login-CSRF guard so the whole
+  // SIWE handshake is same-origin only (dashboard-driven). Lenient outside prod.
+  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
   const ip = clientIp(req);
   let allowed = true;
   try {

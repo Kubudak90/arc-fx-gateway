@@ -7,6 +7,7 @@ import { db } from "@/lib/db/client";
 import { merchants } from "@/lib/db/schema";
 import { publicClient, GATEWAY_ADDRESS } from "@/lib/chain/client";
 import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
+import { isSameOrigin } from "@/lib/security/csrf";
 
 const Body = z.object({
   payoutToken: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
@@ -27,6 +28,9 @@ const Body = z.object({
  * new token.
  */
 export async function POST(req: NextRequest) {
+  // AFG-006 (2026-06-07): same Origin/Referer CSRF guard the sibling
+  // state-changing merchant routes (api-key, origins, bootstrap, webhook) carry.
+  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
   const session = await getSession();
   if (!session.merchantAddress) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

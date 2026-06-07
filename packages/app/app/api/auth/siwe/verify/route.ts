@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySiweMessage } from "@/lib/auth/siwe";
 import { getSession } from "@/lib/auth/session";
+import { isSameOrigin } from "@/lib/security/csrf";
 import { z } from "zod";
 
 const Body = z.object({ message: z.string(), signature: z.string() });
 
 export async function POST(req: NextRequest) {
+  // AFG-006 (2026-06-07): login-CSRF guard. This POST establishes the session
+  // (sets session.merchantAddress), so a cross-site forge could fixate a
+  // victim's browser into the attacker's merchant session. Same guard as logout.
+  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: "bad_body" }, { status: 400 });
   try {

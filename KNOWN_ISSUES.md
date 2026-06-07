@@ -25,7 +25,7 @@ If you hit something that **isn't** listed here, that's a bug — please report 
 
 ## Refunds & webhooks
 
-- **Refunds need the merchant to re-approve the gateway.** The refund flow pulls the merchant's payout-token funds back to send to the customer — the gateway needs an ERC-20 allowance from the merchant's wallet first. The dashboard's refund button handles the prompt automatically, but expect a wallet popup.
+- **Refunds need no merchant approval.** The custody-escrow gateway holds each invoice's payout inside the contract until the 7-day window matures. During that window `refundInvoice(globalId)` drains the escrow straight back to the customer (`ArcFXGateway.sol`) — no ERC-20 allowance and no wallet popup from the merchant. (This replaced the older pull-from-merchant-wallet refund model; the dashboard button is a single `refundInvoice` call.)
 - **Webhooks retry 5× over 30 minutes, then stop.** If your webhook endpoint is down longer than that, fetch missed events via the API. Long-term retry policy is on the v1.x list.
 
 ## Operational caveats
@@ -37,8 +37,8 @@ If you hit something that **isn't** listed here, that's a bug — please report 
 
 | Surface | Status |
 |---|---|
-| Gateway `ArcFXGatewayV8` | live, canonical |
-| Gateway v0.6 / v0.7 | deprecated, moved to `packages/contracts/legacy/` |
+| Gateway `ArcFXGateway` (version-neutral) | live, canonical — `packages/contracts/src/ArcFXGateway.sol` |
+| Pre-retirement deploys (≤ v1.1) | retired 2026-05-20 (testnet wiped); kept in git history only, no `legacy/` dir |
 | `@arcora/sdk` + `@arcora/sdk-react` | published 1.0.0 on npm |
 | Compliance hooks | Phase 0 LIVE (Noop default) — Plan 5 |
 | Audit prep | Layers 1+2 LIVE (zero-budget path) — Plan 7 |

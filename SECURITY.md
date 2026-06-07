@@ -23,14 +23,14 @@ Please do **not** open a public GitHub issue or social-media post until we've ha
 
 ## Scope
 
-The canonical, in-audit-scope on-chain surface is `packages/contracts/src/ArcFXGatewayV8.sol` and the OpenZeppelin libraries it imports.
+The canonical, in-audit-scope on-chain surface is `packages/contracts/src/ArcFXGateway.sol` (the version-neutral custody-escrow gateway) and the OpenZeppelin libraries it imports.
 
-Off-chain components (Vercel app, Neon DB, VPS relayer, hosted checkout, dashboard, SDK) are also in scope for security reports; severity is graded on real-world impact, not contract LOC.
+Off-chain components (Vercel app, Supabase Postgres, VPS relayer/indexer/webhooks, hosted checkout, dashboard, SDK) are also in scope for security reports; severity is graded on real-world impact, not contract LOC.
 
 Out of scope:
 
-- `packages/contracts/legacy/*` — deprecated v0.6 / v0.7 contracts; not deployed in canonical traffic.
-- Third-party services we depend on (Circle USDC/EURC, Permit2, App Kit Swap, Vercel, Neon). Report those upstream.
+- Pre-retirement gateway deployments (≤ v1.1) — retired 2026-05-20, not deployed in canonical traffic and kept in git history only.
+- Third-party services we depend on (Circle USDC/EURC, Permit2, App Kit Swap, Vercel, Supabase). Report those upstream.
 - Social engineering against Arcora team or merchants.
 - Best-practice findings without a concrete attack scenario (style, gas micro-optimisations, "could be more efficient").
 

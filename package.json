@@ -12,7 +12,9 @@
     "deploy:app": "cd packages/app && vercel --prod --yes",
     "deploy:demo": "cd packages/demo-merchant && vercel --prod --yes",
     "pitch:pdf": "marp --allow-local-files docs/PITCH.md -o docs/arcora-pitch.pdf",
-    "pitch:html": "marp --allow-local-files docs/PITCH.md -o docs/arcora-pitch.html"
+    "pitch:html": "marp --allow-local-files docs/PITCH.md -o docs/arcora-pitch.html",
+    "test:crosschain": "pnpm --filter @arcora/crosschain-core test",
+    "typecheck:crosschain": "pnpm --filter @arcora/crosschain-core typecheck"
   },
   "devDependencies": {
     "@marp-team/marp-cli": "^4.3.1"

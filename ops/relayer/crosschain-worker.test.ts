@@ -17,6 +17,7 @@ const baseRow: CrosschainPaymentRow = {
   amount_out_min: "5000000",
   status: "bridge_pending",
   burn_tx_hash: "0x" + "b".repeat(64),
+  burn_submitted_at: null,
   cctp_message: null,
   cctp_attestation: null,
   bridge_receive_tx_hash: null,
@@ -100,11 +101,40 @@ describe("processCrosschainPayment", () => {
 
     expect(d.receiveMessage).not.toHaveBeenCalled();
     expect(d.mark).toHaveBeenCalledTimes(1);
-    expect(d.mark).toHaveBeenCalledWith(baseRow.id, expect.objectContaining({ status: "bridge_pending" }));
+    expect(d.mark).toHaveBeenCalledWith(baseRow.id, expect.objectContaining({
+      status: "bridge_pending",
+      attempts: 0, // polling is waiting, not failing — never burns retry budget
+    }));
     const values = vi.mocked(d.mark).mock.calls[0]![1] as { next_attempt: Date };
     expect(values.next_attempt).toBeInstanceOf(Date);
     expect(values.next_attempt.getTime()).toBeGreaterThan(before);
     expect(d.fail).not.toHaveBeenCalled();
+  });
+
+  it("fails terminally when the attestation is still missing past the wall-clock deadline", async () => {
+    const d = deps();
+    vi.mocked(d.fetchAttestation).mockResolvedValue(null);
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+
+    await processCrosschainPayment({ ...baseRow, burn_submitted_at: threeHoursAgo }, d);
+
+    expect(d.fail).toHaveBeenCalledWith(baseRow.id, "bridge_failed", "attestation_deadline_exceeded");
+    expect(d.mark).not.toHaveBeenCalled();
+    expect(d.receiveMessage).not.toHaveBeenCalled();
+  });
+
+  it("processes normally past the deadline when the attestation IS available (deadline only applies while waiting)", async () => {
+    const d = deps();
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+
+    await processCrosschainPayment({ ...baseRow, burn_submitted_at: threeHoursAgo }, d);
+
+    expect(d.fail).not.toHaveBeenCalled();
+    expect(d.receiveMessage).toHaveBeenCalled();
+    expect(d.settleOnArc).toHaveBeenCalledWith(expect.objectContaining({
+      grossPayout: 5_000_000n,
+    }));
+    expect(d.mark).toHaveBeenCalledWith(baseRow.id, expect.objectContaining({ status: "paid" }));
   });
 
   it("fails with settle_failed when settleOnArc throws", async () => {

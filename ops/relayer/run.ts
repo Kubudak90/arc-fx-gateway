@@ -80,6 +80,10 @@ const CCTP_IRIS_API_URL = CROSSCHAIN_ENABLED ? need("CCTP_IRIS_API_URL") : "";
 const CROSSCHAIN_MAX_ATTEMPTS  = Number(process.env.CROSSCHAIN_MAX_ATTEMPTS ?? "12");
 const CROSSCHAIN_RETRY_BASE_MS = Number(process.env.CROSSCHAIN_RETRY_BASE_MS ?? "15000");
 const CROSSCHAIN_RETRY_MAX_MS  = Number(process.env.CROSSCHAIN_RETRY_MAX_MS ?? "900000");
+// Wall-clock bound on attestation polling (measured from burn_submitted_at):
+// past this, a still-missing IRIS attestation goes terminal bridge_failed
+// instead of polling forever. Default 2 hours.
+const CROSSCHAIN_ATTESTATION_DEADLINE_MS = Number(process.env.CROSSCHAIN_ATTESTATION_DEADLINE_MS ?? "7200000");
 
 function need(k: string): string {
   const v = process.env[k];
@@ -870,17 +874,22 @@ async function claimNextCrosschain(): Promise<CrosschainPaymentRow | null> {
 // from these literal names; keys arriving in `values` that aren't listed
 // throw instead of being interpolated into SQL.
 const CROSSCHAIN_MARK_COLUMNS: ReadonlySet<string> = new Set([
-  "status", "next_attempt", "updated_at",
+  "status", "next_attempt", "updated_at", "attempts",
   "cctp_message", "cctp_attestation",
   "bridge_receive_tx_hash", "bridge_amount_received", "bridge_confirmed_at",
   "arc_swap_tx_hash", "arc_swap_amount_out",
   "settle_tx_hash", "refund_tx_hash", "last_error",
 ]);
 
-/** Parameterized UPDATE of crosschain_payments. Every transition also
- *  releases the lease so the row is reclaimable the moment its
- *  next_attempt allows. */
-async function markCrosschain(id: string, values: Record<string, unknown>): Promise<void> {
+/** Parameterized UPDATE of crosschain_payments. Transitions release the
+ *  lease by default so the row is reclaimable the moment its next_attempt
+ *  allows; mid-flight persists (broadcast-hash checkpoints before a receipt
+ *  wait) pass `releaseLease: false` to keep the claim held. */
+async function markCrosschain(
+  id: string,
+  values: Record<string, unknown>,
+  opts?: { releaseLease?: boolean },
+): Promise<void> {
   const keys = Object.keys(values);
   for (const k of keys) {
     if (!CROSSCHAIN_MARK_COLUMNS.has(k)) {
@@ -888,7 +897,9 @@ async function markCrosschain(id: string, values: Record<string, unknown>): Prom
     }
   }
   const sets = keys.map((k, i) => `${k} = $${i + 2}`);
-  sets.push("lease_owner = null", "lease_expires_at = null");
+  if (opts?.releaseLease !== false) {
+    sets.push("lease_owner = null", "lease_expires_at = null");
+  }
   if (!keys.includes("updated_at")) sets.push("updated_at = now()");
   await pool.query(
     `update crosschain_payments set ${sets.join(", ")} where id = $1`,
@@ -1037,8 +1048,11 @@ async function settleCrosschainOnArc(args: {
   // daemon default, still passed through the AFG-010 allowlist assertion.
   const targetGateway = resolveGateway(null, GATEWAY, GATEWAY_ALLOWLIST);
 
-  // Approve is idempotent (same allowance value on re-issue) — no
-  // checkpoint needed before its receipt wait.
+  // Approve the gateway to pull `payout_token` (what settleInvoice transfers
+  // to the merchant). Note the distinction: `destination_token` is what CCTP
+  // minted on Arc (and was swapped FROM when the two differ) — the gateway
+  // never pulls it. Approve is idempotent (same allowance value on
+  // re-issue) — no checkpoint needed before its receipt wait.
   const approveTx = await wallet.writeContract({
     chain: undefined,
     address: row.payout_token as Address,
@@ -1048,24 +1062,38 @@ async function settleCrosschainOnArc(args: {
   });
   await chain.waitForTransactionReceipt({ hash: approveTx, timeout: RECEIPT_TIMEOUT_MS });
 
-  const tx = await wallet.writeContract({
-    chain: undefined,
-    address: targetGateway,
-    abi: GATEWAY_ABI,
-    functionName: "settleInvoice",
-    args: buildSettleArgs({
-      invoiceId: row.invoice_id,
-      payer: row.payer,
-      payInToken: row.destination_token,
-      amountIn: BigInt(row.bridge_amount_received),
-      grossPayout,
-      swapTxHash,
-    }),
-  });
-  // Persist-before-wait, then let the worker stamp status='paid'.
-  await markCrosschain(row.id, { settle_tx_hash: tx });
-  await chain.waitForTransactionReceipt({ hash: tx, timeout: RECEIPT_TIMEOUT_MS });
-  return tx;
+  try {
+    const tx = await wallet.writeContract({
+      chain: undefined,
+      address: targetGateway,
+      abi: GATEWAY_ABI,
+      functionName: "settleInvoice",
+      args: buildSettleArgs({
+        invoiceId: row.invoice_id,
+        payer: row.payer,
+        payInToken: row.destination_token,
+        amountIn: BigInt(row.bridge_amount_received),
+        grossPayout,
+        swapTxHash,
+      }),
+    });
+    // Persist-before-wait (lease kept — the receipt wait is still in
+    // flight), then let the worker stamp status='paid'.
+    await markCrosschain(row.id, { settle_tx_hash: tx }, { releaseLease: false });
+    await chain.waitForTransactionReceipt({ hash: tx, timeout: RECEIPT_TIMEOUT_MS });
+    return tx;
+  } catch (e) {
+    // Best-effort allowance cleanup: a stranded non-zero allowance against
+    // the gateway outlives terminal failures otherwise.
+    await wallet.writeContract({
+      chain: undefined,
+      address: row.payout_token as Address,
+      abi: ERC20,
+      functionName: "approve",
+      args: [targetGateway, 0n],
+    }).catch(() => {});
+    throw e;
+  }
 }
 
 /** Refund the bridged Arc USDC to the payer (shortfall before any swap).
@@ -1096,7 +1124,8 @@ async function refundCrosschainOnArc(args: {
     functionName: "transfer",
     args: [row.payer as Address, amount],
   });
-  await markCrosschain(row.id, { refund_tx_hash: txHash });
+  // Persist-before-wait (lease kept — the receipt wait is still in flight).
+  await markCrosschain(row.id, { refund_tx_hash: txHash }, { releaseLease: false });
   const receipt = await chain.waitForTransactionReceipt({ hash: txHash, timeout: RECEIPT_TIMEOUT_MS });
   if (receipt.status !== "success") throw new Error("crosschain_refund_reverted");
   return txHash;
@@ -1138,16 +1167,19 @@ async function processCrosschainRow(row: CrosschainPaymentRow): Promise<void> {
     fail: async (id, status, error) => {
       log("error", {
         msg: "crosschain.fail",
-        failureState: status,
+        // Status the row WOULD get if this attempt is the terminal one;
+        // below the cap failCrosschain keeps the processable status.
+        wouldBeTerminalStatus: status,
         terminal: row.attempts >= CROSSCHAIN_MAX_ATTEMPTS,
         err: crosschainErrorCode(error),
       });
       await failCrosschain(row, status, error);
     },
+    attestationDeadlineMs: CROSSCHAIN_ATTESTATION_DEADLINE_MS,
   };
 
-  await processCrosschainPayment(row, deps);
-  log("info", { msg: "crosschain.processed" });
+  const disposition = await processCrosschainPayment(row, deps);
+  log("info", { msg: "crosschain.processed", disposition });
 }
 
 async function main() {

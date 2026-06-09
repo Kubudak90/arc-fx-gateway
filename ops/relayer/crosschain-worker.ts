@@ -24,6 +24,18 @@ import type { CrosschainPaymentRow, CrosschainWorkerDeps } from "./crosschain-ty
 
 const ZERO_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
 
+/** Default wall-clock bound on attestation polling: 2 hours. */
+const DEFAULT_ATTESTATION_DEADLINE_MS = 7_200_000;
+
+/** How a claimed row left the state machine — surfaced to the caller for
+ *  structured logging. */
+export type CrosschainDisposition =
+  | "waiting_attestation"
+  | "refunded"
+  | "paid"
+  | "failed"
+  | "shortfall_failed";
+
 function payoutIsBridgedUsdc(row: CrosschainPaymentRow): boolean {
   return row.payout_token.toLowerCase() === row.destination_token.toLowerCase();
 }
@@ -31,7 +43,7 @@ function payoutIsBridgedUsdc(row: CrosschainPaymentRow): boolean {
 export async function processCrosschainPayment(
   row: CrosschainPaymentRow,
   deps: CrosschainWorkerDeps,
-): Promise<void> {
+): Promise<CrosschainDisposition> {
   let failureState: CrosschainState = "bridge_failed";
   try {
     let bridgeTx = row.bridge_receive_tx_hash as Hex | null;
@@ -44,14 +56,29 @@ export async function processCrosschainPayment(
         : await deps.fetchAttestation(row);
 
       if (!att) {
+        // Wall-clock bound: a burn that has gone this long without an IRIS
+        // attestation is not going to get one — go terminal instead of
+        // polling forever. Only applies while waiting (an attestation that
+        // does arrive after the deadline still processes normally).
+        const deadlineMs = deps.attestationDeadlineMs ?? DEFAULT_ATTESTATION_DEADLINE_MS;
+        if (
+          row.burn_submitted_at != null
+          && Date.now() - new Date(row.burn_submitted_at).getTime() > deadlineMs
+        ) {
+          await deps.fail(row.id, "bridge_failed", "attestation_deadline_exceeded");
+          return "failed";
+        }
         // Attestation not ready yet — IRIS typically takes a few blocks.
-        // Keep the row claimable and come back shortly.
+        // Keep the row claimable and come back shortly. attempts resets to 0
+        // because poll loops are waiting, not failing — they must not consume
+        // the retry budget (the wall-clock deadline above bounds the wait).
         await deps.mark(row.id, {
           status: "bridge_pending",
+          attempts: 0,
           next_attempt: new Date(Date.now() + 15_000),
           updated_at: new Date(),
         });
-        return;
+        return "waiting_attestation";
       }
 
       await deps.mark(row.id, {
@@ -68,10 +95,12 @@ export async function processCrosschainPayment(
         // (CCTP replay protection would revert the duplicate anyway, but
         // the original mint amount would be unrecoverable from here).
         bridgeTx = txHash;
+        // Mid-flight persist: keep the lease so the row isn't reclaimable
+        // while the receipt wait is still in progress.
         await deps.mark(row.id, {
           bridge_receive_tx_hash: txHash,
           updated_at: new Date(),
-        });
+        }, { releaseLease: false });
       });
       bridgeTx = received.txHash;
       bridgeAmountReceived = received.amountReceived;
@@ -126,12 +155,12 @@ export async function processCrosschainPayment(
           last_error: `payout shortfall: ${grossPayout} < ${row.amount_out_min}`,
           updated_at: new Date(),
         });
-        return;
+        return "refunded";
       }
       // Post-swap shortfall: the relayer now holds payout token, not the
       // payer's bridged USDC — never auto-refund here. Operator path.
       await deps.fail(row.id, "arc_swap_failed", `payout shortfall: ${grossPayout} < ${row.amount_out_min}`);
-      return;
+      return "shortfall_failed";
     }
 
     failureState = "settle_failed";
@@ -141,8 +170,10 @@ export async function processCrosschainPayment(
       status: "paid",
       updated_at: new Date(),
     });
+    return "paid";
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     await deps.fail(row.id, failureState, error);
+    return "failed";
   }
 }

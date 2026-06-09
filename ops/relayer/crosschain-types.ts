@@ -16,6 +16,10 @@ export interface CrosschainPaymentRow {
   amount_out_min: string;
   status: CrosschainState;
   burn_tx_hash: string | null;
+  /** When the source-chain burn was submitted. claimNextCrosschain does
+   *  `returning *` so the column arrives on claimed rows (pg returns Date).
+   *  The worker uses it as the wall-clock bound on attestation polling. */
+  burn_submitted_at: Date | string | null;
   cctp_message: string | null;
   cctp_attestation: string | null;
   bridge_receive_tx_hash: string | null;
@@ -49,6 +53,13 @@ export interface CrosschainWorkerDeps {
     token: string;
     amount: bigint;
   }): Promise<Hex>;
-  mark(id: string, values: Record<string, unknown>): Promise<void>;
+  /** Persist a partial row update. `releaseLease: false` keeps the claim
+   *  lease held — used for mid-flight persists (broadcast-hash checkpoints)
+   *  so the row isn't reclaimable while a receipt wait is in progress.
+   *  Defaults to releasing the lease (terminal/scheduling transitions). */
+  mark(id: string, values: Record<string, unknown>, opts?: { releaseLease?: boolean }): Promise<void>;
   fail(id: string, status: CrosschainState, error: string): Promise<void>;
+  /** Wall-clock bound on attestation polling, measured from
+   *  burn_submitted_at. Defaults to 2 hours (7_200_000 ms) when absent. */
+  attestationDeadlineMs?: number;
 }

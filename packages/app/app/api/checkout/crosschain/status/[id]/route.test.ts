@@ -8,10 +8,6 @@ const limitFn = vi.fn(async () => [
     id: INTENT_ID,
     invoiceId: "0x" + "1".repeat(64),
     status: "bridge_pending",
-    sourceChainId: 84532,
-    burnTxHash: "0x" + "b".repeat(64),
-    bridgeReceiveTxHash: null,
-    arcSwapTxHash: null,
     settleTxHash: null,
     lastError: null,
     updatedAt: new Date("2026-06-08T12:00:00Z"),
@@ -35,16 +31,52 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 describe("GET /api/checkout/crosschain/status/[id]", () => {
-  it("returns cross-chain payment status", async () => {
+  it("returns minimal crosschain payment status (pins full body contract)", async () => {
     const res = await GET(new Request("https://arcorapay.xyz") as any, {
       params: Promise.resolve({ id: INTENT_ID }),
     });
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.status).toBe("bridge_pending");
-    expect(body.burnTxHash).toMatch(/^0x/);
     expect(res.headers.get("cache-control")).toBe("no-store");
+    // Pin the full response contract — proves absence of burnTxHash / sourceChainId / etc.
+    expect(body).toEqual({
+      intentId: INTENT_ID,
+      invoiceId: "0x" + "1".repeat(64),
+      status: "bridge_pending",
+      settleTxHash: null,
+      error: null,
+      updatedAt: "2026-06-08T12:00:00.000Z",
+    });
+  });
+
+  it("returns settleTxHash when status is paid", async () => {
+    const PAID_ID = "44444444-4444-4444-8444-444444444444";
+    const SETTLE_HASH = "0x" + "e".repeat(64);
+
+    limitFn.mockResolvedValueOnce([
+      {
+        id: PAID_ID,
+        invoiceId: "0x" + "4".repeat(64),
+        status: "paid",
+        settleTxHash: SETTLE_HASH,
+        lastError: null,
+        updatedAt: new Date("2026-06-08T15:00:00Z"),
+      },
+    ]);
+
+    const res = await GET(new Request("https://arcorapay.xyz") as any, {
+      params: Promise.resolve({ id: PAID_ID }),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.settleTxHash).toBe(SETTLE_HASH);
+    // Wallet-linking fields must not be present
+    expect(body).not.toHaveProperty("burnTxHash");
+    expect(body).not.toHaveProperty("bridgeReceiveTxHash");
+    expect(body).not.toHaveProperty("arcSwapTxHash");
+    expect(body).not.toHaveProperty("sourceChainId");
   });
 
   it("returns 404 for an unknown intent id", async () => {
@@ -79,10 +111,6 @@ describe("GET /api/checkout/crosschain/status/[id]", () => {
         id: "22222222-2222-4222-8222-222222222222",
         invoiceId: "0x" + "2".repeat(64),
         status: "bridge_failed",
-        sourceChainId: 84532,
-        burnTxHash: "0x" + "c".repeat(64),
-        bridgeReceiveTxHash: null,
-        arcSwapTxHash: null,
         settleTxHash: null,
         lastError: "CCTP_ATTESTATION_TIMEOUT",
         updatedAt: new Date("2026-06-08T13:00:00Z"),
@@ -104,10 +132,6 @@ describe("GET /api/checkout/crosschain/status/[id]", () => {
         id: "33333333-3333-4333-8333-333333333333",
         invoiceId: "0x" + "3".repeat(64),
         status: "bridge_pending",
-        sourceChainId: 84532,
-        burnTxHash: "0x" + "d".repeat(64),
-        bridgeReceiveTxHash: null,
-        arcSwapTxHash: null,
         settleTxHash: null,
         lastError: "transient_rpc_error",
         updatedAt: new Date("2026-06-08T14:00:00Z"),

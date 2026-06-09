@@ -30,15 +30,15 @@ export async function GET(
     return NextResponse.json({ error: "not_found" }, { status: 404, headers: NO_STORE });
   }
 
+  // Security trim (M12 parity): anonymous callers only get the fields the
+  // checkout UI needs — status for polling, settleTxHash on success, error
+  // code on failure. burnTxHash / bridgeReceiveTxHash / arcSwapTxHash / sourceChainId
+  // link the invoice to customer wallet activity and must not be exposed here.
   const row = (await db
     .select({
       id: crosschainPayments.id,
       invoiceId: crosschainPayments.invoiceId,
       status: crosschainPayments.status,
-      sourceChainId: crosschainPayments.sourceChainId,
-      burnTxHash: crosschainPayments.burnTxHash,
-      bridgeReceiveTxHash: crosschainPayments.bridgeReceiveTxHash,
-      arcSwapTxHash: crosschainPayments.arcSwapTxHash,
       settleTxHash: crosschainPayments.settleTxHash,
       lastError: crosschainPayments.lastError,
       updatedAt: crosschainPayments.updatedAt,
@@ -56,11 +56,7 @@ export async function GET(
       intentId: row.id,
       invoiceId: row.invoiceId,
       status: row.status,
-      sourceChainId: row.sourceChainId,
-      burnTxHash: row.burnTxHash,
-      bridgeReceiveTxHash: row.bridgeReceiveTxHash,
-      arcSwapTxHash: row.arcSwapTxHash,
-      settleTxHash: row.settleTxHash,
+      settleTxHash: row.status === "paid" ? row.settleTxHash : null,
       // Only expose lastError on terminal failure states. See FORWARD CONTRACT
       // above — the worker must write only stable error codes here.
       error: FAILED_STATES.has(row.status) ? row.lastError : null,

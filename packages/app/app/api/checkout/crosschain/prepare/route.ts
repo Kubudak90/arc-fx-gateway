@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Address } from "viem";
 import { chainById, parseChainRegistryJson } from "@arcora/crosschain-core";
 import { db } from "@/lib/db/client";
@@ -64,12 +64,12 @@ export async function POST(req: NextRequest) {
     context: { flow: "customer_pay", invoiceId },
   });
   if (screen.decision !== "allow") {
-    await recordCheckoutEvent({
+    recordCheckoutEvent({
       invoiceId,
       eventType: "crosschain_prepare_blocked",
       sourceChainId,
       errorCode: screen.decision,
-    });
+    }).catch((err) => console.error("crosschain_prepare telemetry write failed", err));
     return NextResponse.json({
       decision: screen.decision,
       ticketId: screen.ticketId,
@@ -111,12 +111,24 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const error = /source chain disabled/.test(msg) ? "source_chain_disabled" : "route_unavailable";
-    return NextResponse.json({ error, detail: msg }, { status: 400 });
+    if (/source chain disabled/.test(msg)) {
+      return NextResponse.json({ error: "source_chain_disabled", detail: msg }, { status: 400 });
+    }
+    // Config-class failures (missing env, unconfigured services, App Kit key)
+    // are server-side problems, not bad client input: surface them as 503 so
+    // monitoring and clients treat them as outages rather than rejections.
+    const status = /missing|unconfigured|KIT_KEY/.test(msg) ? 503 : 400;
+    return NextResponse.json({ error: "route_unavailable", detail: msg }, { status });
   }
 
-  const inserted = await db.insert(crosschainPayments).values({
-    invoiceId,
+  // Re-prepare policy: an `authorized` intent is just a stored quote/route —
+  // no on-chain value has moved yet — so it is freely replaceable. The payer
+  // field is unauthenticated (anonymous checkout), so anyone can pre-create an
+  // intent; refusing to re-prepare would let an attacker lock an invoice.
+  // Re-prepare (chain switch, payer switch, idempotent retry) overwrites the
+  // existing row in place. Once a burn has been submitted (status past
+  // "authorized") the row is immutable from this endpoint.
+  const computedFields = {
     idempotencyKey: intent.idempotencyKey,
     payer: payer.toLowerCase(),
     sourceChainId,
@@ -130,20 +142,60 @@ export async function POST(req: NextRequest) {
     payoutToken: inv.payoutToken.toLowerCase(),
     amountOutMin: inv.amountOut,
     routeVersion: intent.routeVersion,
-    status: "authorized",
-  }).onConflictDoUpdate({
-    target: crosschainPayments.idempotencyKey,
-    set: { updatedAt: new Date() },
-  }).returning({ id: crosschainPayments.id });
+    status: "authorized" as const,
+  };
 
-  const intentId = inserted[0]!.id;
-  await recordCheckoutEvent({
+  let intentId: string;
+  let httpStatus = 201;
+  try {
+    const existing = (await db.select().from(crosschainPayments)
+      .where(eq(crosschainPayments.invoiceId, invoiceId)).limit(1))[0];
+
+    if (existing) {
+      if (existing.status !== "authorized") {
+        return NextResponse.json({ error: "invoice_already_in_progress" }, { status: 409 });
+      }
+      const updated = await db.update(crosschainPayments)
+        .set({ ...computedFields, updatedAt: new Date() })
+        // status guard: don't clobber a row the bridge worker advanced
+        // between our select and this update.
+        .where(and(eq(crosschainPayments.id, existing.id), eq(crosschainPayments.status, "authorized")))
+        .returning({ id: crosschainPayments.id });
+      if (!updated[0]) {
+        return NextResponse.json({ error: "invoice_already_in_progress" }, { status: 409 });
+      }
+      intentId = updated[0].id;
+      httpStatus = 200;
+    } else {
+      const inserted = await db.insert(crosschainPayments).values({
+        invoiceId,
+        ...computedFields,
+      }).onConflictDoUpdate({
+        // Race backstop: if a concurrent prepare with the same idempotency key
+        // landed first, refresh the row so the response matches the store.
+        target: crosschainPayments.idempotencyKey,
+        set: { ...computedFields, updatedAt: new Date() },
+      }).returning({ id: crosschainPayments.id });
+      intentId = inserted[0]!.id;
+    }
+  } catch (e) {
+    // A raced concurrent prepare with a different idempotency key can still
+    // trip the invoice_id unique constraint. Drizzle may wrap the pg error,
+    // so check both the error itself and its cause.
+    const code = (e as any)?.code ?? (e as any)?.cause?.code;
+    if (code === "23505") {
+      return NextResponse.json({ error: "invoice_already_prepared" }, { status: 409 });
+    }
+    throw e;
+  }
+
+  recordCheckoutEvent({
     invoiceId,
     crosschainPaymentId: intentId,
     eventType: "crosschain_prepare_created",
     sourceChainId,
     metadata: { routeVersion: intent.routeVersion },
-  });
+  }).catch((err) => console.error("crosschain_prepare telemetry write failed", err));
 
   return NextResponse.json({
     intentId,
@@ -168,5 +220,5 @@ export async function POST(req: NextRequest) {
       finalityThreshold: 2000,
     },
     expiresAt: inv.expiresAt.toISOString(),
-  }, { status: 201 });
+  }, { status: httpStatus });
 }

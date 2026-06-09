@@ -43,6 +43,9 @@ importers:
 
   ops/relayer:
     dependencies:
+      '@arcora/crosschain-core':
+        specifier: workspace:*
+        version: link:../../packages/crosschain-core
       '@circle-fin/adapter-viem-v2':
         specifier: ^1.0.0
         version: 1.8.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(viem@2.48.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.67))

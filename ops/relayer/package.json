@@ -10,6 +10,7 @@
     "test":      "vitest run"
   },
   "dependencies": {
+    "@arcora/crosschain-core": "workspace:*",
     "@circle-fin/app-kit": "^1.4.1",
     "@circle-fin/adapter-viem-v2": "^1.0.0",
     "pg": "^8.13.0",

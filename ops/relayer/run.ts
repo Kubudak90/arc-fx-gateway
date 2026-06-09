@@ -16,20 +16,34 @@
  *              ├─ gateway.recordPayerRefund
  *              └─▶ refunded
  *
+ * Cross-chain v2 (Q1, feature-flagged via CROSSCHAIN_ENABLED): the same
+ * daemon also drains `crosschain_payments` (CCTP burn on a source chain →
+ * IRIS attestation → receiveMessage mint on Arc → optional kit.swap →
+ * gateway.settleInvoice). The state machine itself is pure and lives in
+ * crosschain-worker.ts; this file only wires the real chain/DB deps.
+ *
  * Env: see .env.example.
  */
 
 import {
-  createPublicClient, createWalletClient, http, parseAbi,
+  createPublicClient, createWalletClient, http, parseAbi, parseEventLogs,
   type Address, type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { AppKit } from "@circle-fin/app-kit";
 import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import pg from "pg";
+import {
+  chainById, parseChainRegistryJson,
+  type ChainRegistry, type CrosschainState,
+} from "@arcora/crosschain-core";
 import { fetchPrivateKeyFromVault } from "./vault-signer";
 import { buildOpsPoolConfig, describeDbTls, assertSecureDbTls } from "./db";
 import { buildGatewayAllowlist, resolveGateway } from "./gateway-allowlist";
+import { fetchIrisAttestation, receiveMessageCall } from "./cctp";
+import { buildSettleArgs, tokenSymbolForArcAddress } from "./arc-settlement";
+import { processCrosschainPayment } from "./crosschain-worker";
+import type { CrosschainPaymentRow, CrosschainWorkerDeps } from "./crosschain-types";
 
 const RPC           = need("ARC_TESTNET_RPC");
 const PG_URL        = need("POSTGRES_URL_NON_POOLING");
@@ -52,6 +66,20 @@ const RECEIPT_TIMEOUT_MS = 30_000;
 // and reclaimed by the next claimNext call. Set generously above worst-case
 // kit.swap + settle latency. Audit P2 #5, 2026-05-03.
 const LEASE_SECONDS = Number(process.env.RELAYER_LEASE_SECONDS ?? "480"); // 8 min
+
+// ── Cross-chain v2 (Q1) env ─────────────────────────────────────────
+// Feature-flagged: the daemon only claims `crosschain_payments` rows when
+// CROSSCHAIN_ENABLED=true. The chain registry and IRIS URL then become
+// required and are validated at boot (fail fast on malformed config —
+// parseChainRegistryJson throws on unknown chains / zero addresses).
+const CROSSCHAIN_ENABLED = process.env.CROSSCHAIN_ENABLED === "true";
+const crosschainRegistry: ChainRegistry | null = CROSSCHAIN_ENABLED
+  ? parseChainRegistryJson(need("CROSSCHAIN_CHAIN_CONFIG_JSON"))
+  : null;
+const CCTP_IRIS_API_URL = CROSSCHAIN_ENABLED ? need("CCTP_IRIS_API_URL") : "";
+const CROSSCHAIN_MAX_ATTEMPTS  = Number(process.env.CROSSCHAIN_MAX_ATTEMPTS ?? "12");
+const CROSSCHAIN_RETRY_BASE_MS = Number(process.env.CROSSCHAIN_RETRY_BASE_MS ?? "15000");
+const CROSSCHAIN_RETRY_MAX_MS  = Number(process.env.CROSSCHAIN_RETRY_MAX_MS ?? "900000");
 
 function need(k: string): string {
   const v = process.env[k];
@@ -162,20 +190,9 @@ function gatewayFor(row: QueueRow): Address {
   return resolveGateway(row.gateway_address, GATEWAY, GATEWAY_ALLOWLIST);
 }
 
-// ── Token symbol resolution for kit.swap ────────────────────────────
-// App Kit takes ticker symbols, not addresses. Maintain a small lookup
-// from on-chain address → ticker. This is testnet-only; mainnet builds
-// out from the wider Arc address book.
-const TOKEN_SYMBOL: Record<string, "USDC" | "EURC"> = {
-  "0x3600000000000000000000000000000000000000": "USDC",
-  "0x89b50855aa3be2f677cd6303cec089b5f319d72a": "EURC",
-};
-
-function tokenSymbol(addr: string): "USDC" | "EURC" {
-  const sym = TOKEN_SYMBOL[addr.toLowerCase()];
-  if (!sym) throw new Error(`relayer.unknown_token: ${addr}`);
-  return sym;
-}
+// Token symbol resolution for kit.swap (App Kit takes ticker symbols, not
+// addresses) lives in arc-settlement.ts — tokenSymbolForArcAddress — so the
+// Arc address → ticker map exists in exactly one place. Throws on unknown.
 
 // ── DB helpers ──────────────────────────────────────────────────────
 
@@ -380,8 +397,8 @@ async function pullViaPermit2(
 }
 
 async function runSwap(row: QueueRow): Promise<{ amountOut: string; txHash: Hex }> {
-  const tokenIn  = tokenSymbol(row.pay_in_token);
-  const tokenOut = tokenSymbol(row.payout_token);
+  const tokenIn  = tokenSymbolForArcAddress(row.pay_in_token);
+  const tokenOut = tokenSymbolForArcAddress(row.payout_token);
   const amountInHumanReadable = humanizeAmount(row.amount_in, tokenIn);
 
   const result = await kit.swap({
@@ -801,6 +818,338 @@ function parseHumanAmount(amount: string, decimals: number): bigint {
   return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(fracPadded || "0");
 }
 
+// ── Cross-chain v2 worker wiring ────────────────────────────────────
+// The state machine itself (crosschain-worker.ts) is pure; everything below
+// is the real-world dependency set: lease-based claim over
+// `crosschain_payments`, CCTP receive on Arc, kit.swap, gateway settle, and
+// the retry/backoff bookkeeping.
+
+const CROSSCHAIN_LEASE_OWNER = `relayer:${RELAYER_ADDR.toLowerCase()}#${process.pid}`;
+
+const TRANSFER_EVENT = parseAbi([
+  "event Transfer(address indexed from,address indexed to,uint256 value)",
+]);
+
+/** Resolve a chain config from the boot-validated registry. Only reachable
+ *  when CROSSCHAIN_ENABLED (the claim never runs otherwise). */
+function crosschainChain(chainId: number) {
+  if (!crosschainRegistry) throw new Error("crosschain_disabled");
+  return chainById(crosschainRegistry, chainId);
+}
+
+/** Lease-based claim (FOR UPDATE SKIP LOCKED) over the processable
+ *  cross-chain statuses. `attempts` increments on every claim so chronically
+ *  stuck rows eventually hit CROSSCHAIN_MAX_ATTEMPTS and surface as terminal
+ *  failures instead of retrying forever. */
+async function claimNextCrosschain(): Promise<CrosschainPaymentRow | null> {
+  const res = await pool.query(
+    `with claimed as (
+       update crosschain_payments
+          set attempts = attempts + 1,
+              lease_owner = $1,
+              lease_expires_at = now() + ($2 || ' seconds')::interval,
+              updated_at = now()
+        where id = (
+          select id from crosschain_payments
+           where status in ('bridge_pending', 'bridge_confirmed', 'arc_swap_pending', 'settle_pending')
+             and next_attempt <= now()
+             and (lease_expires_at is null or lease_expires_at < now())
+           order by next_attempt
+           limit 1
+           for update skip locked
+        )
+        returning *
+     )
+     select * from claimed`,
+    [CROSSCHAIN_LEASE_OWNER, String(LEASE_SECONDS)],
+  );
+  return (res.rows[0] as CrosschainPaymentRow | undefined) ?? null;
+}
+
+// Allowlisted column map for markCrosschain — SET clauses are built ONLY
+// from these literal names; keys arriving in `values` that aren't listed
+// throw instead of being interpolated into SQL.
+const CROSSCHAIN_MARK_COLUMNS: ReadonlySet<string> = new Set([
+  "status", "next_attempt", "updated_at",
+  "cctp_message", "cctp_attestation",
+  "bridge_receive_tx_hash", "bridge_amount_received", "bridge_confirmed_at",
+  "arc_swap_tx_hash", "arc_swap_amount_out",
+  "settle_tx_hash", "refund_tx_hash", "last_error",
+]);
+
+/** Parameterized UPDATE of crosschain_payments. Every transition also
+ *  releases the lease so the row is reclaimable the moment its
+ *  next_attempt allows. */
+async function markCrosschain(id: string, values: Record<string, unknown>): Promise<void> {
+  const keys = Object.keys(values);
+  for (const k of keys) {
+    if (!CROSSCHAIN_MARK_COLUMNS.has(k)) {
+      throw new Error(`crosschain_mark_unknown_column:${k}`);
+    }
+  }
+  const sets = keys.map((k, i) => `${k} = $${i + 2}`);
+  sets.push("lease_owner = null", "lease_expires_at = null");
+  if (!keys.includes("updated_at")) sets.push("updated_at = now()");
+  await pool.query(
+    `update crosschain_payments set ${sets.join(", ")} where id = $1`,
+    [id, ...keys.map((k) => values[k])],
+  );
+}
+
+/** Stable error codes only into last_error — collapse whitespace and cap at
+ *  200 chars so giant RPC/ABI dumps don't bloat the row. */
+function crosschainErrorCode(error: string): string {
+  return error.replace(/\s+/g, " ").trim().slice(0, 200);
+}
+
+/** Retry semantics: below the attempts cap, keep the row's CURRENT
+ *  processable status (do NOT write the failure state) and reschedule with
+ *  exponential backoff; at/after the cap, write the terminal failure status
+ *  for operator triage. Lease is released either way. */
+async function failCrosschain(
+  row: CrosschainPaymentRow,
+  status: CrosschainState,
+  error: string,
+): Promise<void> {
+  const code = crosschainErrorCode(error);
+  if (row.attempts >= CROSSCHAIN_MAX_ATTEMPTS) {
+    await pool.query(
+      `update crosschain_payments
+          set status = $2, last_error = $3,
+              lease_owner = null, lease_expires_at = null, updated_at = now()
+        where id = $1`,
+      [row.id, status, code],
+    );
+    return;
+  }
+  const backoffMs = Math.min(
+    CROSSCHAIN_RETRY_BASE_MS * 2 ** Math.max(row.attempts - 1, 0),
+    CROSSCHAIN_RETRY_MAX_MS,
+  );
+  await pool.query(
+    `update crosschain_payments
+        set last_error = $2,
+            next_attempt = now() + ($3 || ' milliseconds')::interval,
+            lease_owner = null, lease_expires_at = null, updated_at = now()
+      where id = $1`,
+    [row.id, code, String(backoffMs)],
+  );
+}
+
+/** CCTP receive on Arc with replay-safe receipt-log accounting: the minted
+ *  amount is read from the receipt's Transfer logs (zero address →
+ *  relayer on the destination USDC), NOT from balance deltas, so a daemon
+ *  restart can reconstruct the exact received amount from the persisted
+ *  bridge_receive_tx_hash. */
+async function receiveCrosschainMessage(
+  row: CrosschainPaymentRow,
+  att: { message: Hex; attestation: Hex },
+  onBroadcast: (txHash: Hex) => Promise<void>,
+): Promise<{ txHash: Hex; amountReceived: bigint }> {
+  const destination = crosschainChain(row.destination_chain_id);
+  const txHash = (row.bridge_receive_tx_hash as Hex | null)
+    ?? await wallet.writeContract({
+      chain: undefined,
+      ...receiveMessageCall({
+        messageTransmitter: destination.messageTransmitter,
+        message: att.message,
+        attestation: att.attestation,
+      }),
+    });
+  // Persist-before-wait: a crash inside the receipt-await window must not
+  // lose the broadcast hash (CCTP replay protection makes a re-broadcast
+  // revert, and the mint would otherwise be unaccountable).
+  if (!row.bridge_receive_tx_hash) await onBroadcast(txHash);
+  const receipt = await chain.waitForTransactionReceipt({ hash: txHash, timeout: RECEIPT_TIMEOUT_MS });
+  if (receipt.status !== "success") throw new Error("cctp_receive_reverted");
+  const transfers = parseEventLogs({
+    abi: TRANSFER_EVENT,
+    eventName: "Transfer",
+    logs: receipt.logs,
+    strict: false,
+  });
+  const mint = transfers.find((event) =>
+    event.address.toLowerCase() === row.destination_token.toLowerCase()
+    && event.args.from?.toLowerCase() === "0x0000000000000000000000000000000000000000"
+    && event.args.to?.toLowerCase() === RELAYER_ADDR.toLowerCase(),
+  );
+  if (!mint?.args.value || mint.args.value <= 0n) throw new Error("cctp_receive_mint_event_missing");
+  return { txHash, amountReceived: mint.args.value };
+}
+
+/** Swap the bridged Arc USDC (exact-in bridge_amount_received) to the
+ *  invoice's payout token via App Kit — same swap surface as the Arc-only
+ *  flow in runSwap. The worker persists arc_swap_tx_hash/amount_out
+ *  immediately after this returns (kit.swap is atomic, so there is no
+ *  broadcast/receipt window to checkpoint inside). */
+async function swapCrosschainOnArc(
+  row: CrosschainPaymentRow,
+): Promise<{ amountOut: bigint; txHash: Hex }> {
+  if (!row.bridge_amount_received) throw new Error("crosschain_bridge_amount_missing");
+  const tokenIn  = tokenSymbolForArcAddress(row.destination_token);
+  const tokenOut = tokenSymbolForArcAddress(row.payout_token);
+
+  const result = await kit.swap({
+    from: { adapter, chain: "Arc_Testnet" as const },
+    tokenIn, tokenOut,
+    amountIn: humanizeAmount(row.bridge_amount_received, tokenIn),
+    config: {
+      kitKey:      KIT_KEY,
+      slippageBps: SLIPPAGE_BPS,
+      customFee:   { percentageBps: CUSTOM_FEE_BPS, recipientAddress: FEE_RECIPIENT },
+    },
+  });
+  const r = result as { amountOut?: string; txHash: Hex };
+  if (!r.amountOut) throw new Error("kit.swap returned no amountOut");
+  return { amountOut: parseHumanAmount(r.amountOut, 6), txHash: r.txHash };
+}
+
+/** Gateway settle, mirroring callSettle's semantics against
+ *  ArcFXGateway.settleInvoice(bytes32 globalId, address payer, address
+ *  payInToken, uint256 amountIn, uint256 grossPayout, bytes32 swapTxHash).
+ *  Cross-chain arg mapping: payInToken = the Arc-side token CCTP delivered
+ *  (row.destination_token), amountIn = the minted bridge_amount_received. */
+async function settleCrosschainOnArc(args: {
+  row: CrosschainPaymentRow;
+  grossPayout: bigint;
+  swapTxHash: Hex;
+}): Promise<Hex> {
+  const { row, grossPayout, swapTxHash } = args;
+
+  // Resume guard: settle_tx_hash persisted by a prior attempt means
+  // settleInvoice already hit the wire — re-broadcasting would revert as
+  // InvoiceAlreadyPaid even though the merchant was paid. Verify the
+  // recorded tx instead (mirrors the relayer_queue settle resume).
+  if (row.settle_tx_hash) {
+    const prior = await chain.waitForTransactionReceipt({
+      hash: row.settle_tx_hash as Hex,
+      timeout: RECEIPT_TIMEOUT_MS,
+    });
+    if (prior.status !== "success") {
+      throw new Error(`crosschain_settle_prior_tx_reverted:${row.settle_tx_hash}`);
+    }
+    return row.settle_tx_hash as Hex;
+  }
+
+  if (!row.bridge_amount_received) throw new Error("crosschain_bridge_amount_missing");
+
+  // crosschain_payments rows carry no per-row gateway; settle against the
+  // daemon default, still passed through the AFG-010 allowlist assertion.
+  const targetGateway = resolveGateway(null, GATEWAY, GATEWAY_ALLOWLIST);
+
+  // Approve is idempotent (same allowance value on re-issue) — no
+  // checkpoint needed before its receipt wait.
+  const approveTx = await wallet.writeContract({
+    chain: undefined,
+    address: row.payout_token as Address,
+    abi: ERC20,
+    functionName: "approve",
+    args: [targetGateway, grossPayout],
+  });
+  await chain.waitForTransactionReceipt({ hash: approveTx, timeout: RECEIPT_TIMEOUT_MS });
+
+  const tx = await wallet.writeContract({
+    chain: undefined,
+    address: targetGateway,
+    abi: GATEWAY_ABI,
+    functionName: "settleInvoice",
+    args: buildSettleArgs({
+      invoiceId: row.invoice_id,
+      payer: row.payer,
+      payInToken: row.destination_token,
+      amountIn: BigInt(row.bridge_amount_received),
+      grossPayout,
+      swapTxHash,
+    }),
+  });
+  // Persist-before-wait, then let the worker stamp status='paid'.
+  await markCrosschain(row.id, { settle_tx_hash: tx });
+  await chain.waitForTransactionReceipt({ hash: tx, timeout: RECEIPT_TIMEOUT_MS });
+  return tx;
+}
+
+/** Refund the bridged Arc USDC to the payer (shortfall before any swap).
+ *  Persist-before-wait + resume guard so a crash inside the receipt-await
+ *  window can never double-refund. */
+async function refundCrosschainOnArc(args: {
+  row: CrosschainPaymentRow;
+  token: string;
+  amount: bigint;
+}): Promise<Hex> {
+  const { row, token, amount } = args;
+
+  if (row.refund_tx_hash) {
+    const prior = await chain.waitForTransactionReceipt({
+      hash: row.refund_tx_hash as Hex,
+      timeout: RECEIPT_TIMEOUT_MS,
+    });
+    if (prior.status !== "success") {
+      throw new Error(`crosschain_refund_prior_tx_reverted:${row.refund_tx_hash}`);
+    }
+    return row.refund_tx_hash as Hex;
+  }
+
+  const txHash = await wallet.writeContract({
+    chain: undefined,
+    address: token as Address,
+    abi: ERC20,
+    functionName: "transfer",
+    args: [row.payer as Address, amount],
+  });
+  await markCrosschain(row.id, { refund_tx_hash: txHash });
+  const receipt = await chain.waitForTransactionReceipt({ hash: txHash, timeout: RECEIPT_TIMEOUT_MS });
+  if (receipt.status !== "success") throw new Error("crosschain_refund_reverted");
+  return txHash;
+}
+
+async function processCrosschainRow(row: CrosschainPaymentRow): Promise<void> {
+  const log = (level: string, fields: Record<string, unknown>) => {
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(), level, crosschainId: row.id,
+      invoiceId: row.invoice_id, status: row.status, attempt: row.attempts,
+      ...fields,
+    }));
+  };
+  log("info", {
+    msg: "crosschain.claimed",
+    resume: {
+      attestation: !!(row.cctp_message && row.cctp_attestation),
+      bridge:      !!row.bridge_receive_tx_hash,
+      swap:        !!row.arc_swap_tx_hash,
+      settle:      !!row.settle_tx_hash,
+      refund:      !!row.refund_tx_hash,
+    },
+  });
+
+  const deps: CrosschainWorkerDeps = {
+    fetchAttestation: async (r) => {
+      if (!r.burn_tx_hash) throw new Error("crosschain_burn_tx_missing");
+      return fetchIrisAttestation({
+        irisBaseUrl: CCTP_IRIS_API_URL,
+        sourceDomain: r.source_domain,
+        burnTxHash: r.burn_tx_hash as Hex,
+      });
+    },
+    receiveMessage: receiveCrosschainMessage,
+    swapOnArc: swapCrosschainOnArc,
+    settleOnArc: settleCrosschainOnArc,
+    refundOnArc: refundCrosschainOnArc,
+    mark: markCrosschain,
+    fail: async (id, status, error) => {
+      log("error", {
+        msg: "crosschain.fail",
+        failureState: status,
+        terminal: row.attempts >= CROSSCHAIN_MAX_ATTEMPTS,
+        err: crosschainErrorCode(error),
+      });
+      await failCrosschain(row, status, error);
+    },
+  };
+
+  await processCrosschainPayment(row, deps);
+  log("info", { msg: "crosschain.processed" });
+}
+
 async function main() {
   console.log(JSON.stringify({
     msg: "relayer.start",
@@ -809,6 +1158,8 @@ async function main() {
     tickMs: TICK_MS,
     customFeeBps: CUSTOM_FEE_BPS,
     slippageBps: SLIPPAGE_BPS,
+    crosschain: CROSSCHAIN_ENABLED,
+    crosschainChains: crosschainRegistry ? [...crosschainRegistry.keys()] : [],
   }));
 
   // Audit Ops-L-1 (2026-05-24): graceful drain. The previous handler
@@ -829,6 +1180,16 @@ async function main() {
 
   while (!shuttingDown) {
     try {
+      // Cross-chain rows first (feature-flagged), then the Arc-only queue.
+      // Still strictly one row at a time — same single-hot-wallet nonce
+      // discipline as the relayer_queue path.
+      if (CROSSCHAIN_ENABLED) {
+        const ccRow = await claimNextCrosschain();
+        if (ccRow) {
+          await processCrosschainRow(ccRow);
+          continue; // back to the top — drain anything else queued
+        }
+      }
       const row = await claimNext();
       if (row) {
         await processOne(row);

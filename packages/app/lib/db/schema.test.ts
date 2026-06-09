@@ -38,4 +38,9 @@ describe("cross-chain v2 schema", () => {
     expect(crosschainPayments.invoiceId.name).toBe("invoice_id");
     expect(checkoutTelemetry.eventType.name).toBe("event_type");
   });
+  it("crosschainPayments and invoices have required NOT NULL columns", () => {
+    expect(crosschainPayments.invoiceId.notNull).toBe(true);
+    expect(crosschainPayments.idempotencyKey.notNull).toBe(true);
+    expect(invoices.settlementTier.notNull).toBe(true);
+  });
 });

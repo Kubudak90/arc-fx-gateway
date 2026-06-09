@@ -1,19 +1,25 @@
-CREATE TYPE crosschain_payment_status AS ENUM (
-  'created',
-  'authorized',
-  'bridge_pending',
-  'bridge_confirmed',
-  'arc_swap_pending',
-  'settle_pending',
-  'paid',
-  'bridge_failed',
-  'arc_swap_failed',
-  'settle_failed',
-  'refunded',
-  'expired'
-);
+DO $$ BEGIN
+  CREATE TYPE crosschain_payment_status AS ENUM (
+    'created',
+    'authorized',
+    'bridge_pending',
+    'bridge_confirmed',
+    'arc_swap_pending',
+    'settle_pending',
+    'paid',
+    'bridge_failed',
+    'arc_swap_failed',
+    'settle_failed',
+    'refunded',
+    'expired'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE settlement_tier AS ENUM ('zero_day', 'one_day', 'seven_day');
+DO $$ BEGIN
+  CREATE TYPE settlement_tier AS ENUM ('zero_day', 'one_day', 'seven_day');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE invoices
   ADD COLUMN IF NOT EXISTS settlement_tier settlement_tier NOT NULL DEFAULT 'seven_day',

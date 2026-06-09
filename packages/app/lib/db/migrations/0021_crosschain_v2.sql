@@ -72,7 +72,10 @@ CREATE INDEX IF NOT EXISTS idx_crosschain_payments_invoice
 
 -- Unique: one on-chain burn tx can satisfy at most one intent. CCTP
 -- receiveMessage is replay-protected, so a second intent claiming the same
--- burn could never be settled by the relayer.
+-- burn could never be settled by the relayer. An earlier in-flight revision
+-- of this migration created a plain index under the old name; drop it so
+-- every environment converges on the unique form.
+DROP INDEX IF EXISTS idx_crosschain_payments_burn_tx;
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_crosschain_payments_burn_tx
   ON crosschain_payments(source_chain_id, burn_tx_hash)
   WHERE burn_tx_hash IS NOT NULL;

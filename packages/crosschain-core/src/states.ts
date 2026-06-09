@@ -15,6 +15,9 @@ export const CROSSCHAIN_STATES = [
 
 export type CrosschainState = typeof CROSSCHAIN_STATES[number];
 
+// The relayer's claim SQL (ops/relayer/run.ts claimNextCrosschain) enumerates
+// the processable (non-terminal, worker-driven) states — keep it in sync when
+// adding transitions here.
 const allowed: Record<CrosschainState, readonly CrosschainState[]> = {
   created: ["authorized", "expired"],
   authorized: ["bridge_pending", "expired"],

@@ -14,6 +14,11 @@ export interface CrosschainPaymentRow {
   destination_token: string;
   payout_token: string;
   amount_out_min: string;
+  /** Lowercased bytes32 hex (0x + 24 zero bytes + 40 hex chars) the app's
+   *  prepare route derived from NEXT_PUBLIC_RELAYER_ADDRESS. The CCTP
+   *  receive accepts a mint to this address as well as the env-derived
+   *  relayer address (env-skew self-healing). */
+  mint_recipient: string;
   status: CrosschainState;
   burn_tx_hash: string | null;
   /** When the source-chain burn was submitted. claimNextCrosschain does

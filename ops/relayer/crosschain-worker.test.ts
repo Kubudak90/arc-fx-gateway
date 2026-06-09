@@ -15,6 +15,7 @@ const baseRow: CrosschainPaymentRow = {
   destination_token: "0x3600000000000000000000000000000000000000",
   payout_token: "0x3600000000000000000000000000000000000000",
   amount_out_min: "5000000",
+  mint_recipient: "0x" + "0".repeat(24) + "c".repeat(40),
   status: "bridge_pending",
   burn_tx_hash: "0x" + "b".repeat(64),
   burn_submitted_at: null,

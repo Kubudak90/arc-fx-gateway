@@ -133,6 +133,18 @@ const _vaultOpts = {
 const _relayerKey = await fetchPrivateKeyFromVault(_vaultOpts);
 const account = privateKeyToAccount(_relayerKey);
 const RELAYER_ADDR = account.address;
+// Env-skew fail-fast: the app's prepare route pins each cross-chain intent's
+// CCTP mintRecipient to NEXT_PUBLIC_RELAYER_ADDRESS. If that var is mirrored
+// onto this box and disagrees with the Vault-derived key (key rotation, stale
+// env), every payment would burn on the source chain and then fail at bridge
+// receive — so refuse to boot. Guard is skipped when the var is unset; the
+// crosschain-v2-demo runbook covers the parity requirement.
+const _appRelayerAddr = process.env.NEXT_PUBLIC_RELAYER_ADDRESS;
+if (_appRelayerAddr && _appRelayerAddr.toLowerCase() !== RELAYER_ADDR.toLowerCase()) {
+  throw new Error(
+    `relayer address mismatch: vault key ${RELAYER_ADDR} vs NEXT_PUBLIC_RELAYER_ADDRESS ${_appRelayerAddr}; cross-chain intents would fail at bridge receive`,
+  );
+}
 const wallet = createWalletClient({ account, transport: http(RPC) });
 const adapter = createViemAdapterFromPrivateKey({ privateKey: _relayerKey });
 
@@ -855,6 +867,9 @@ async function claimNextCrosschain(): Promise<CrosschainPaymentRow | null> {
               updated_at = now()
         where id = (
           select id from crosschain_payments
+           -- Claimable set must cover every non-terminal processable state in
+           -- crosschain-core's transition map (bridge_pending, bridge_confirmed,
+           -- arc_swap_pending, settle_pending) — update both together.
            where status in ('bridge_pending', 'bridge_confirmed', 'arc_swap_pending', 'settle_pending')
              and next_attempt <= now()
              and (lease_expires_at is null or lease_expires_at < now())
@@ -979,11 +994,16 @@ async function receiveCrosschainMessage(
     logs: receipt.logs,
     strict: false,
   });
-  const mint = transfers.find((event) =>
-    event.address.toLowerCase() === row.destination_token.toLowerCase()
-    && event.args.from?.toLowerCase() === "0x0000000000000000000000000000000000000000"
-    && event.args.to?.toLowerCase() === RELAYER_ADDR.toLowerCase(),
-  );
+  // Accept the mint if it lands on EITHER the env-derived relayer address OR
+  // the recipient embedded in the stored intent (bytes32 mint_recipient) —
+  // self-heals app/relayer env skew so funds already minted on Arc aren't stranded.
+  const intentRecipient = "0x" + row.mint_recipient.slice(-40);
+  const mint = transfers.find((event) => {
+    const to = event.args.to?.toLowerCase();
+    return event.address.toLowerCase() === row.destination_token.toLowerCase()
+      && event.args.from?.toLowerCase() === "0x0000000000000000000000000000000000000000"
+      && (to === RELAYER_ADDR.toLowerCase() || to === intentRecipient);
+  });
   if (!mint?.args.value || mint.args.value <= 0n) throw new Error("cctp_receive_mint_event_missing");
   return { txHash, amountReceived: mint.args.value };
 }

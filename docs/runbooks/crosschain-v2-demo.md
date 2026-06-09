@@ -15,6 +15,9 @@ followed by Arc-side settlement into the merchant payout token.
   for Arc Testnet, Base Sepolia, and Ethereum Sepolia.
 - Source-chain RPC envs are configured.
 - `CCTP_IRIS_API_URL=https://iris-api-sandbox.circle.com`.
+- `NEXT_PUBLIC_RELAYER_ADDRESS` on the app deployment MUST equal the relayer's
+  signing address (Vault key); set it on the relayer too so the daemon can
+  fail fast on mismatch.
 - Relayer wallet has Arc gas balance and can call `receiveMessage`.
 - Customer wallet has source-chain USDC and gas.
 

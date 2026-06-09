@@ -290,7 +290,9 @@ export const crosschainPayments = pgTable("crosschain_payments", {
   uniqueIndex("uniq_crosschain_payments_idempotency").on(t.idempotencyKey),
   index("idx_crosschain_payments_status_next_attempt").on(t.status, t.nextAttempt),
   index("idx_crosschain_payments_invoice").on(t.invoiceId),
-  index("idx_crosschain_payments_burn_tx").on(t.sourceChainId, t.burnTxHash),
+  // One burn tx may back at most one intent (cross-invoice replay guard);
+  // partial so multiple un-submitted rows (NULL burn_tx_hash) coexist.
+  uniqueIndex("uniq_crosschain_payments_burn_tx").on(t.sourceChainId, t.burnTxHash).where(sql`${t.burnTxHash} IS NOT NULL`),
 ]);
 
 export const checkoutTelemetry = pgTable("checkout_telemetry", {

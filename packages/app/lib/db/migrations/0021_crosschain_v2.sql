@@ -70,8 +70,12 @@ CREATE INDEX IF NOT EXISTS idx_crosschain_payments_status_next_attempt
 CREATE INDEX IF NOT EXISTS idx_crosschain_payments_invoice
   ON crosschain_payments(invoice_id);
 
-CREATE INDEX IF NOT EXISTS idx_crosschain_payments_burn_tx
-  ON crosschain_payments(source_chain_id, burn_tx_hash);
+-- Unique: one on-chain burn tx can satisfy at most one intent. CCTP
+-- receiveMessage is replay-protected, so a second intent claiming the same
+-- burn could never be settled by the relayer.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_crosschain_payments_burn_tx
+  ON crosschain_payments(source_chain_id, burn_tx_hash)
+  WHERE burn_tx_hash IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS checkout_telemetry (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

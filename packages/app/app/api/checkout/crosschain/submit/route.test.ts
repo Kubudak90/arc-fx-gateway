@@ -30,16 +30,23 @@ function baseRow() {
 
 const dbState = {
   row: baseRow() as any,
+  // Row returned by the (sourceChainId, burnTxHash) claim lookup — that query
+  // selects explicit fields ({ id }), while the intent lookup is select().
+  burnTxClaim: null as any,
   updates: [] as any[],
   updateReturnsEmpty: false,
+  updateThrows: null as unknown,
 };
 
 vi.mock("@/lib/db/client", () => ({
   db: {
-    select: () => ({
+    select: (fields?: any) => ({
       from: () => ({
         where: () => ({
-          limit: async () => (dbState.row ? [dbState.row] : []),
+          limit: async () => {
+            if (fields) return dbState.burnTxClaim ? [dbState.burnTxClaim] : [];
+            return dbState.row ? [dbState.row] : [];
+          },
         }),
       }),
     }),
@@ -47,6 +54,7 @@ vi.mock("@/lib/db/client", () => ({
       set: (values: any) => ({
         where: () => ({
           returning: async () => {
+            if (dbState.updateThrows) throw dbState.updateThrows;
             dbState.updates.push(values);
             return dbState.updateReturnsEmpty ? [] : [{ id: INTENT_ID }];
           },
@@ -75,8 +83,10 @@ const goodBody = {
 describe("POST /api/checkout/crosschain/submit", () => {
   beforeEach(() => {
     dbState.row = baseRow();
+    dbState.burnTxClaim = null;
     dbState.updates = [];
     dbState.updateReturnsEmpty = false;
+    dbState.updateThrows = null;
     takeTokenMock.mockReset().mockResolvedValue(true);
     verifyMock.mockReset().mockResolvedValue({ ok: true, blockNumber: 123n });
   });
@@ -103,6 +113,66 @@ describe("POST /api/checkout/crosschain/submit", () => {
     expect(dbState.row.status).toBe("authorized");
   });
 
+  it("returns 409 burn_tx_already_used when another intent already claimed this burn tx", async () => {
+    dbState.burnTxClaim = { id: "22222222-2222-4222-8222-222222222222" };
+
+    const res = await POST(req(goodBody));
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.error).toBe("burn_tx_already_used");
+    expect(verifyMock).not.toHaveBeenCalled();
+    expect(dbState.updates).toHaveLength(0);
+  });
+
+  it("proceeds when the burn tx claim belongs to this same intent", async () => {
+    dbState.burnTxClaim = { id: INTENT_ID };
+
+    const res = await POST(req(goodBody));
+
+    expect(res.status).toBe(202);
+    expect(verifyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sanitizes unknown verifier errors so raw RPC details never reach the client", async () => {
+    verifyMock.mockRejectedValueOnce(
+      new Error("could not find transaction 0xb... internal-rpc-host:8545"),
+    );
+
+    const res = await POST(req(goodBody));
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("burn_tx_verification_failed");
+    expect(JSON.stringify(body)).not.toContain("internal-rpc-host");
+    expect(dbState.updates).toHaveLength(0);
+  });
+
+  it("returns 409 burn_tx_already_used when the unique burn-tx index fires on update", async () => {
+    dbState.updateThrows = Object.assign(
+      new Error("duplicate key value violates unique constraint \"uniq_crosschain_payments_burn_tx\""),
+      { code: "23505" },
+    );
+
+    const res = await POST(req(goodBody));
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.error).toBe("burn_tx_already_used");
+  });
+
+  it("maps a wrapped (cause) unique violation on update to 409 burn_tx_already_used", async () => {
+    dbState.updateThrows = Object.assign(new Error("query failed"), {
+      cause: { code: "23505" },
+    });
+
+    const res = await POST(req(goodBody));
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.error).toBe("burn_tx_already_used");
+  });
+
   it("returns 404 when the intent does not exist", async () => {
     dbState.row = null;
 
@@ -111,6 +181,16 @@ describe("POST /api/checkout/crosschain/submit", () => {
 
     expect(res.status).toBe(404);
     expect(body.error).toBe("intent_not_found");
+  });
+
+  it("handles numeric-string amounts with a decimal point (AFG-009 posture)", async () => {
+    dbState.row = { ...baseRow(), sourceAmount: "5000000.00" };
+
+    const res = await POST(req(goodBody));
+
+    expect(res.status).toBe(202);
+    expect(verifyMock).toHaveBeenCalledTimes(1);
+    expect((verifyMock.mock.calls[0] as any[])[0].expectedAmount).toBe(5_000_000n);
   });
 
   it("returns 409 when the intent is already past authorized", async () => {

@@ -5,6 +5,8 @@ import { ConnectButton } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { QuoteDisplay } from "@/components/checkout/QuoteDisplay";
 import { PayButton } from "@/components/checkout/PayButton";
+import { ChainSelector } from "@/components/checkout/ChainSelector";
+import { CrossChainPayButton } from "@/components/checkout/CrossChainPayButton";
 import { SuccessScreen, ExpiredScreen } from "@/components/checkout/StatusScreens";
 import { MobileWalletQR } from "@/components/checkout/MobileWalletQR";
 import { Smartphone } from "lucide-react";
@@ -38,6 +40,15 @@ export default function CheckoutClient(props: CheckoutClientProps) {
   const [amountIn, setAmountIn]     = useState<bigint | null>(null);
   const [quoteStale, setQuoteStale] = useState(false);
   const [showQR, setShowQR]         = useState(false);
+  const [sourceChainId, setSourceChainId] = useState(84532); // Base Sepolia default
+
+  // Cross-chain checkout only applies when the invoice's payIn token is Arc
+  // USDC (the prepare endpoint 409s with crosschain_requires_arc_usdc_payin
+  // otherwise), so gate on both the env flag and the payIn token.
+  const crosschainEnabled =
+    process.env.NEXT_PUBLIC_CROSSCHAIN_ENABLED === "true" &&
+    props.payInTokenAddress.toLowerCase() ===
+      (process.env.NEXT_PUBLIC_USDC_ADDRESS ?? "").toLowerCase();
 
   useEffect(() => {
     if (status !== "created") return;
@@ -69,11 +80,30 @@ export default function CheckoutClient(props: CheckoutClientProps) {
       />
 
       <div className="flex flex-col gap-3">
+        {crosschainEnabled && (
+          <ChainSelector value={sourceChainId} onChange={setSourceChainId} />
+        )}
+
         <ConnectButton
           client={thirdwebClient}
           connectButton={{ label: "Connect wallet", className: "btn-arcora-pill w-full" }}
           theme="light"
         />
+
+        {crosschainEnabled && (
+          <div className="space-y-2">
+            <CrossChainPayButton
+              invoiceId={props.invoiceId}
+              sourceChainId={sourceChainId}
+              onPaid={() => setStatus("paid")}
+              onFailed={() => setStatus("failed")}
+            />
+            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+              If bridging completes but settlement cannot proceed before a swap, any automatic refund is sent as USDC to this same address on Arc.
+            </p>
+            <p className="text-center text-[13px] text-arcora-muted-fg">or pay directly on Arc</p>
+          </div>
+        )}
 
         <PayButton
           invoiceId={props.invoiceId}

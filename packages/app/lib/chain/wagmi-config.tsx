@@ -2,6 +2,7 @@
 
 import { createConfig, createStorage, http, noopStorage, WagmiProvider } from "wagmi";
 import { defineChain } from "viem";
+import { baseSepolia, sepolia } from "viem/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThirdwebProvider } from "thirdweb/react";
 import { injected, walletConnect } from "wagmi/connectors";
@@ -18,7 +19,9 @@ export const arcTestnet = defineChain({
 });
 
 export const wagmiConfig = createConfig({
-  chains: [arcTestnet],
+  // Base Sepolia + Ethereum Sepolia are the cross-chain checkout source
+  // chains (CCTP depositForBurn happens there; settlement stays on Arc).
+  chains: [arcTestnet, baseSepolia, sepolia],
   connectors: [
     injected(),
     walletConnect({
@@ -26,7 +29,13 @@ export const wagmiConfig = createConfig({
       showQrModal: true,
     }),
   ],
-  transports: { [arcTestnet.id]: http() },
+  transports: {
+    [arcTestnet.id]: http(),
+    // Undefined URL falls back to the chain's default public RPC — fine for
+    // local dev, but production must set both NEXT_PUBLIC_*_RPC_URL vars.
+    [baseSepolia.id]: http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL),
+    [sepolia.id]: http(process.env.NEXT_PUBLIC_ETHEREUM_SEPOLIA_RPC_URL),
+  },
   // SSR + explicit storage: wagmi's default storage backend tries to touch
   // indexedDB during Next.js static generation and emits "ReferenceError:
   // indexedDB is not defined" for every prerendered route. We give it

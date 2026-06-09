@@ -1,4 +1,11 @@
+function assertDecimals(decimals: number): void {
+  if (!Number.isInteger(decimals) || decimals < 0) {
+    throw new Error("decimals must be a non-negative integer");
+  }
+}
+
 export function parseBaseUnits(value: string, decimals: number): bigint {
+  assertDecimals(decimals);
   if (!/^\d+(\.\d+)?$/.test(value)) throw new Error(`invalid decimal amount: ${value}`);
   const parts = value.split(".");
   const wholeRaw = parts[0] ?? "";
@@ -12,6 +19,7 @@ export function parseBaseUnits(value: string, decimals: number): bigint {
 }
 
 export function formatBaseUnits(value: bigint, decimals: number): string {
+  assertDecimals(decimals);
   if (value < 0n) throw new Error("negative amounts are not supported");
   const scale = 10n ** BigInt(decimals);
   const whole = value / scale;
@@ -21,5 +29,6 @@ export function formatBaseUnits(value: bigint, decimals: number): string {
 
 export function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   if (denominator <= 0n) throw new Error("denominator must be positive");
+  if (numerator < 0n) throw new Error("numerator must be non-negative");
   return (numerator + denominator - 1n) / denominator;
 }

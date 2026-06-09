@@ -9,6 +9,13 @@ export interface PlannedCrosschainRoute {
   sourceAmountBaseUnits: bigint;
   mintRecipientChain: "arc-testnet";
   requiresArcSwap: boolean;
+  /**
+   * Describes the Arc swap leg of this route.
+   *
+   * IMPORTANT: consumers MUST gate on `requiresArcSwap` before acting on this field.
+   * For USDC→USDC routes `requiresArcSwap` is `false` and this field describes a no-op
+   * (tokenIn === tokenOut === "USDC") — it MUST NOT be executed in that case.
+   */
   arcSwap: { tokenIn: "USDC"; tokenOut: "USDC" | "EURC" };
 }
 

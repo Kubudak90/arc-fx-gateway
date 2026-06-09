@@ -21,4 +21,9 @@ describe("cross-chain state machine", () => {
     expect(isTerminalCrosschainState("refunded")).toBe(true);
     expect(isTerminalCrosschainState("settle_pending")).toBe(false);
   });
+
+  it("does not allow bridge_confirmed to expire (funds must resolve via failure paths)", () => {
+    expect(() => assertTransition("bridge_confirmed", "expired"))
+      .toThrow(/invalid crosschain transition/);
+  });
 });

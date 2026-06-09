@@ -19,6 +19,9 @@ const allowed: Record<CrosschainState, readonly CrosschainState[]> = {
   created: ["authorized", "expired"],
   authorized: ["bridge_pending", "expired"],
   bridge_pending: ["bridge_confirmed", "bridge_failed", "expired"],
+  // Once a bridge is confirmed (funds minted on Arc), there is no time-based `expired` escape.
+  // Stuck payments must resolve through the failure→refunded paths so real funds are never
+  // abandoned by an expiry timer.
   bridge_confirmed: ["arc_swap_pending", "settle_pending", "arc_swap_failed"],
   arc_swap_pending: ["settle_pending", "arc_swap_failed"],
   settle_pending: ["paid", "settle_failed"],

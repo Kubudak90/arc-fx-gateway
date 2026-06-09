@@ -148,6 +148,13 @@
       "when": 1781000000000,
       "tag": "0020_publishable_key",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781086400000,
+      "tag": "0021_crosschain_v2",
+      "breakpoints": true
     }
   ]
 }

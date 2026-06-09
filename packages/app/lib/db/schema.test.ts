@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { merchants, invoices, webhookAttempts } from "./schema";
+import {
+  merchants, invoices, webhookAttempts,
+  crosschainPayments,
+  checkoutTelemetry,
+  crosschainPaymentStatus,
+  settlementTier,
+} from "./schema";
 
 describe("schema", () => {
   it("merchants table has expected columns", () => {
@@ -21,5 +27,15 @@ describe("schema", () => {
     expect(webhookAttempts.eventType).toBeDefined();
     expect(webhookAttempts.eventType.name).toBe("event_type");
     expect(webhookAttempts.eventType.notNull).toBe(true);
+  });
+});
+
+describe("cross-chain v2 schema", () => {
+  it("exports cross-chain payment tables and enums", () => {
+    expect(crosschainPaymentStatus.enumValues).toContain("bridge_pending");
+    expect(crosschainPaymentStatus.enumValues).toContain("paid");
+    expect(settlementTier.enumValues).toEqual(["zero_day", "one_day", "seven_day"]);
+    expect(crosschainPayments.invoiceId.name).toBe("invoice_id");
+    expect(checkoutTelemetry.eventType.name).toBe("event_type");
   });
 });

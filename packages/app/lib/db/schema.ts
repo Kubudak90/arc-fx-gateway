@@ -1,5 +1,5 @@
 import {
-  pgTable, text, uuid, timestamp, integer, numeric, jsonb, customType, boolean, pgEnum, index,
+  pgTable, text, uuid, timestamp, integer, numeric, jsonb, customType, boolean, pgEnum, index, uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm/sql";
 
@@ -19,6 +19,23 @@ export const invoiceStatus = pgEnum("invoice_status", ["created", "paid", "expir
 export const relayerQueueStatus = pgEnum("relayer_queue_status",
   ["pending", "processing", "settled", "refunded", "failed"],
 );
+
+export const crosschainPaymentStatus = pgEnum("crosschain_payment_status", [
+  "created",
+  "authorized",
+  "bridge_pending",
+  "bridge_confirmed",
+  "arc_swap_pending",
+  "settle_pending",
+  "paid",
+  "bridge_failed",
+  "arc_swap_failed",
+  "settle_failed",
+  "refunded",
+  "expired",
+]);
+
+export const settlementTier = pgEnum("settlement_tier", ["zero_day", "one_day", "seven_day"]);
 
 export const merchants = pgTable("merchants", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -80,6 +97,8 @@ export const invoices = pgTable("invoices", {
   claimTx:     text("claim_tx"),
   recoveredAt: timestamp("recovered_at", { withTimezone: true }),
   recoveryTx:  text("recovery_tx"),
+  settlementTier: settlementTier("settlement_tier").notNull().default("seven_day"),
+  settlementPolicySnapshot: jsonb("settlement_policy_snapshot").notNull().default({}),
 });
 
 export const webhookAttempts = pgTable("webhook_attempts", {
@@ -230,3 +249,61 @@ export const relayerQueue = pgTable("relayer_queue", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const crosschainPayments = pgTable("crosschain_payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: text("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  idempotencyKey: text("idempotency_key").notNull(),
+  payer: text("payer").notNull(),
+  sourceChainId: integer("source_chain_id").notNull(),
+  sourceDomain: integer("source_domain").notNull(),
+  sourceToken: text("source_token").notNull(),
+  sourceAmount: numeric("source_amount").notNull(),
+  destinationChainId: integer("destination_chain_id").notNull(),
+  destinationDomain: integer("destination_domain").notNull(),
+  destinationToken: text("destination_token").notNull(),
+  mintRecipient: text("mint_recipient").notNull(),
+  payoutToken: text("payout_token").notNull(),
+  amountOutMin: numeric("amount_out_min").notNull(),
+  routeVersion: text("route_version").notNull(),
+  status: crosschainPaymentStatus("status").notNull().default("created"),
+  burnTxHash: text("burn_tx_hash"),
+  burnSubmittedAt: timestamp("burn_submitted_at", { withTimezone: true }),
+  cctpMessage: text("cctp_message"),
+  cctpAttestation: text("cctp_attestation"),
+  bridgeReceiveTxHash: text("bridge_receive_tx_hash"),
+  bridgeAmountReceived: numeric("bridge_amount_received"),
+  bridgeConfirmedAt: timestamp("bridge_confirmed_at", { withTimezone: true }),
+  arcSwapTxHash: text("arc_swap_tx_hash"),
+  arcSwapAmountOut: numeric("arc_swap_amount_out"),
+  settleTxHash: text("settle_tx_hash"),
+  refundTxHash: text("refund_tx_hash"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  nextAttempt: timestamp("next_attempt", { withTimezone: true }).notNull().defaultNow(),
+  leaseOwner: text("lease_owner"),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("uniq_crosschain_payments_invoice").on(t.invoiceId),
+  uniqueIndex("uniq_crosschain_payments_idempotency").on(t.idempotencyKey),
+  index("idx_crosschain_payments_status_next_attempt").on(t.status, t.nextAttempt),
+  index("idx_crosschain_payments_invoice").on(t.invoiceId),
+  index("idx_crosschain_payments_burn_tx").on(t.sourceChainId, t.burnTxHash),
+]);
+
+export const checkoutTelemetry = pgTable("checkout_telemetry", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: text("invoice_id").references(() => invoices.id, { onDelete: "cascade" }),
+  crosschainPaymentId: uuid("crosschain_payment_id").references(() => crosschainPayments.id, { onDelete: "set null" }),
+  eventType: text("event_type").notNull(),
+  sourceChainId: integer("source_chain_id"),
+  elapsedMs: integer("elapsed_ms"),
+  errorCode: text("error_code"),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("idx_checkout_telemetry_invoice_created").on(t.invoiceId, t.createdAt),
+  index("idx_checkout_telemetry_event_created").on(t.eventType, t.createdAt),
+]);

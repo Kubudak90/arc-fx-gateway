@@ -99,6 +99,9 @@ importers:
 
   packages/app:
     dependencies:
+      '@arcora/crosschain-core':
+        specifier: workspace:*
+        version: link:../crosschain-core
       '@base-ui/react':
         specifier: ^1.4.1
         version: 1.4.1(@types/react@18.3.28)(date-fns@2.30.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

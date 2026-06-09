@@ -57,7 +57,7 @@ The forward roadmap, operational hygiene, and consciously-deferred audit Low bac
 | Phase | Ships |
 |---|---|
 | **v1.2** (current) | Custody-escrow gateway live on Arc testnet; production hardening (audit fixes, rate limits, Permit2 verification tests, SSRF guard, a11y). USDC/EURC only (App Kit Swap testnet limit). |
-| **v2.0** (next) | Crosschain USDC source via Arc App Kit Bridge (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex). |
+| **v2.0** (next) | Crosschain USDC source via Arc App Kit Bridge (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex). Q1 v2.0 implementation plan lives at `docs/superpowers/plans/2026-06-08-q1-cross-chain-v2-code-spine.md`; it starts with Base/Ethereum demo routes, keeps source-chain expansion behind feature flags, and preserves the merchant payout-token invariant. |
 | **v2.1** | Source-side aggregator — customer pays in any token on the source chain via Odos/1inch/0x/Paraswap. |
 | **v2.2** | Non-EVM sources (Solana, Sui). |
 | **v3.0** | Intent / solver model. One-signature one-click; Arcora's solver executes the full route. |

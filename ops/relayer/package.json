@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "smoke":     "tsx --env-file-if-exists=.env smoke.ts",
+    "smoke":            "tsx --env-file-if-exists=.env smoke.ts",
+    "smoke:crosschain": "tsx --env-file-if-exists=.env smoke-crosschain.ts",
     "start":     "tsx run.ts",
     "replay":    "tsx replay.ts",
     "typecheck": "tsc --noEmit",

@@ -149,6 +149,8 @@ function Header({ range, setRange, payoutSymbol }: { range: Range; setRange: (r:
         {RANGES.map(p => (
           <button
             key={p}
+            type="button"
+            aria-pressed={range === p}
             onClick={() => setRange(p)}
             className={range === p ? "on" : ""}
           >

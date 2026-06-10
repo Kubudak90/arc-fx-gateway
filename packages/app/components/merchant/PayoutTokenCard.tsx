@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { mapChainError } from "@/lib/chain/error-mapper";
 import { symbolForAddress } from "@/lib/ui/format";
+import { Coin } from "@/components/ui/Coin";
 
 // Active custody-escrow gateway. Source-of-truth env: NEXT_PUBLIC_GATEWAY_ADDRESS.
 const GATEWAY = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ?? "") as Address;
@@ -27,18 +28,6 @@ const CHOICES: TokenChoice[] = [
 interface Props {
   currentPayoutToken: string;
   onUpdated?: () => void;
-}
-
-function Coin({ sym }: { sym: string }) {
-  const cls: Record<string, string> = {
-    USDC: "coin--usdc", EURC: "coin--eurc", USDT: "coin--usdt", DAI: "coin--dai", PYUSD: "coin--pyusd",
-  };
-  const label: Record<string, string> = { USDC: "$", EURC: "€", USDT: "₮", DAI: "◈", PYUSD: "P" };
-  return (
-    <span className={`coin ${cls[sym] ?? "coin--usdc"}`} aria-hidden="true">
-      {label[sym] ?? sym.slice(0, 1)}
-    </span>
-  );
 }
 
 export function PayoutTokenCard({ currentPayoutToken, onUpdated }: Props) {

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatCurrency, formatRelativeTime, symbolForAddress, abbreviateAddress } from "@/lib/ui/format";
+import { Coin } from "@/components/ui/Coin";
 import { ClaimAllButton } from "@/components/treasury/ClaimAllButton";
 
 interface TokenTotals {
@@ -206,18 +207,6 @@ export default function TreasuryPage() {
   );
 }
 
-function Coin({ sym }: { sym: string }) {
-  const cls: Record<string, string> = {
-    USDC: "coin--usdc", EURC: "coin--eurc", USDT: "coin--usdt", DAI: "coin--dai", PYUSD: "coin--pyusd",
-  };
-  const label: Record<string, string> = { USDC: "$", EURC: "€", USDT: "₮", DAI: "◈", PYUSD: "P" };
-  return (
-    <span className={`coin ${cls[sym] ?? "coin--usdc"}`} aria-hidden="true">
-      {label[sym] ?? sym.slice(0, 1)}
-    </span>
-  );
-}
-
 function TokenSection({ t, series }: { t: TokenTotals; series?: TimeSeriesEntry }) {
   const sym = symbolForAddress(t.token);
   const isPositive = BigInt(t.received) >= 0n;
@@ -418,8 +407,8 @@ const STATUS_LABEL: Record<ActivityRow["status"], string> = {
 const STATUS_COLOR: Record<ActivityRow["status"], string> = {
   paid:      "var(--success)",
   refunded:  "var(--info)",
-  claimed:   "#b794f6",
-  recovered: "#f0a868",
+  claimed:   "var(--status-claimed)",
+  recovered: "var(--status-recovered)",
 };
 const SIGN_FOR: Record<ActivityRow["status"], string> = {
   paid:      "+",

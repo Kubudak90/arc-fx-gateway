@@ -2,6 +2,7 @@
 
 import { QrCode } from "lucide-react";
 import { formatCurrency, formatRelativeTime, symbolForAddress } from "@/lib/ui/format";
+import { Coin } from "@/components/ui/Coin";
 import { InvoiceShareQRDialog } from "./InvoiceShareQRDialog";
 import { RefundButton } from "./RefundButton";
 import { useState } from "react";
@@ -100,18 +101,6 @@ export function InvoiceTable({ invoices, payoutToken, onChange }: InvoiceTablePr
   );
 }
 
-function Coin({ sym }: { sym: string }) {
-  const cls: Record<string, string> = {
-    USDC: "coin--usdc", EURC: "coin--eurc", USDT: "coin--usdt", DAI: "coin--dai", PYUSD: "coin--pyusd",
-  };
-  const label: Record<string, string> = { USDC: "$", EURC: "€", USDT: "₮", DAI: "◈", PYUSD: "P" };
-  return (
-    <span className={`coin ${cls[sym] ?? "coin--usdc"}`} aria-hidden="true">
-      {label[sym] ?? sym.slice(0, 1)}
-    </span>
-  );
-}
-
 /** Status → [label, color] per the UI v2 STATUS map (m-shell.jsx). */
 const STATUS: Record<InvoiceStatus, [string, string, string]> = {
   paid:      ["Paid",      "var(--success)", "var(--success-bg)"],
@@ -119,8 +108,8 @@ const STATUS: Record<InvoiceStatus, [string, string, string]> = {
   expired:   ["Expired",   "var(--fg-3)",    "transparent"],
   refunded:  ["Refunded",  "var(--info)",    "var(--info-bg)"],
   failed:    ["Failed",    "var(--danger)",  "var(--danger-bg)"],
-  claimed:   ["Claimed",   "#b794f6",        "color-mix(in oklch, #b794f6 16%, transparent)"],
-  recovered: ["Recovered", "#f0a868",        "color-mix(in oklch, #f0a868 16%, transparent)"],
+  claimed:   ["Claimed",   "var(--status-claimed)",   "var(--status-claimed-bg)"],
+  recovered: ["Recovered", "var(--status-recovered)", "var(--status-recovered-bg)"],
 };
 
 function StatusBadge({ status }: { status: InvoiceStatus }) {

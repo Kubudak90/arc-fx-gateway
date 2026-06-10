@@ -129,6 +129,9 @@
   --warning: #9a6b00;  --warning-bg: #fbefcc;
   --danger: #db4b4b;   --danger-bg: #f8dede;
 
+  --status-claimed: #7c3aed;    --status-claimed-bg: #ede9fe;
+  --status-recovered: #b45309;  --status-recovered-bg: #fef3c7;
+
   --elev-1: 0 1px 2px rgba(20, 40, 36, 0.06), 0 1px 1px rgba(20, 40, 36, 0.04);
   --elev-2: 0 2px 6px rgba(20, 40, 36, 0.08), 0 1px 2px rgba(20, 40, 36, 0.05);
   --elev-3: 0 8px 24px rgba(20, 40, 36, 0.1), 0 2px 6px rgba(20, 40, 36, 0.06);
@@ -171,6 +174,9 @@
   --info: #6aa9e0;     --info-bg: #112538;
   --warning: #e6b53a;  --warning-bg: #322512;
   --danger: #ee7070;   --danger-bg: #381818;
+
+  --status-claimed: #b794f6;    --status-claimed-bg: #2a2040;
+  --status-recovered: #f0a868;  --status-recovered-bg: #3a2a18;
 
   --elev-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --elev-2: 0 2px 8px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -412,6 +418,22 @@ h2.disp { font-weight: 400; letter-spacing: -0.025em; line-height: 1.06; }
   color: var(--fg-2); cursor: pointer; transition: all 0.18s var(--ease);
 }
 .iconbtn:hover { color: var(--fg-1); border-color: var(--fg-3); }
+
+/* Keyboard focus — recipe controls + field inputs */
+.pill:focus-visible,
+.iconbtn:focus-visible,
+.seg button:focus-visible,
+.m-navitem:focus-visible,
+.m-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+input.field:focus-visible,
+textarea.field:focus-visible,
+.field:has(> input:focus-visible) {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--focus-ring) 25%, transparent);
+}
 
 /* Feature-card hover */
 .lift { transition: transform 0.3s var(--ease), border-color 0.3s var(--ease), box-shadow 0.3s var(--ease); }

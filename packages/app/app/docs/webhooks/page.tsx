@@ -31,7 +31,10 @@ function verify(rawBody: string, signatureHex: string, secret: string) {
   const b = Buffer.from(signatureHex, 'hex');
   return a.length === b.length && timingSafeEqual(a, b);
 }`}</code></pre>
-      <p>The SDK exports <code>verifyWebhook</code> which does this for you.</p>
+      <p>
+        Verification deliberately stays out of the SDK — the snippet above is all you need, and it works in any
+        runtime with Node&apos;s <code>crypto</code> (or the equivalent HMAC in your language of choice).
+      </p>
 
       <h2>Event types</h2>
       <h3><code>invoice.paid</code></h3>

@@ -18,8 +18,8 @@ export default function SdkDocs() {
           <tr><th>Package</th><th>Use it for</th><th>Version</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>@arcora/sdk</code></td><td>Browser or server-side invoice creation, hosted-checkout redirect, escrow listing</td><td><code>1.1.0</code></td></tr>
-          <tr><td><code>@arcora/sdk-react</code></td><td>React hook and one-click button that wrap the SDK for embedded checkout</td><td><code>1.0.0</code></td></tr>
+          <tr><td><code>@arcora/sdk</code></td><td>Browser or server-side invoice creation, hosted-checkout redirect, escrow listing</td><td><code>1.2.0</code></td></tr>
+          <tr><td><code>@arcora/sdk-react</code></td><td>React hook and one-click button that wrap the SDK for embedded checkout</td><td><code>1.2.0</code></td></tr>
         </tbody>
       </table>
       <p>Webhook verification is signature-only and stays out of the SDK on purpose — three lines of <code>crypto.createHmac</code> work in any runtime; see <a href="/docs/webhooks">/docs/webhooks</a> for the snippet.</p>

@@ -55,9 +55,17 @@ console.log(invoice.url);
       <h2>3. Receive the webhook</h2>
       <p>
         Configure a webhook URL in <code>/m/settings</code>. Arcora signs each payload with HMAC-SHA256 over the raw
-        body using the secret you set there.
+        body using the secret you set there. Verification is plain <code>node:crypto</code> — deliberately not an SDK
+        method, so it works in any runtime (see <Link href={"/docs/webhooks" as Route}>Webhooks</Link> for details).
       </p>
-      <pre><code>{`import { verifyWebhook } from '@arcora/sdk';
+      <pre><code>{`import { createHmac, timingSafeEqual } from 'node:crypto';
+
+function verifyWebhook(rawBody: string, signatureHex: string, secret: string) {
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+  const a = Buffer.from(expected, 'hex');
+  const b = Buffer.from(signatureHex, 'hex');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 export async function POST(req: Request) {
   const signature = req.headers.get('x-arcora-signature') ?? '';
@@ -91,7 +99,8 @@ export async function POST(req: Request) {
         <li>The settled amount lands in your merchant wallet</li>
       </ul>
       <p>
-        Refund flows the same way — call <code>arcora.refundInvoice(invoiceId)</code> from the SDK or trigger from <code>/m/dashboard</code>.
+        Refund flows the same way — trigger it from the invoice row in <code>/m/dashboard</code>. (There&apos;s no SDK
+        refund method; refunds are merchant-dashboard or direct-contract operations.)
       </p>
 
       <h2>Common pitfalls</h2>

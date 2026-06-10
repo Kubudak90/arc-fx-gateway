@@ -13,14 +13,15 @@ const CODE = `import { Arcora } from '@arcora/sdk';
 
 const arcora = new Arcora({ apiKey: process.env.ARCORA_KEY });
 
-// Create an invoice — customer pays in any stable, you settle in USDC
-const invoice = await arcora.invoices.create({
-  amount: { value: '49.00', currency: 'USD' },
-  settle: 'USDC',
+// Create an invoice — customer pays EURC, you settle in your payout stable
+const invoice = await arcora.createInvoice({
+  amountUsdc: 49.00,
+  payInToken: 'EURC',
+  successUrl: 'https://shop.example.com/ok',
   metadata: { orderId: 'ord_8124' },
 });
 
-return Response.redirect(invoice.checkoutUrl);`;
+return Response.redirect(invoice.url);`;
 
 const KEYWORDS  = new Set(["import", "from", "const", "await", "return", "new", "process", "env"]);
 const TYPENAMES = new Set(["Arcora", "Response"]);

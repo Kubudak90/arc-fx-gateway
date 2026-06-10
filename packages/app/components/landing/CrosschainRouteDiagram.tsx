@@ -142,8 +142,9 @@ export function CrosschainRouteDiagram() {
 
         {/* Pulsing ring */}
         <circle cx={ARC_X} cy="165" r="50"
+          className="anim-pulse-ring"
           fill="none" strokeWidth="1" opacity="0.35"
-          style={{ stroke: "var(--sage)", transformOrigin: `${ARC_X}px 165px`, animation: "ax-pulse-ring 2s ease-out infinite" }} />
+          style={{ stroke: "var(--sage)", transformOrigin: `${ARC_X}px 165px` }} />
 
         {/* Settlement node */}
         <g transform={`translate(${SETTLE_X}, 165)`}>

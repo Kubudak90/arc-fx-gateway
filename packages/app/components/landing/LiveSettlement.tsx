@@ -134,11 +134,10 @@ export function LiveSettlement() {
           <div className="relative my-1.5 h-[2px] w-full" style={{ background: "var(--border)" }}>
             <span
               key={`${scenarioIdx}-${phase}-${tick}`}
-              className="absolute top-1/2 h-[9px] w-[9px] -translate-y-1/2 rounded-full"
+              className={`absolute top-1/2 h-[9px] w-[9px] -translate-y-1/2 rounded-full${phase === "settled" ? "" : " anim-flow-dot"}`}
               style={{
                 background: "var(--acc)",
                 boxShadow: "0 0 12px var(--acc-glow)",
-                animation: phase === "settled" ? "none" : "flow-dot 2.6s var(--ease) infinite",
                 left: phase === "settled" ? "98%" : undefined,
               }}
             />

@@ -365,6 +365,7 @@ h2.disp { font-weight: 400; letter-spacing: -0.025em; line-height: 1.06; }
   html { scroll-behavior: auto; }
   .marquee { animation: none; }
   .dot--live { animation: none; }
+  .anim-flow-dot, .anim-pulse-ring { animation: none; }
   [class*="steps-rail"] i.cur::after { animation: none; transform: none; }
 }
 
@@ -391,6 +392,8 @@ h2.disp { font-weight: 400; letter-spacing: -0.025em; line-height: 1.06; }
 @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 @keyframes spin-slow { to { transform: rotate(360deg); } }
 .spin { animation: spin-slow 1s linear infinite; }
+.anim-flow-dot { animation: flow-dot 2.6s var(--ease) infinite; }
+.anim-pulse-ring { animation: ax-pulse-ring 2s ease-out infinite; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
 
@@ -459,12 +462,12 @@ textarea.field:focus-visible,
 
 /* Segmented control */
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.seg button {
+.seg button, .seg span {
   font-family: var(--font-mono); font-size: 11px; padding: 7px 13px; background: transparent;
   color: var(--fg-3); border: none; cursor: pointer; border-right: 1px solid var(--border); transition: all 0.15s var(--ease);
 }
-.seg button:last-child { border-right: none; }
-.seg button.on { background: var(--acc); color: var(--acc-ink); font-weight: 600; }
+.seg button:last-child, .seg span:last-child { border-right: none; }
+.seg button.on, .seg span.on { background: var(--acc); color: var(--acc-ink); font-weight: 600; }
 .seg button:not(.on):hover { color: var(--fg-1); background: color-mix(in oklch, var(--fg-1) 5%, transparent); }
 
 /* Progress steps */

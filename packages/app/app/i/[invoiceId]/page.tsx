@@ -101,6 +101,11 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
         <p className="mono text-center text-[10.5px] uppercase tracking-[0.12em] text-[var(--fg-3)]">
           Gas-less Permit2 / EIP-712 · settles on Arc
         </p>
+        <p className="mono text-center text-[10.5px] uppercase tracking-[0.12em] text-[var(--fg-3)]">
+          <a href="/terms" className="hover:text-[var(--fg-2)] transition-colors">Terms</a>
+          {" · "}
+          <a href="/privacy" className="hover:text-[var(--fg-2)] transition-colors">Privacy</a>
+        </p>
       </div>
     </main>
   );

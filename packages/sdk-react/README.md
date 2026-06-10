@@ -76,7 +76,7 @@ function Pay() {
 
 ## Source
 
-[github.com/Kubudak90/arc-fx-gateway](https://github.com/Kubudak90/arc-fx-gateway) — `packages/sdk-react/`
+[github.com/arcoralabs/arcorapay](https://github.com/arcoralabs/arcorapay) — `packages/sdk-react/`
 
 ## License
 

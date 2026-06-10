@@ -1,13 +1,13 @@
 <?php
 /**
  * Plugin Name:       Arcora — Stablecoin Checkout
- * Plugin URI:        https://github.com/Kubudak90/arc-fx-gateway
+ * Plugin URI:        https://github.com/arcoralabs/arcorapay
  * Description:       Accept stablecoin payments (USDC, EURC) on Arc Network through Arcora's hosted checkout. Customer pays with their preferred stablecoin; merchant settles in the stable they choose. Atomic on-chain settlement, sub-second finality, refunds in payout token.
  * Version:           1.0.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Arcora
- * Author URI:        https://github.com/Kubudak90/arc-fx-gateway
+ * Author URI:        https://github.com/arcoralabs/arcorapay
  * License:           MIT
  * Text Domain:       arcora-woocommerce
  * WC requires at least: 7.0

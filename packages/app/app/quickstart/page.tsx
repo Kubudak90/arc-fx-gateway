@@ -170,7 +170,7 @@ export default function QuickstartPage() {
           <nav className="flex items-center gap-4 sm:gap-5">
             <Link href={"/" as Route} className="navlink">Home</Link>
             <Link href={"/m/login" as Route} className="navlink whitespace-nowrap">Merchants</Link>
-            <a href="https://github.com/Kubudak90/arc-fx-gateway" className="navlink">GitHub</a>
+            <a href="https://github.com/arcoralabs/arcorapay" className="navlink">GitHub</a>
             <ThemeToggle />
           </nav>
         </div>

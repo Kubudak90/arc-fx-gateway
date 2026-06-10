@@ -25,19 +25,19 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Developers",
     items: [
-      { label: "GitHub", href: "https://github.com/Kubudak90/arc-fx-gateway", external: true },
+      { label: "GitHub", href: "https://github.com/arcoralabs/arcorapay", external: true },
       { label: "@arcora/sdk", href: "https://www.npmjs.com/package/@arcora/sdk", external: true },
       { label: "@arcora/sdk-react", href: "https://www.npmjs.com/package/@arcora/sdk-react", external: true },
-      { label: "Releases", href: "https://github.com/Kubudak90/arc-fx-gateway/releases", external: true },
+      { label: "Releases", href: "https://github.com/arcoralabs/arcorapay/releases", external: true },
     ],
   },
   {
     title: "Resources",
     items: [
       { label: "Live merchant demo", href: "https://arc-fx-demo.vercel.app", external: true },
-      { label: "Pitch deck (PDF)", href: "https://github.com/Kubudak90/arc-fx-gateway/raw/plan-1-protocol/docs/arcora-pitch.pdf", external: true },
-      { label: "Specs & plans", href: "https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/docs", external: true },
-      { label: "CHANGELOG", href: "https://github.com/Kubudak90/arc-fx-gateway/blob/plan-1-protocol/CHANGELOG.md", external: true },
+      { label: "Litepaper", href: "https://github.com/arcoralabs/arcorapay/blob/HEAD/docs/LITEPAPER.md", external: true },
+      { label: "Specs & plans", href: "https://github.com/arcoralabs/arcorapay/tree/HEAD/docs", external: true },
+      { label: "CHANGELOG", href: "https://github.com/arcoralabs/arcorapay/blob/HEAD/CHANGELOG.md", external: true },
     ],
   },
 ];
@@ -54,6 +54,10 @@ export function SiteFooter() {
             </p>
             <span className="mono text-[11px] tracking-[0.08em]" style={{ color: "var(--fg-3)" }}>
               © 2026 Arcora · Arc testnet
+            </span>
+            <span className="flex items-center gap-3">
+              <a href="/terms" className="navlink text-[12px]">Terms</a>
+              <a href="/privacy" className="navlink text-[12px]">Privacy</a>
             </span>
           </div>
           {COLUMNS.map(col => (

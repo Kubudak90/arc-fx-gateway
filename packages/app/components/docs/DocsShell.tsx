@@ -64,7 +64,7 @@ export function DocsShell({
             <Link href={"/" as Route} className="navlink">Home</Link>
             <Link href={"/quickstart" as Route} className="navlink hidden md:inline-block">Tester</Link>
             <Link href={"/m/login" as Route} className="navlink whitespace-nowrap">Merchants</Link>
-            <a href="https://github.com/Kubudak90/arc-fx-gateway" className="navlink">GitHub</a>
+            <a href="https://github.com/arcoralabs/arcorapay" className="navlink">GitHub</a>
             <ThemeToggle />
           </nav>
         </div>

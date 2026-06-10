@@ -18,11 +18,11 @@ Source of truth lives in `run.ts` (daemon), `replay.ts` (recovery CLI), and `smo
 
 ```bash
 # liveness
-ssh root@194.163.136.1 'systemctl is-active arcora-relayer'
+ssh root@<ops-vps> 'systemctl is-active arcora-relayer'
 # logs
-ssh root@194.163.136.1 'journalctl -u arcora-relayer -f'
+ssh root@<ops-vps> 'journalctl -u arcora-relayer -f'
 # restart after env change (new gateway, new kit key, etc.)
-ssh root@194.163.136.1 'systemctl restart arcora-relayer'
+ssh root@<ops-vps> 'systemctl restart arcora-relayer'
 ```
 
 ## Recovery — `replay.ts`

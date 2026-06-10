@@ -2,6 +2,62 @@
 
 All notable changes to Arcora are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project follows [Semantic Versioning](https://semver.org/) for the published `@arcora/*` npm packages.
 
+## [Unreleased]
+
+Public-beta launch work on `feat/public-beta-launch`. Not yet tagged. The `@arcora/sdk` source carries the AFG-019 security rework below; `@arcora/sdk` and `@arcora/sdk-react` are both prepped at **1.2.0** for the npm publish that ships these client-facing changes.
+
+### Security
+- **AFG-019 — browser keys can no longer act as server keys.** The docs previously told merchants to embed the privileged `ak_live_` secret key (which creates invoices, spends server-wallet gas, lists escrows, and reads private invoice data) directly in browser / CDN / React code. Introduced a browser-safe **publishable key (`pk_live_…`)**: `POST /api/invoices` now routes by key class — `pk_` may only open a checkout from an allowlisted Origin, `ak_` keeps full capability, unknown prefix is rejected. `lookupMerchantByApiKey` matches `ak_` only, so a browser key can never authorize escrows or private invoice fields. SDK `escrows()` throws `PUBLISHABLE_KEY_FORBIDDEN` for a `pk_` key, and constructing the SDK with a secret key in a browser warns. Migration `0020` adds the publishable-key column (plaintext + prefix index), generated at bootstrap and lazily backfilled for existing merchants. Docs/READMEs/SDK page now show `pk_` in client code with an explicit "secret = server-side only" callout.
+- **2026-06-06 full-scope audit remediation sweep** (findings AFG-001 through AFG-021): webhook DNS pinned to the validated connection + hardened IP classifier (AFG-001/002); server-priced shop cart + abuse throttle (AFG-003/004); fail-closed compliance gate + soft refund-window semantics (AFG-005/013); CSRF coverage across all merchant routes + amount-string caps before `BigInt` (AFG-006/009); relayer gateway allowlist + strict pinned-CA database TLS (AFG-010/011); ops daemons run unprivileged and systemd-sandboxed (AFG-021).
+
+### Added
+- **UI v2 redesign** — new chartreuse-accent design system ported into the Tailwind theme (design tokens + component recipes in `globals.css`), with **dual light/dark themes** driven by a `data-theme` attribute (dark by default). Landing, hosted checkout, demo, and the full merchant area (shell, sidebar, dashboard, treasury) were restyled to v2; legacy aux surfaces migrated and the old style layer removed.
+- **New Arcorapay brand** — redesigned Arcora symbol + two-tone "Arcorapay" wordmark, new favicon and metadata; typography moved to **Hanken Grotesk** (UI) and **IBM Plex Mono** (tabular numerals) via `next/font`.
+- **Terms of Service + Privacy Policy pages** for the public beta (privacy deletion requests require wallet-ownership proof).
+- **`/api/health` endpoint** for uptime monitoring (reports deploy SHA as version).
+- **Ops health-check cron** covering the VPS daemons, webhook/settlement queue age, and the app endpoint, with hardened scripting (ERR trap, timeouts, `flock`, CA cleanup), an on-alert runbook, and optional `ntfy.sh` push alerts.
+- **Cross-chain (v2) checkout** groundwork — shared v2 route core, prepare/burn-submit/status endpoints, cross-chain payment schema (migration `0021`), a CCTP attestation adapter, and a relayer payment state machine. (Testnet/preview; not part of the SDK publish.)
+
+## [1.2.0] — 2026-05-13
+
+Hardening + hygiene point release on top of 1.1.0. No public SDK surface change versus 1.1.0; the npm artifacts were not re-cut for this tag.
+
+### Security
+- **Dependency audit cleared** — `pnpm audit` findings cut from 43 → 3 (all critical + high resolved). `next` bumped `^15.0.0 → ^15.5.18` across `packages/app` and `packages/shop`, covering the App Router SSRF, middleware/proxy bypass, XSS, cache-poisoning, and DoS advisories; `happy-dom` `^15 → ^20` (dev) closes the VM-context-escape RCE; `axios` forced via pnpm override to clear transitive highs. sdk-react verified non-breaking against the bump.
+
+### Fixed
+- **Dead-domain defaults** — SDK and WooCommerce default base URLs pointed at unregistered DNS (`checkout.arcorapay.com` / `checkout-staging.arcorapay.com`, which never had A records); a consumer who didn't pass an explicit `baseUrl` silently failed. Testnet and mainnet defaults now point at the resolving `arcorapay.xyz`; `PUBLIC_BASE_URL` fallback in the invoice route fixed; SDK test fixture aligned.
+
+### Changed
+- `.env.example` files refreshed to V11-correct shape; litepaper rewritten and pitch deck refreshed for the V11 / v1.1.0 era; real SDK docs in place of stale copy.
+
+## [1.1.0] — 2026-05-13
+
+Major feature release: a V10 custody gateway, multi-stable StableFX swap pools, a Vault-backed relayer, compliance Phase 0, a live dogfooding storefront, full `/docs`, and the first publishable `@arcora/sdk` CDN bundle. Also folds in two large audit-remediation passes (2026-05-19 and 2026-05-24).
+
+### Added
+- **`@arcora/sdk` 1.1.0 — drop-in `<script>` CDN bundle.** New `dist/arcora.global.js` IIFE build (`unpkg` / `jsdelivr` fields, `./global` export) so a merchant can load Arcora from a CDN without a bundler.
+- **`@arcora/sdk` — V10 surface.** V10 ABI, `escrows()`, and `refundEndsAt` exposed in the client.
+- **`Arcora` class for multi-tenant safety** (audit-h6) — replaces the global static `init()` singleton so a process can hold more than one merchant configuration; the static init path is deprecated.
+- **V10 custody gateway** — escrow-per-invoice settlement (no on-settle transfer), permissionless `claimAll` that splits the escrow with the fee accrued at claim time, refunds that drain the escrow and make the customer whole, an admin recovery path for a deactivated merchant's escrow (+14d), merchant lifecycle / reactivate, token whitelist + pause, and constructor fee/window bounds. Deployed and wired across app, indexer, and DB (escrow schema migrations, V10 event handlers).
+- **StableFX integration (plan-6)** — v0.7/v0.8 token-agnostic, pool-routed gateway with a `StablecoinRegistry`, per-token `PriceGuard`, and a cross-decimal `StablePool` (deposit/withdraw/pause, oracle-priced quote, swap + fee accrual). v0.8 hosted checkout UI with `targetOutput` quote mode; deterministic merchant payout.
+- **Vault-backed relayer** — relayer authenticates via HashiCorp Vault and drops `RELAYER_PRIVATE_KEY` from disk (M1), signing through a viem custom signer backed by Vault's transit engine.
+- **Compliance hooks Phase 0 (plan-5)** — pluggable screening adapters, an audit log, and a checkout compliance gate (Noop default).
+- **Arcora Shop** — a live storefront that dogfoods the checkout end-to-end, with real product photography.
+- **Full `/docs` section** — sidebar, prose styling, 10 pages; `docs.arcorapay.xyz/*` rewritten to `/docs/*`.
+- **Merchant UX** — sidebar layout + KPI overview redesign, settle-currency picker (USDC/EURC), treasury Claim tab + permissionless `ClaimAllButton`, `/api/merchant/escrows` rollup, share/copy link in the create-invoice success state. Standalone invoices: `successUrl` is now optional.
+- **Security headers** (audit-m14) — CSP, HSTS, X-Frame-Options on app + shop.
+
+### Changed
+- **Rebrand to Arcora** completed at the package level — `@arc-fx/*` workspace packages renamed to `@arcora/*`, and `@arcora/react` renamed to `@arcora/sdk-react`. Product surfaces renamed from "Arc FX Gateway" to "Arcora".
+
+### Fixed
+- Large audit-remediation sweeps on **2026-05-19** (High + Medium plan) and **2026-05-24** (contracts/ops/app findings): checkout authorize/submit rate limiting, constant-time `CRON_SECRET` comparison, SSRF hardening (IPv6 6to4 / hex / NAT64 / Teredo), invoice amount + metadata bounds, webhook replay protection (V2 sig + timestamp) and body-buffer caps, relayer refund-tx persistence + resume, graceful SIGTERM drain, and many app-side input/CSRF/env-validation fixes.
+- SDK `createInvoice` pre-flight validates `amountUsdc` (audit #38); SDK refuses to fall back to `Math.random` for the Permit2 nonce (audit-m13); `sdk-react` `useCheckout` includes `opts.environment` in its memo deps.
+
+[1.1.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.1.0
+[1.2.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.2.0
+
 ## [1.0.3] — 2026-04-30
 
 Marketing surface + docs alignment release. No contract changes; SDK npm artifacts unchanged. v0.6 gateway at `0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3` remains canonical.
@@ -14,7 +70,7 @@ Marketing surface + docs alignment release. No contract changes; SDK npm artifac
 - **Roadmap rows** on the landing: v1.0 → v3.0 with phase pills.
 - **Rich site footer** with Product / Developers / Resources columns. Every link points at something that actually exists today (no placeholder /about, /security, /compliance pages).
 - **JetBrains Mono** added via `next/font` for tabular numbers.
-- **Plan 4 spec** (`docs/superpowers/specs/2026-04-30-plan-4-crosschain-checkout.md`) — v2.0 crosschain rewrites the previous CCTP plan around **App Kit Bridge** (Arc's recommended primitive) instead of raw `TokenMessenger` calls. Off-chain EIP-712 intent, single Arcora relayer, no new gateway contract.
+- **Plan 4 spec** (internal) — v2.0 crosschain rewrites the previous CCTP plan around **App Kit Bridge** (Arc's recommended primitive) instead of raw `TokenMessenger` calls. Off-chain EIP-712 intent, single Arcora relayer, no new gateway contract.
 - **README "How Arcora relates to Arc primitives"** subsection — frames Arcora as the merchant abstraction layer above StableFX / App Kit / Circle DCW / Refund Protocol. Stripe ↔ Visa shape.
 - **Pitch deck refresh** — new "Arcora sits above Arc primitives" slide; gas-cost line corrected from "testnet ETH" to "USDC" (Arc settles gas in USDC).
 - **Arc docs alignment** verified through the `arc-network` MCP. USDC, EURC, chain config, decimals, native gas — all confirmed against `docs.arc.network`.
@@ -30,7 +86,7 @@ Marketing surface + docs alignment release. No contract changes; SDK npm artifac
 - `pnpm deploy:app` / `pnpm deploy:demo` / `pnpm pitch:pdf` / `pnpm pitch:html` scripts at repo root so deploys + pitch renders run from the right cwd. Multiple "wrong directory" Vercel errors had cluttered the dashboard before this.
 - `.gitignore` adds `.vercel`.
 
-[1.0.3]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.3
+[1.0.3]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.0.3
 
 ## [1.0.2] — 2026-04-29
 
@@ -49,7 +105,7 @@ Refunds, treasury dashboard, and one nasty deploy lesson. SDK npm artifacts unch
 - v0.5 deprecated; v0.6 canonical at `0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3`. Vercel envs and the VPS `arcora-indexer.service` `.env` repointed; daemon restarted.
 - DB migrations `0001_stale_newton_destine.sql` (refund columns + enum value) and `0002_legal_flatman.sql` (treasury columns) applied to Neon prod.
 
-[1.0.2]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.2
+[1.0.2]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.0.2
 
 ## [1.0.1] — 2026-04-29
 
@@ -65,7 +121,7 @@ Hotfix release. Live EURC↔USDC swap payments reverted on-chain with `Insuffici
 - v0.4 deprecated and recorded as such in `packages/contracts/deployments/arc-testnet.json`. Existing v0.4 invoices in the DB stay as-is; the indexer/webhook daemons now point exclusively at v0.5 (Vercel envs + VPS `arcora-indexer.service` `.env` updated and the daemon restarted).
 - npm packages (`@arcora/sdk`, `@arcora/sdk-react`) untouched — their source surface didn't change.
 
-[1.0.1]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.1
+[1.0.1]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.0.1
 
 ## [1.0.0] — 2026-04-28
 
@@ -75,7 +131,7 @@ First shippable Arcora release. Arc-only stablecoin checkout and FX settlement: 
 - **Arcora Gateway v0.4** at `0xA80A5741a09bff1f43dcBF15Df7c598A23163302` on Arc testnet.
 - **`@arcora/sdk`** — three-function checkout client (`init` / `createInvoice` / `openCheckout`), zero EVM deps, ~1.5 KB gzipped.
 - **`@arcora/sdk-react`** — `<CheckoutButton />` and `useCheckout()` for drop-in React integration.
-- **Hosted checkout app** at `arc-fx-gateway.vercel.app`: SIWE merchant auth, invoice creation via server hot wallet, customer-side wallet connect (MetaMask + WalletConnect), live FX quote display.
+- **Hosted checkout app** (now live at [`arcorapay.xyz`](https://arcorapay.xyz)): SIWE merchant auth, invoice creation via server hot wallet, customer-side wallet connect (MetaMask + WalletConnect), live FX quote display.
 - **Merchant dashboard** under `/m/`: invoice list, create new, share QR, API key + webhook URL settings.
 - **VPS-resident ops daemons** (`arcora-indexer.service`, `arcora-webhooks.service`) with systemd `Restart=always`, replacing Vercel cron for chain → DB sync and webhook delivery.
 - **OracleAMM** Chainlink-priced two-token swap pool for USDC ⇄ EURC, ± 4 bps fee, ± 0.5% deviation guard.
@@ -101,4 +157,4 @@ First shippable Arcora release. Arc-only stablecoin checkout and FX settlement: 
 - Single chain (Arc testnet). Crosschain payment from any CCTP-supported chain is the v2.0 milestone.
 - Mock Chainlink feed on testnet — a VPS systemd timer keeps it fresh; mainnet replaces this with the real Chainlink EUR/USD feed.
 
-[1.0.0]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.0
+[1.0.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.0.0

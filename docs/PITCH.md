@@ -256,7 +256,7 @@ Each row is scoped. Items 5–6 are reversible single-host changes. Items 1–4 
 **For builders / partners:**
 Try the demo, integrate the SDK, file issues.
 [`npm install @arcora/sdk`](https://www.npmjs.com/package/@arcora/sdk) — it works today.
-GitHub: [`Kubudak90/arc-fx-gateway`](https://github.com/Kubudak90/arc-fx-gateway)
+GitHub: [`arcoralabs/arcorapay`](https://github.com/arcoralabs/arcorapay)
 
 **For investors / Arc ecosystem:**
 v1 ships on testnet today. v2 (crosschain) is the wedge.
@@ -275,7 +275,7 @@ The customer-side problem — *right token, wrong chain* — is real. Arcora's b
 
 # Pay anywhere. Settle on Arc.
 
-## `arcorapay.xyz` · `@arcora/sdk` · `arc-fx-gateway` (GitHub)
+## `arcorapay.xyz` · `@arcora/sdk` · `arcoralabs/arcorapay` (GitHub)
 
 <br>
 

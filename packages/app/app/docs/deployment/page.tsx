@@ -13,7 +13,7 @@ export default function DeploymentDocs() {
       description="Stand up your own Arcora — env vars, infra, and the runbook."
     >
       <p>
-        The Arcora codebase is open source — <a href="https://github.com/Kubudak90/arc-fx-gateway">github.com/Kubudak90/arc-fx-gateway</a>.
+        The Arcora codebase is open source — <a href="https://github.com/arcoralabs/arcorapay">github.com/arcoralabs/arcorapay</a>.
         Most merchants will use the hosted version at <code>arcorapay.xyz</code>; if you need to self-host (compliance, branding, sovereignty), here&apos;s the shape.
       </p>
 
@@ -64,7 +64,7 @@ RELAYER_TICK_MS        default 5000`}</code></pre>
       </ol>
       <p>
         If the <code>__drizzle_migrations</code> table is out of sync (manual SQL applied earlier), run the SQL files
-        directly inside a transaction. See <code>memory/compliance_phase0.md</code> in the repo for the workflow.
+        directly inside a transaction and backfill <code>__drizzle_migrations</code> once so future migrations apply cleanly.
       </p>
 
       <h2>Deploying the gateway</h2>
@@ -75,11 +75,9 @@ forge script script/Deploy.s.sol \\
   --verifier-url $ARC_EXPLORER_URL \\
   --etherscan-api-key $ARC_EXPLORER_KEY`}</code></pre>
       <p>
-        Then verify with <code>cast receipt</code> and <code>cast code</code>. The full deploy checklist is at{" "}
-        <a href="https://github.com/Kubudak90/arc-fx-gateway/blob/plan-1-protocol/docs/audit/deploy-checklist.md">
-          docs/audit/deploy-checklist.md
-        </a>{" "}
-        — cover that before mainnet.
+        Then verify with <code>cast receipt</code> (status=1) <em>and</em> <code>cast code</code> (non-empty bytecode)
+        before trusting the broadcast file, repoint every consumer env (Vercel + VPS daemons), and restart the daemons.
+        We run an internal deploy checklist covering exactly that ground before every redeploy — do the same before mainnet.
       </p>
 
       <h2>Operational reality</h2>

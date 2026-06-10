@@ -2,6 +2,8 @@
 
 Steps to cut a release. Two surfaces ship together: **published npm packages** (`@arcora/sdk`, `@arcora/sdk-react`) and the **hosted app** on Vercel.
 
+> Git remote: `origin` points at **`github.com/arcoralabs/arcorapay`**. The Vercel project is still named `arc-fx-gateway` internally and its alias is unchanged — that's intentional; only the GitHub repo moved.
+
 ## 1. Pre-flight
 
 ```bash

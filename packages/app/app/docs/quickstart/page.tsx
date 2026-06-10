@@ -54,16 +54,40 @@ console.log(invoice.url);
 
       <h2>3. Receive the webhook</h2>
       <p>
-        Configure a webhook URL in <code>/m/settings</code>. Arcora signs each payload with HMAC-SHA256 over the raw
-        body using the secret you set there.
+        Configure a webhook URL in <code>/m/settings</code>. Every delivery is dual-signed with the secret you set
+        there: a legacy <code>X-Arcora-Signature</code> and a timestamp-bound <code>X-Arcora-Signature-V2</code> (paired
+        with <code>X-Arcora-Timestamp</code>) for replay protection. Both header values carry a <code>sha256=</code>{" "}
+        prefix — compare against the whole value. Prefer V2 when present and reject deliveries outside a ±300s window.
+        Verification is plain <code>node:crypto</code> — deliberately not an SDK method, so it works in any runtime
+        (see <Link href={"/docs/webhooks" as Route}>Webhooks</Link> for details).
       </p>
-      <pre><code>{`import { verifyWebhook } from '@arcora/sdk';
+      <pre><code>{`import { createHmac, timingSafeEqual } from 'node:crypto';
+
+const TOLERANCE_SECONDS = 300; // ±5 min replay window
+
+function safeEqual(a: string, b: string) {
+  const ab = Buffer.from(a), bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+function verifyWebhook(headers: Headers, rawBody: string, secret: string) {
+  const sigV2 = headers.get('x-arcora-signature-v2');
+  const ts    = headers.get('x-arcora-timestamp');
+  if (sigV2 && ts) { // prefer V2: timestamp-bound, replay-protected
+    const n = Number(ts);
+    if (!Number.isFinite(n) || Math.abs(Date.now() / 1000 - n) > TOLERANCE_SECONDS) return false;
+    const expected = 'sha256=' + createHmac('sha256', secret).update(ts + '.' + rawBody).digest('hex');
+    return safeEqual(expected, sigV2);
+  }
+  const sig = headers.get('x-arcora-signature') ?? ''; // legacy fallback (no replay protection)
+  const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
+  return safeEqual(expected, sig);
+}
 
 export async function POST(req: Request) {
-  const signature = req.headers.get('x-arcora-signature') ?? '';
-  const rawBody   = await req.text();
+  const rawBody = await req.text();
 
-  if (!verifyWebhook(rawBody, signature, process.env.ARCORA_WEBHOOK_SECRET!)) {
+  if (!verifyWebhook(req.headers, rawBody, process.env.ARCORA_WEBHOOK_SECRET!)) {
     return new Response('Bad signature', { status: 400 });
   }
 
@@ -91,7 +115,8 @@ export async function POST(req: Request) {
         <li>The settled amount lands in your merchant wallet</li>
       </ul>
       <p>
-        Refund flows the same way — call <code>arcora.refundInvoice(invoiceId)</code> from the SDK or trigger from <code>/m/dashboard</code>.
+        Refund flows the same way — trigger it from the invoice row in <code>/m/dashboard</code>. (There&apos;s no SDK
+        refund method; refunds are merchant-dashboard or direct-contract operations.)
       </p>
 
       <h2>Common pitfalls</h2>

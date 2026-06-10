@@ -11,7 +11,7 @@
 
 After every VPS reboot:
 ```
-ssh root@194.163.136.1
+ssh root@<ops-vps>
 export VAULT_ADDR=http://127.0.0.1:8200
 vault operator unseal <key1>
 vault operator unseal <key2>
@@ -49,7 +49,7 @@ vault operator rekey <existing-key>
 If `secret-id-rotation.sh` errors:
 - Relayer still has its current `secret_id` valid for 24h. Manual re-run:
   ```
-  ssh root@194.163.136.1
+  ssh root@<ops-vps>
   VAULT_TOKEN=$(cat /root/.vault-rotation-token) bash /opt/arcora/ops/vault/secret-id-rotation.sh
   ```
 - Past 24h without rotation → relayer signing fails (invalid secret_id). Use the rotation operator token to mint a new secret_id manually:

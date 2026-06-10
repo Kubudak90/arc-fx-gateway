@@ -1,6 +1,6 @@
 {
   "name": "@arcora/sdk-react",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "React bindings for the Arcora checkout SDK — drop-in <CheckoutButton /> + useCheckout()",
   "keywords": [
     "arcora",
@@ -11,11 +11,14 @@
     "arc",
     "hooks"
   ],
-  "homepage": "https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/packages/sdk-react#readme",
+  "homepage": "https://github.com/arcoralabs/arcorapay/tree/HEAD/packages/sdk-react#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Kubudak90/arc-fx-gateway.git",
+    "url": "git+https://github.com/arcoralabs/arcorapay.git",
     "directory": "packages/sdk-react"
+  },
+  "bugs": {
+    "url": "https://github.com/arcoralabs/arcorapay/issues"
   },
   "license": "MIT",
   "main": "./dist/index.js",

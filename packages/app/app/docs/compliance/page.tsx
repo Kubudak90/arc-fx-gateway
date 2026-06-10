@@ -75,7 +75,7 @@ export default function ComplianceDocs() {
       <h2>Reporting a suspected issue</h2>
       <p>
         <code>compliance@arcorapay.xyz</code>. We aim to respond within 24 hours. See{" "}
-        <a href="https://github.com/Kubudak90/arc-fx-gateway/blob/plan-1-protocol/SECURITY.md">SECURITY.md</a> for security disclosures.
+        <a href="https://github.com/arcoralabs/arcorapay/blob/HEAD/SECURITY.md">SECURITY.md</a> for security disclosures.
       </p>
     </DocsShell>
   );

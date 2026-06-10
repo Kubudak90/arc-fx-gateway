@@ -1,6 +1,6 @@
 /**
  * Compliance screening types. Provider-agnostic — Elliptic / TRM Labs /
- * Noop all map onto these shapes. See `docs/superpowers/specs/2026-05-01-plan-5-compliance-hooks.md`.
+ * Noop all map onto these shapes.
  */
 
 export type Risk =

@@ -30,8 +30,8 @@ If you hit something that **isn't** listed here, that's a bug — please report 
 
 ## Operational caveats
 
-- **Foundry broadcast can lie.** On Arc testnet, `forge script --broadcast` has been observed reporting success while the tx silently failed to confirm. We always verify with `cast receipt` (status=1) AND `cast code <addr>` (non-empty). If you re-deploy, follow [`docs/audit/deploy-checklist.md`](docs/audit/deploy-checklist.md).
-- **Drizzle migration tracking is out of sync on Neon prod.** Migrations 0000–0005 have been applied via direct SQL exec, not via `drizzle-kit migrate`. Before any future migration, see `memory/compliance_phase0.md` for the workaround.
+- **Foundry broadcast can lie.** On Arc testnet, `forge script --broadcast` has been observed reporting success while the tx silently failed to confirm. We always verify with `cast receipt` (status=1) AND `cast code <addr>` (non-empty), and re-run those checks before trusting any redeploy.
+- **Drizzle migration tracking is out of sync on the production database.** Migrations 0000–0005 were applied via direct SQL exec rather than `drizzle-kit migrate`, so the migrations journal does not reflect prod state. Any future migration must be reconciled against the live schema before running `drizzle-kit migrate`.
 
 ## Versioning
 
@@ -39,7 +39,7 @@ If you hit something that **isn't** listed here, that's a bug — please report 
 |---|---|
 | Gateway `ArcFXGateway` (version-neutral) | live, canonical — `packages/contracts/src/ArcFXGateway.sol` |
 | Pre-retirement deploys (≤ v1.1) | retired 2026-05-20 (testnet wiped); kept in git history only, no `legacy/` dir |
-| `@arcora/sdk` + `@arcora/sdk-react` | published 1.0.0 on npm |
+| `@arcora/sdk` + `@arcora/sdk-react` | 1.0.0 published on npm; 1.2.0 prepared (version-synced, ships the publishable-key rework), publish pending (2FA user step) |
 | Compliance hooks | Phase 0 LIVE (Noop default) — Plan 5 |
 | Audit prep | Layers 1+2 LIVE (zero-budget path) — Plan 7 |
 | KYB | spec'd two-track (Manual + Persona), not built — Plan 8 |
@@ -49,7 +49,7 @@ If you hit something that **isn't** listed here, that's a bug — please report 
 
 ## Reporting
 
-- General feedback / bugs: `support@arcorapay.xyz` or [GitHub issues](https://github.com/Kubudak90/arc-fx-gateway/issues)
+- General feedback / bugs: `support@arcorapay.xyz` or [GitHub issues](https://github.com/arcoralabs/arcorapay/issues)
 - Security disclosure: `compliance@arcorapay.xyz` ([SECURITY.md](SECURITY.md))
 
 We aim to acknowledge within 24h. Coordinated disclosure expected for security findings.

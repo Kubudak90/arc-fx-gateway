@@ -76,40 +76,40 @@ type Phase = "shipped" | "next" | "later";
 
 const ROADMAP_ITEMS: Array<{ tag: string; phase: Phase; title: string; body: string }> = [
   {
-    tag: "v0.8",
-    phase: "shipped",
-    title: "Permit2 + App Kit Swap",
-    body: "Customer-side gas-less Permit2 signature; Arcora relayer drives Circle's App Kit Swap on Arc; deterministic merchant payout. Live on Arc testnet.",
-  },
-  {
     tag: "v1.0",
     phase: "shipped",
     title: "Hosted checkout & merchant dashboard",
-    body: "Invoice creation, hosted checkout page, SIWE auth, refunds, treasury view with 30-day charts, npm SDK, WooCommerce plugin.",
+    body: "Gas-less Permit2 checkout driving Circle's App Kit Swap on Arc, SIWE auth, refunds, treasury view, npm SDK, WooCommerce plugin. Live on Arc testnet.",
   },
   {
-    tag: "v1.x",
-    phase: "next",
-    title: "Compliance hooks (Elliptic / TRM)",
-    body: "Native screening adapters for sanctioned-wallet detection — pre-mainnet bar. Adapter pattern spec'd; rollout staged behind a config flip.",
+    tag: "v1.1",
+    phase: "shipped",
+    title: "Custody escrow & Vault-backed relayer",
+    body: "Escrow-per-invoice settlement with a 7-day refund window and permissionless claim, admin recovery, compliance gate (Phase 0), relayer key isolated in HashiCorp Vault.",
+  },
+  {
+    tag: "v1.2",
+    phase: "shipped",
+    title: "Hardening, UI v2 & public beta",
+    body: "Internal-audit findings remediated off-chain, browser-safe publishable keys, rate limiting + SSRF guards, UI v2 redesign — public testnet beta live at arcorapay.xyz.",
   },
   {
     tag: "v2.0",
     phase: "next",
     title: "Crosschain checkout via App Kit Bridge",
-    body: "Customer pays USDC from any chain App Kit supports — Ethereum, Arbitrum, Base, Optimism, Polygon, Avalanche, Linea — bridged through CCTPv2 to Arc settlement.",
+    body: "Customer pays USDC from another chain, merchant still settles on Arc. Feature-flagged demo in development against Sepolia / Base Sepolia, CCTP attestation flow.",
   },
   {
-    tag: "v2.1",
+    tag: "T-0",
     phase: "later",
-    title: "Pay with any token",
-    body: "Source-side DEX aggregation so customers pay in native ETH or any ERC-20 — Arcora handles the conversion before bridging.",
+    title: "Mainnet — gated on Arc",
+    body: "Hard-gated on Arc Network mainnet plus our pre-mainnet checklist: external audit, multisig admin, KYB, HSM signing, real price feeds, compliance provider activation.",
   },
   {
-    tag: "v2.2",
+    tag: "v2.x",
     phase: "later",
-    title: "Solana, beyond EVM",
-    body: "Same checkout shape, non-EVM wallet stack — App Kit's Solana adapter, Phantom, native CCTP routes.",
+    title: "Any token, any source chain",
+    body: "Source-side DEX aggregation (native ETH, any ERC-20) and non-EVM sources — Solana wallet stack, native CCTP routes — before bridging to Arc settlement.",
   },
   {
     tag: "v3.0",
@@ -144,7 +144,7 @@ export default function Home() {
             <a href="#developers" className="navlink">Developers</a>
             <a href="#roadmap" className="navlink">Roadmap</a>
             <Link href={"/docs" as Route} className="navlink">Docs</Link>
-            <a href="https://github.com/Kubudak90/arc-fx-gateway" className="navlink">GitHub</a>
+            <a href="https://github.com/arcoralabs/arcorapay" className="navlink">GitHub</a>
           </nav>
           <div className="flex items-center gap-2.5">
             <ThemeToggle />
@@ -178,18 +178,18 @@ export default function Home() {
               <div className="mb-8 flex flex-wrap gap-3">
                 <Link href={"/quickstart" as Route} className="pill pill--lg pill--acc">Test in 10 min</Link>
                 <Link href="/checkout-demo" className="pill pill--lg pill--ghost">Try the checkout</Link>
-                <a href="https://github.com/Kubudak90/arc-fx-gateway" className="pill pill--lg pill--ghost hide-sm">View on GitHub</a>
+                <a href="https://github.com/arcoralabs/arcorapay" className="pill pill--lg pill--ghost hide-sm">View on GitHub</a>
               </div>
               {/* Honest trust line — test count (suite currently runs 438; intentionally rounded down), no fabricated logos */}
               <div className="mono flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] tracking-[0.04em]" style={{ color: "var(--fg-3)" }}>
                 <span className="inline-flex items-center gap-2">
                   <span className="dot dot--live" />
-                  <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">400+ tests passing</a>
+                  <a href="https://github.com/arcoralabs/arcorapay" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">400+ tests passing</a>
                 </span>
                 <span>
-                  · <a href="https://github.com/Kubudak90/arc-fx-gateway/blob/HEAD/SECURITY.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">audited</a>
+                  · <a href="https://github.com/arcoralabs/arcorapay/blob/HEAD/SECURITY.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">internally audited</a>
                   {" · "}
-                  <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">open-source</a>
+                  <a href="https://github.com/arcoralabs/arcorapay" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">open-source</a>
                   {" · sub-30s settlement"}
                 </span>
                 <a href="https://arc-fx-demo.vercel.app" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">live merchant demo →</a>
@@ -375,7 +375,7 @@ export default function Home() {
           <div className="mb-2 flex flex-wrap items-baseline gap-3">
             <span className="mono text-[14px] font-semibold tabular-nums">v2.0</span>
             <PhaseBadge phase="next" />
-            <span className="eyebrow ml-auto">In design · No code yet</span>
+            <span className="eyebrow ml-auto">In development · Feature-flagged demo</span>
           </div>
           <h2 className="disp mb-3.5 max-w-[640px]" style={{ fontSize: "clamp(28px, 3.6vw, 38px)" }}>
             Customer pays from anywhere. Merchant settles on Arc.
@@ -490,11 +490,11 @@ export default function Home() {
               <h2 className="disp max-w-[520px]" style={{ fontSize: "clamp(30px, 4vw, 44px)" }}>
                 Ship a checkout this afternoon. <em>Settle by morning.</em>
               </h2>
-              <p className="lead mt-3.5 text-[16px]">Arc testnet is open. v1 is live; v2 is in design.</p>
+              <p className="lead mt-3.5 text-[16px]">Arc testnet is open. v1 is live; v2 is in development.</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Link href="/checkout-demo" className="pill pill--lg pill--acc">Try the checkout</Link>
-              <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="pill pill--lg pill--ghost">GitHub</a>
+              <a href="https://github.com/arcoralabs/arcorapay" target="_blank" rel="noopener noreferrer" className="pill pill--lg pill--ghost">GitHub</a>
             </div>
           </div>
         </div>

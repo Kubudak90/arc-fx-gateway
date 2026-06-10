@@ -11,9 +11,9 @@
  *   5. Relayer queue is healthy — no rows stuck in `processing` for > 5min
  *   6. compliance_screenings table exists and the providers env is sane
  *
- * Wallet-driven smoke (sign Permit2 + pay) is documented in
- * docs/audit/deploy-checklist.md and run by hand from incognito browsers
- * with funded testnet wallets.
+ * Wallet-driven smoke (sign Permit2 + pay) is documented in the internal
+ * deploy checklist and run by hand from incognito browsers with funded
+ * testnet wallets.
  *
  * Usage:
  *   pnpm exec tsx --no-warnings scripts/smoke-prod.ts

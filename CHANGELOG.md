@@ -70,7 +70,7 @@ Marketing surface + docs alignment release. No contract changes; SDK npm artifac
 - **Roadmap rows** on the landing: v1.0 → v3.0 with phase pills.
 - **Rich site footer** with Product / Developers / Resources columns. Every link points at something that actually exists today (no placeholder /about, /security, /compliance pages).
 - **JetBrains Mono** added via `next/font` for tabular numbers.
-- **Plan 4 spec** (`docs/superpowers/specs/2026-04-30-plan-4-crosschain-checkout.md`) — v2.0 crosschain rewrites the previous CCTP plan around **App Kit Bridge** (Arc's recommended primitive) instead of raw `TokenMessenger` calls. Off-chain EIP-712 intent, single Arcora relayer, no new gateway contract.
+- **Plan 4 spec** (internal) — v2.0 crosschain rewrites the previous CCTP plan around **App Kit Bridge** (Arc's recommended primitive) instead of raw `TokenMessenger` calls. Off-chain EIP-712 intent, single Arcora relayer, no new gateway contract.
 - **README "How Arcora relates to Arc primitives"** subsection — frames Arcora as the merchant abstraction layer above StableFX / App Kit / Circle DCW / Refund Protocol. Stripe ↔ Visa shape.
 - **Pitch deck refresh** — new "Arcora sits above Arc primitives" slide; gas-cost line corrected from "testnet ETH" to "USDC" (Arc settles gas in USDC).
 - **Arc docs alignment** verified through the `arc-network` MCP. USDC, EURC, chain config, decimals, native gas — all confirmed against `docs.arc.network`.

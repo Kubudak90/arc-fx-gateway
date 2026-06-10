@@ -54,4 +54,4 @@ When we have findings to credit, we'll list them here:
 
 ## Roadmap to a live bounty
 
-A formal Immunefi program with severity-tiered cash pool is planned for **mainnet T-0** alongside the first paying merchant. Until then, this disclosure channel is the canonical path. See [`docs/superpowers/specs/2026-05-03-plan-7-audit-prep.md`](docs/superpowers/specs/2026-05-03-plan-7-audit-prep.md) ("Layer 3 — Bug bounty") for the rollout plan.
+A formal Immunefi program with severity-tiered cash pool is planned for **mainnet T-0** alongside the first paying merchant. Until then, this disclosure channel is the canonical path.

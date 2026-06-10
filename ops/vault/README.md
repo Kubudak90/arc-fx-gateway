@@ -29,8 +29,8 @@ Then, interactively in an SSH session:
 ```bash
 export VAULT_ADDR=http://127.0.0.1:8200
 
-# 1. Init — save the 3 unseal keys offline (1Password + paper backup,
-#    distributed across holders).
+# 1. Init — save the 3 unseal keys offline, distributed across holders
+#    (custody arrangement is documented in the private operator runbook).
 vault operator init -key-shares=3 -key-threshold=2
 
 # 2. Unseal — twice, with two of the three keys.
@@ -70,38 +70,38 @@ cat > /tmp/rotator.hcl <<'HCL'
 path "auth/approle/role/relayer/secret-id" { capabilities = ["update"] }
 HCL
 vault policy write approle-rotator /tmp/rotator.hcl
-vault token create -policy=approle-rotator -ttl=8760h -orphan -field=token > /root/.vault-rotation-token
-chmod 600 /root/.vault-rotation-token
+vault token create -policy=approle-rotator -ttl=8760h -orphan -field=token > <root-only token file>
+chmod 600 <root-only token file>
 
 # 10. Wire the rotation cron (root user crontab, NOT /etc/cron.d).
 # Production: rotation runs from root's crontab so the VAULT_TOKEN env
-# can be sourced from the scoped operator token at /etc/arcora/rotation-
-# operator.token. The actual production layout (audit 2026-05-24
-# follow-up) is:
+# can be sourced from a scoped, root-only operator token file. The
+# production layout (audit 2026-05-24 follow-up) is:
 #
-#   - script: /root/secret-id-rotation.sh (sync from
-#     ops/vault/secret-id-rotation.sh in the repo on each change)
-#   - token : /etc/arcora/rotation-operator.token (chmod 600, scoped
-#     policy in policy-rotation-operator.hcl — only allowed grant is
+#   - script: a root-only copy of ops/vault/secret-id-rotation.sh, synced
+#     from the repo on each change
+#   - token : a root-only operator token file (chmod 600, scoped policy in
+#     policy-rotation-operator.hcl — only allowed grant is
 #     `update auth/approle/role/relayer/secret-id`)
-#   - log   : /var/log/secret-id-rotation.log
+#   - log   : a root-only rotation log
 #
 crontab -e
-# Add:
-# 0 3 * * * VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=$(cat /etc/arcora/rotation-operator.token) /root/secret-id-rotation.sh >> /var/log/secret-id-rotation.log 2>&1
+# Add a daily entry that sources VAULT_ADDR + the scoped operator token,
+# runs the rotation script, and appends to the rotation log, e.g.:
+# <schedule> VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=$(cat <operator-token-file>) <rotation-script> >> <rotation-log> 2>&1
 
 # 11. Wire the rotation freshness check (audit Ops-M4, 2026-05-24).
-# Runs hourly; exits 1 if no successful rotation in 25h. The cron MAILTO
-# surfaces failures so a silent rotation outage (the 2026-05-12 root cause)
-# can't recur. VAULT_ROTATION_LOG points at the log written by the cron
-# above; the script accepts both the new "ok" line and the legacy
-# "new secret_id rotated" line so this check can roll out without
-# backfilling the log.
+# Runs on a recurring schedule; exits 1 if no successful rotation within the
+# secret-id TTL window. The cron MAILTO surfaces failures so a silent
+# rotation outage (the 2026-05-12 root cause) can't recur. VAULT_ROTATION_LOG
+# points at the log written by the cron above; the script accepts both the
+# new "ok" line and the legacy "new secret_id rotated" line so this check can
+# roll out without backfilling the log.
 cat > /etc/cron.d/vault-rotation-health <<EOF
 SHELL=/bin/bash
 MAILTO=root
-VAULT_ROTATION_LOG=/var/log/secret-id-rotation.log
-15 * * * * root /root/arcora-ops/vault/vault-rotation-health.sh
+VAULT_ROTATION_LOG=<rotation-log>
+<schedule> root <vault-rotation-health-script>
 EOF
 ```
 
@@ -142,4 +142,4 @@ longer uses).
 
 ## Disaster recovery
 
-See `docs/runbooks/vault-recovery.md`.
+See the private operator runbook.

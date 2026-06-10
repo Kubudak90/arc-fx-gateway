@@ -30,7 +30,7 @@ Arc's timeline, not ours to promise) plus the checklist at the bottom.
   light/dark themes, rebranded Arcorapay identity (new wordmark, Hanken
   Grotesk / IBM Plex Mono), landing + checkout + merchant area restyled.
 - **Public-beta launch hardening.** Browser-safe publishable keys
-  (`pk_` / `ak_` split — AFG-019), terms of service + privacy policy,
+  (`pk_` / `ak_` split), terms of service + privacy policy,
   `/api/health` uptime endpoint, ops health-check cron with on-alert runbook,
   and the 2026-06-06 internal full-scope audit sweep — all off-chain findings
   remediated in-repo.

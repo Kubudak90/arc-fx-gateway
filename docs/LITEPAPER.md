@@ -340,7 +340,7 @@ The intended end-state is *intent-based cross-chain*: customer signs one intent,
 
 **v1.2 — Hardening (current release).** Internal audit remediation closed: per-IP rate limiting on checkout endpoints, constant-time secret comparison on the cron auth path, server-side Permit2 signature verification with unit coverage, SSRF + https-only guard on merchant origins, invoice input bounds, configurable compliance asset, working ESLint pipeline, checkout-countdown accessibility, source-tree V11 relabel and legacy cleanup.
 
-**UI v2 + public-beta launch hardening.** New design system with dual light/dark themes, rebranded Arcorapay identity, terms + privacy pages, `/api/health` + ops health monitoring, publishable-key security rework (AFG-019), and the 2026-06-06 internal-audit remediation sweep. Public beta live at [arcorapay.xyz](https://arcorapay.xyz).
+**UI v2 + public-beta launch hardening.** New design system with dual light/dark themes, rebranded Arcorapay identity, terms + privacy pages, `/api/health` + ops health monitoring, publishable-key security rework, and the 2026-06-06 internal-audit remediation sweep. Public beta live at [arcorapay.xyz](https://arcorapay.xyz).
 
 ### Now
 

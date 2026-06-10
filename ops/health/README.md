@@ -70,6 +70,56 @@ can never pile up. It pairs with the in-script `timeout 30` around `psql`.
 Using a dedicated `/etc/cron.d/arcora-health` file (rather than editing the
 root crontab) means existing cron entries are never touched.
 
+## Push alerts via ntfy.sh (no MTA on the box)
+
+The ops VPS has **no mail transfer agent**, so cron's `MAILTO=root` is silently
+discarded — a FAIL would never reach anyone by mail. To get the alert off the
+box we use [ntfy.sh](https://ntfy.sh): a free, no-account pub/sub push service
+(the box's other tenant already uses it, so egress is known-good).
+
+Set the optional `ARCORA_NTFY_TOPIC` knob and, on any FAIL (the CRITICAL
+verdict path **and** the unexpected-abort `ERR` trap), the script POSTs the
+exact same body it sends to stdout/stderr to `https://ntfy.sh/<topic>`. It is
+best-effort (`curl --max-time 10 … || true`): a slow or unreachable ntfy never
+fails the health check, and an empty knob is a no-op. Mail behaviour is
+unchanged (still harmless if an MTA is ever installed). The body is already
+DSN-redacted by the queue check — no secrets are ever pushed.
+
+Wire it in via the cron file (it lives only on the box, so the secret topic
+stays out of git):
+
+```
+SHELL=/bin/bash
+MAILTO=root
+ARCORA_NTFY_TOPIC=arcora-ops-xxxxxxxxxxxx
+*/10 * * * * root flock -n /run/arcora-health.lock /root/arcora-ops/health/arcora-health.sh
+```
+
+The same `ARCORA_NTFY_TOPIC` knob is honoured by
+`ops/vault/vault-rotation-health.sh`; both crons can share one topic.
+
+> **The topic name is a SECRET.** ntfy.sh has no auth — anyone who knows the
+> topic can read every alert (and publish noise to it). Keep it **only** in
+> `/etc/cron.d/` on the box; **never commit it** to this repo. To rotate, pick
+> a new `arcora-ops-$(openssl rand -hex 6)`, update both cron files, and
+> re-subscribe.
+
+### Subscribing to the alerts
+
+- **ntfy mobile app** (iOS / Android): tap *＋*, enter the topic name exactly
+  (server `ntfy.sh`), subscribe. Pushes arrive as notifications.
+- **CLI / scripting** — stream live:
+
+  ```bash
+  curl -s ntfy.sh/<topic>/json
+  ```
+
+- **Poll the recent backlog** (useful for testing — last 5 min, no long-poll):
+
+  ```bash
+  curl -s "https://ntfy.sh/<topic>/json?poll=1&since=5m"
+  ```
+
 ## Manual runs / testing
 
 ```bash

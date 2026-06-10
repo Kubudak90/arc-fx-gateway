@@ -105,6 +105,20 @@ VAULT_ROTATION_LOG=/var/log/secret-id-rotation.log
 EOF
 ```
 
+> **No MTA on the box → also wire ntfy.sh push alerts.** Cron `MAILTO` is
+> discarded (no mail transfer agent). `vault-rotation-health.sh` honours the
+> optional `ARCORA_NTFY_TOPIC` knob: when set, the freshness-FAIL path pushes
+> the CRITICAL line to `https://ntfy.sh/<topic>` best-effort (the check only
+> ever emits the rotation log's freshness — never a Vault secret). Add the env
+> line to the cron file above (it can share the same secret topic as
+> `arcora-health`). See `ops/health/README.md` for the full knob/subscribe
+> docs and the rule that the topic name is a SECRET kept only in `/etc/cron.d`,
+> never committed:
+>
+> ```
+> ARCORA_NTFY_TOPIC=arcora-ops-xxxxxxxxxxxx
+> ```
+
 ## What goes in the relayer .env file
 
 ```

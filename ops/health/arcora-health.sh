@@ -46,6 +46,26 @@ APP_HEALTH_URL=${ARCORA_APP_HEALTH_URL:-https://arcorapay.xyz/api/health}
 # TODO(Task 10): flip the default to "fail" once /api/health is deployed.
 APP_404=${ARCORA_APP_404:-warn}
 VERBOSE=${ARCORA_HEALTH_VERBOSE:-0}
+# Optional ntfy.sh push alerting. When ARCORA_NTFY_TOPIC is non-empty, the
+# failure paths below POST the same body that goes to stdout/stderr to
+# https://ntfy.sh/<topic> as a best-effort side channel — the box has no MTA
+# so cron MAILTO is discarded. The topic name is a SECRET (kept only in
+# /etc/cron.d on the box, never committed); see ops/health/README.md.
+NTFY_TOPIC=${ARCORA_NTFY_TOPIC:-}
+
+# Best-effort push to ntfy.sh. Never fails the script (|| true), capped at
+# 10s, no-op when the knob is empty. $1 is the alert body (already DSN-redacted
+# by the callers — the script never echoes a DSN verbatim).
+ntfy_push() {
+  [[ -z "$NTFY_TOPIC" ]] && return 0
+  local alert_body="$1"
+  curl -s --max-time 10 \
+    -H "Title: Arcorapay health FAIL ($(hostname))" \
+    -H "Priority: high" \
+    -H "Tags: rotating_light" \
+    --data-binary "$alert_body" \
+    "https://ntfy.sh/${NTFY_TOPIC}" >/dev/null 2>&1 || true
+}
 
 RESULTS=()
 FAILS=0
@@ -60,8 +80,18 @@ fail() { RESULTS+=("[health] FAIL: $1"); FAILS=$((FAILS + 1)); }
 # stderr so the cron MAILTO surfaces the abort instead of mailing nothing.
 on_err() {
   local rc=$?
+  local critical="[health] CRITICAL: script aborted unexpectedly (exit $rc) on $(hostname) at $(date -Iseconds)"
   if ((${#RESULTS[@]})); then printf '%s\n' "${RESULTS[@]}" >&2; fi
-  echo "[health] CRITICAL: script aborted unexpectedly (exit $rc) on $(hostname) at $(date -Iseconds)" >&2
+  echo "$critical" >&2
+  # Push the same picture (accumulated check lines + the CRITICAL footer) to
+  # ntfy.sh. Built into a local so stdout/stderr and the push stay identical.
+  local alert_body
+  if ((${#RESULTS[@]})); then
+    alert_body=$(printf '%s\n' "${RESULTS[@]}"; printf '%s\n' "$critical")
+  else
+    alert_body="$critical"
+  fi
+  ntfy_push "$alert_body"
   exit "$rc"
 }
 trap on_err ERR
@@ -172,8 +202,12 @@ esac
 
 # ── verdict ──────────────────────────────────────────────────────────
 if (( FAILS > 0 )); then
+  critical="[health] CRITICAL: $FAILS check(s) failed on $(hostname) at $(date -Iseconds)"
   printf '%s\n' "${RESULTS[@]}"
-  echo "[health] CRITICAL: $FAILS check(s) failed on $(hostname) at $(date -Iseconds)" >&2
+  echo "$critical" >&2
+  # Same body as stdout/stderr: all check lines (including WARNs) + the
+  # CRITICAL footer. RESULTS is already DSN-redacted by the queue check.
+  ntfy_push "$(printf '%s\n' "${RESULTS[@]}"; printf '%s\n' "$critical")"
   exit 1
 fi
 if [[ "$VERBOSE" == "1" ]]; then

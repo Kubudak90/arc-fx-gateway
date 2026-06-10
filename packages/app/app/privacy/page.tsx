@@ -133,8 +133,9 @@ export default function PrivacyPage() {
               <a href={GITHUB_ISSUES} target="_blank" rel="noopener noreferrer">
                 github.com/arcoralabs/arcorapay/issues
               </a>{" "}
-              from any account and reference your merchant wallet address — we will delete the
-              database records we hold for it. Note that on-chain testnet data cannot be deleted by
+              and include a message signed with the merchant wallet (the same wallet you sign in
+              with) so we can verify ownership — we will then delete the database records we hold
+              for it. Note that on-chain testnet data cannot be deleted by
               anyone. You can clear the session cookie and localStorage entries in your browser at
               any time.
             </p>

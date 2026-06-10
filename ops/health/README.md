@@ -1,7 +1,8 @@
 # Arcora stack health cron
 
 `arcora-health.sh` is the single liveness check for the testnet stack on the
-ops VPS (194.163.136.1). It runs every 10 minutes from cron; like
+ops VPS (host details live in the private operator notes, not in this repo).
+It runs every 10 minutes from cron; like
 `ops/vault/vault-rotation-health.sh`, it is **silent when healthy** and prints
 \+ exits non-zero on failure so the cron `MAILTO` mails the operator only when
 something is actually wrong.
@@ -75,7 +76,7 @@ root crontab) means existing cron entries are never touched.
 The ops VPS has **no mail transfer agent**, so cron's `MAILTO=root` is silently
 discarded — a FAIL would never reach anyone by mail. To get the alert off the
 box we use [ntfy.sh](https://ntfy.sh): a free, no-account pub/sub push service
-(the box's other tenant already uses it, so egress is known-good).
+(egress from the box to ntfy.sh is known-good).
 
 Set the optional `ARCORA_NTFY_TOPIC` knob and, on any FAIL (the CRITICAL
 verdict path **and** the unexpected-abort `ERR` trap), the script POSTs the

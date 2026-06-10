@@ -48,7 +48,7 @@ churn); local working repo keeps its history privately.
 - App: `GET /api/health` — checks DB (`select 1`), Arc RPC (`eth_blockNumber`),
   returns `{ ok, db, rpc, version (package.json), commit (env) }`; no auth, rate-limited,
   no secrets in output.
-- VPS (194.163.136.1): one new `ops/health/` script set (cron, MAILTO pattern like
+- VPS (ops host): one new `ops/health/` script set (cron, MAILTO pattern like
   `ops/vault/vault-rotation-health.sh`):
   - daemon liveness (systemctl is-active for the 3 arcora units + vault),
   - relayer queue-age alarm: oldest unfinished `relayer_queue` row > threshold → mail,
@@ -114,7 +114,7 @@ and notes audits are available to partners on request.
 - Verify `.env*` are gitignored and absent from export; only `.env.example` ships and
   contains placeholders.
 - Grep sweep for: private keys (0x[0-9a-f]{64}), `IRON_SESSION`, `MASTER_KEY` values,
-  VPS IP `194.163.136.1`, passwords, `sk_`/`ak_live_` style keys, email addresses,
+  the ops-VPS IP, passwords, `sk_`/`ak_live_` style keys, email addresses,
   Vault tokens, seed phrases. Every hit reviewed; real values removed/replaced.
 - `pnpm-lock.yaml` etc. fine.
 

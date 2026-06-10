@@ -6,7 +6,7 @@
 
 **Architecture:** Work lands on `feat/public-beta-launch` (off `plan-1-protocol`) and merges back so the private repo stays source of truth. The public repo only ever receives curated orphan-branch snapshots. VPS work is applied unit-by-unit per existing runbooks.
 
-**Tech Stack:** Next.js 15 / Tailwind v4 app, pnpm monorepo, systemd + HashiCorp Vault on VPS 194.163.136.1, Vercel (manual CLI deploys), gh CLI.
+**Tech Stack:** Next.js 15 / Tailwind v4 app, pnpm monorepo, systemd + HashiCorp Vault on the ops VPS, Vercel (manual CLI deploys), gh CLI.
 
 **Spec:** `docs/superpowers/specs/2026-06-10-public-beta-launch-design.md`
 **Branch:** create `feat/public-beta-launch` from `plan-1-protocol` first.
@@ -49,7 +49,7 @@ Reference reading FIRST: `docs/audit/2026-06-06-full-scope/remediation-plan.md` 
 
 - [ ] **Step 1:** Write `ops/health/arcora-health.sh`: checks `systemctl is-active` for `arcora-indexer arcora-relayer arcora-webhooks vault`; queries Postgres for oldest unfinished relayer_queue row age (read the queue table name/status values from `ops/relayer/run.ts` and the drizzle schema — use the same DB connection env the relayer uses); curls `https://arcorapay.xyz/api/health`; any failure → non-zero exit + message on stdout (cron MAILTO delivers it). Mirror the style of `vault-rotation-health.sh`.
 - [ ] **Step 2:** Commit the script + README (`ops/health/README.md` documents install: crontab entry `*/10 * * * *` with MAILTO, same mailbox as vault health).
-- [ ] **Step 3 (VPS, ssh root@194.163.136.1):** Install the health cron. Test-fire once by stopping nothing — instead run the script manually and confirm clean pass; then temporarily point it at a bogus unit name to confirm the failure path emails/prints, restore.
+- [ ] **Step 3 (VPS, ssh root@<ops-vps>):** Install the health cron. Test-fire once by stopping nothing — instead run the script manually and confirm clean pass; then temporarily point it at a bogus unit name to confirm the failure path emails/prints, restore.
 - [ ] **Step 4 (VPS, AFG-021):** Apply the hardened systemd units from the repo (dedicated `arcora` user, NoNewPrivileges, ProtectSystem) — per the remediation plan. ONE UNIT AT A TIME: `systemctl daemon-reload && systemctl restart <unit> && systemctl status <unit>` and tail journal for a clean settle/poll cycle before the next unit. If any unit fails to start under hardening, revert that unit, document why, continue with the rest.
 - [ ] **Step 5 (VPS, AFG-011):** Apply CA-pinning env for the Vault client per remediation plan; restart relayer; verify it boots and fetches the key (journal shows the existing "relayer address verified" log).
 - [ ] **Step 6:** Run `packages/app/scripts/smoke-prod.ts` (read its README/usage first) or create+pay a testnet invoice end-to-end to prove settle still works after hardening.
@@ -102,7 +102,7 @@ Reference reading FIRST: `docs/audit/2026-06-06-full-scope/remediation-plan.md` 
 - [ ] **Step 1:** Write the exclusion list (paths NOT shipped publicly): `docs/superpowers/`, `docs/audit/`, `docs/runbooks/` entries containing infra specifics (review file-by-file; generic dev runbooks may ship), `docs/loom-script.md`, internal PDFs/HTML decks deemed stale in Task 6, `.claude/`, `.superpowers/`, `KNOWN_ISSUES.md`? — NO, it ships (honest, public-safe; re-read to confirm no secrets/IPs), plus anything Step 2 flags.
 - [ ] **Step 2:** Working-tree secret sweep (the public tree = HEAD tree minus exclusions):
   - `git ls-files | xargs grep -lE "0x[0-9a-fA-F]{64}"` — review every hit (test fixtures with well-known anvil keys are acceptable ONLY if clearly labeled test keys; anything else is a finding)
-  - grep for `194.163.136.1`, `Asusf8va` (must be ZERO anywhere), `IRON_SESSION_PASSWORD=`, `MASTER_KEY=`, `VAULT_TOKEN`, `secret-id`, `BEGIN.*PRIVATE KEY`, `ak_live_`, `sk_live_`, real email addresses
+  - grep for the ops-VPS IP and root password (literals kept out of every tracked file — must be ZERO anywhere), `IRON_SESSION_PASSWORD=`, `MASTER_KEY=`, `VAULT_TOKEN`, `secret-id`, `BEGIN.*PRIVATE KEY`, `ak_live_`, `sk_live_`, real email addresses
   - verify `git check-ignore .env .env.local packages/app/.env.local packages/contracts/.env` all ignored and `git ls-files | grep -E "\.env$|\.env\.local"` is empty
   - `.env.example` files: every value is a placeholder
 - [ ] **Step 3:** Fix findings (replace/remove), commit fixes separately: `chore: scrub public tree (secret sweep findings)`. Then commit the exclusion manifest.

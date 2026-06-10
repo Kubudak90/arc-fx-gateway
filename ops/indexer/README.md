@@ -17,11 +17,11 @@ Source of truth lives in `run.ts`. This README is operator-facing.
 
 ```bash
 # liveness
-ssh root@194.163.136.1 'systemctl is-active arcora-indexer'
+ssh root@<ops-vps> 'systemctl is-active arcora-indexer'
 # logs
-ssh root@194.163.136.1 'journalctl -u arcora-indexer -f'
+ssh root@<ops-vps> 'journalctl -u arcora-indexer -f'
 # restart after env change (e.g. new gateway address)
-ssh root@194.163.136.1 'systemctl restart arcora-indexer'
+ssh root@<ops-vps> 'systemctl restart arcora-indexer'
 ```
 
 ## Recovery — `replay.ts`

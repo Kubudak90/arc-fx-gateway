@@ -103,7 +103,7 @@ After deploy, update `GATEWAY_ADDRESS_V8` in Vercel + the VPS relayer/indexer en
 | Permit2 | `0x000000…78BA3` | universal Permit2 |
 | USDC / EURC | Circle-managed canonical addresses | live |
 
-(Full address list with explorer links: see the live brief at `docs/arcora-roadmap.html` or run the dashboard at `arcorapay.xyz`.)
+(Full address list: `packages/contracts/deployments/arc-testnet.json` is the canonical record, or run the dashboard at `arcorapay.xyz`.)
 
 ## Reporting a finding
 

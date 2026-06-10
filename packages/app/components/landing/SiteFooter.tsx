@@ -35,7 +35,7 @@ const COLUMNS: FooterColumn[] = [
     title: "Resources",
     items: [
       { label: "Live merchant demo", href: "https://arc-fx-demo.vercel.app", external: true },
-      { label: "Pitch deck (PDF)", href: "https://github.com/Kubudak90/arc-fx-gateway/raw/plan-1-protocol/docs/arcora-pitch.pdf", external: true },
+      { label: "Litepaper", href: "https://github.com/Kubudak90/arc-fx-gateway/blob/plan-1-protocol/docs/LITEPAPER.md", external: true },
       { label: "Specs & plans", href: "https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/docs", external: true },
       { label: "CHANGELOG", href: "https://github.com/Kubudak90/arc-fx-gateway/blob/plan-1-protocol/CHANGELOG.md", external: true },
     ],

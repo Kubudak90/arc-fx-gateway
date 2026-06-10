@@ -1,9 +1,11 @@
-# Arcora — Litepaper
+# Arcorapay — Litepaper
 
-**Version 0.3 · 2026-05-20**
+**An Arcora Labs product · Version 0.4 · 2026-06-10**
 
-> Stablecoin checkout on Arc Network.
+> Stablecoin checkout on Arc Network — public testnet beta live at [arcorapay.xyz](https://arcorapay.xyz).
 > The customer pays with one signature in any supported stable. The merchant settles in the stable they want, deterministically. No bridge clicks, no custodial off-ramp, no FX gymnastics.
+>
+> Everything described here runs on **Arc testnet**. This is a working demo of the protocol, not a production payment rail — mainnet is gated on Arc Network's own mainnet launch and the checklist in [section 12](#12-what-stands-between-us-and-mainnet).
 
 ---
 
@@ -18,9 +20,10 @@
 7. [Compliance posture](#7-compliance-posture)
 8. [Developer surface](#8-developer-surface)
 9. [Live deployment](#9-live-deployment)
-10. [Roadmap](#10-roadmap)
-11. [What stands between us and mainnet](#11-what-stands-between-us-and-mainnet)
-12. [Glossary](#12-glossary)
+10. [Security & audit status](#10-security--audit-status)
+11. [Roadmap](#11-roadmap)
+12. [What stands between us and mainnet](#12-what-stands-between-us-and-mainnet)
+13. [Glossary](#13-glossary)
 
 ---
 
@@ -28,7 +31,7 @@
 
 A merchant on Arc says: "I want to be paid in EURC." A customer holds USDC. Arcora's gateway accepts the customer's pay-in token, runs an atomic on-chain swap, and deposits the merchant's chosen stable into a 7-day custody escrow that the merchant claims permissionlessly. The customer signs once — a Permit2 message, no transaction, no gas. The merchant integrates once — an API key, an invoice call, a webhook secret. Everything between those two surfaces (FX routing, key isolation, settlement, refund window, compliance gating) is the protocol.
 
-The roadmap extends this to *cross-chain*: customer pays from any chain Arc App Kit Bridge supports, merchant still settles in their preferred Arc stable. That's v2.0, spec'd but not built. The current product (v1.2) ships the Arc-side version of the same flow.
+The roadmap extends this to *cross-chain*: customer pays from any chain Arc App Kit Bridge supports, merchant still settles in their preferred Arc stable. That's v2.0 — a feature-flagged demo is in development against Sepolia / Base Sepolia, not yet enabled in the public beta. The current product (v1.2, public testnet beta) ships the Arc-side version of the same flow.
 
 ---
 
@@ -290,6 +293,8 @@ Verification is three lines of `crypto.createHmac('sha256', secret).update(rawBo
 
 ## 9. Live deployment
 
+**Status.** v1.2 is the current release. The public testnet beta is live at [arcorapay.xyz](https://arcorapay.xyz), running the UI v2 redesign (deployed 2026-06-10) with terms of service, privacy policy, a `/api/health` uptime endpoint, and ops health monitoring on the off-chain daemons. `@arcora/sdk` and `@arcora/sdk-react` are version-synced at 1.2.0 in-tree; the npm publish of 1.2.0 is pending (1.0.0 is the latest published version).
+
 **Arc testnet** (chain id 5042002, RPC `https://rpc.testnet.arc.network`, explorer `https://testnet.arcscan.app`):
 
 | Component                 | Address                                                  |
@@ -305,25 +310,58 @@ Gateway parameters: protocol fee 30 bps, refund window 7 days, admin recovery de
 
 **Hosting.** The app runs on Vercel (Next.js App Router, Turbopack). Database is Neon Postgres in EU-Central. The three off-chain daemons (relayer, indexer, webhook) run on a single Ubuntu host with HashiCorp Vault on the same machine, listener bound to loopback.
 
-**Source.** Open development on GitHub: `Kubudak90/arc-fx-gateway`. Default branch `plan-1-protocol`. Tagged releases: `v1.0.0`, `v1.0.1`, `v1.0.2`, `v1.0.3`, `v1.1.0`, `v1.2.0` (current).
+**Source.** Public repository: [github.com/arcoralabs/arcorapay](https://github.com/arcoralabs/arcorapay). Tagged releases: `v1.0.0`, `v1.0.1`, `v1.0.2`, `v1.0.3`, `v1.1.0`, `v1.2.0` (current).
 
 ---
 
-## 10. Roadmap
+## 10. Security & audit status
 
-The intended end-state is *intent-based cross-chain*: customer signs one intent, Arcora solves the full route, merchant settles in their chosen Arc stable. Each milestone below is a step toward that without rewriting earlier layers.
+Honesty first: **no external audit has been performed yet.** What has happened is a series of internal full-scope audits — 2026-05-19, 2026-05-24, 2026-05-31, and 2026-06-06 — covering the contract, the app, the SDKs, and the ops surface.
 
-**v1.0 — Arc-only checkout (shipped).** USDC and EURC, Permit2-based settlement, hosted checkout, merchant dashboard, refunds, treasury reporting, SDK + React SDK + WooCommerce plugin published to npm.
+Where that stands today:
 
-**v1.1 — Custody escrow (shipped).** Custody-escrow gateway, refund safety net, admin recovery for abandoned merchants, compliance gate (Phase 0), Vault-backed key isolation.
+- **Off-chain findings: remediated in-repo.** Every off-chain finding from the internal audit passes has shipped — among them checkout rate limiting, constant-time cron-secret comparison, SSRF hardening across IPv6 encodings, webhook DNS pinning, CSRF coverage on merchant routes, fail-closed customer compliance gating, strict pinned-CA database TLS, unprivileged systemd-sandboxed daemons, and the browser-safe publishable-key split (`pk_` vs `ak_`) so a secret key never has to live in client code.
+- **Contract findings: nothing exploitable on the deployed bytecode.** The internal contract passes found no exploitable issue on the live V11 gateway. They did surface contract-hardening items that require source changes; those are tracked for the next gateway deployment (V12) and ride with the next planned redeploy. Until then, the shipped off-chain mitigations are the active surface.
+- **External audit: a pre-mainnet requirement, not a checkbox we've ticked.** An external audit (Spearbit / Cantina / Sherlock RFP) is item #2 on the mainnet gate in [section 12](#12-what-stands-between-us-and-mainnet). Nothing in this document should be read as "audited by a third party" — it hasn't been.
 
-**v1.2 — Production hardening (shipped, current).** External review + full code audit closed: per-IP rate limiting on checkout endpoints, constant-time secret comparison on the cron auth path, server-side Permit2 signature verification with unit coverage, SSRF + https-only guard on merchant origins, invoice input bounds, configurable compliance asset, working ESLint pipeline, checkout-countdown accessibility, source-tree V11 relabel and legacy cleanup.
+Security disclosures: see `SECURITY.md` in the repository.
 
-**v1.x — In-flight enhancements.**
-- Multi-stable (USDT, PYUSD, DAI, USDe) — mainnet-bound, testnet App Kit currently USDC/EURC only.
+---
+
+## 11. Roadmap
+
+The intended end-state is *intent-based cross-chain*: customer signs one intent, Arcora solves the full route, merchant settles in their chosen Arc stable. Each milestone below is a step toward that without rewriting earlier layers. The canonical, dated tracking document is [`docs/ROADMAP.md`](./ROADMAP.md); this section mirrors it.
+
+### Shipped
+
+**v1.0 — Arc-only checkout.** USDC and EURC, Permit2-based settlement, hosted checkout, merchant dashboard, refunds, treasury reporting, SDK + React SDK + WooCommerce plugin published to npm.
+
+**v1.1 — Custody escrow.** Custody-escrow gateway, refund safety net, admin recovery for abandoned merchants, compliance gate (Phase 0), Vault-backed key isolation.
+
+**v1.2 — Hardening (current release).** Internal audit remediation closed: per-IP rate limiting on checkout endpoints, constant-time secret comparison on the cron auth path, server-side Permit2 signature verification with unit coverage, SSRF + https-only guard on merchant origins, invoice input bounds, configurable compliance asset, working ESLint pipeline, checkout-countdown accessibility, source-tree V11 relabel and legacy cleanup.
+
+**UI v2 + public-beta launch hardening.** New design system with dual light/dark themes, rebranded Arcorapay identity, terms + privacy pages, `/api/health` + ops health monitoring, publishable-key security rework (AFG-019), and the 2026-06-06 internal-audit remediation sweep. Public beta live at [arcorapay.xyz](https://arcorapay.xyz).
+
+### Now
+
+- **Public testnet beta.** Open to anyone — faucet-funded USDC/EURC, no real money moves. Rough edges are tracked in `KNOWN_ISSUES.md`.
+- **v2.0 cross-chain demo (in development).** Customer pays USDC from another EVM chain, merchant still settles on Arc. Feature-flagged, built against Sepolia / Base Sepolia testnets with a CCTP attestation adapter and a relayer payment state machine. Not enabled in the public beta yet.
+
+### Next
+
+- Beta feedback loop — issues and merchant onboarding friction drive the queue.
+- Observability + failover maturation: multi-relayer with rolling failover, longer webhook retry policy.
+- npm publish of `@arcora/sdk` / `@arcora/sdk-react` 1.2.0.
 - Shopify plugin — same shape as the WooCommerce one.
 
-**v2.0 — Cross-chain USDC source (spec'd).** Customer pays USDC from any CCTP-supported EVM chain (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex). Routes through Arc App Kit Bridge — not raw CCTP — so the bridge surface stays in Circle's supported primitives. Merchant still settles in their chosen Arc stable.
+### Gated on Arc mainnet
+
+- Multi-stable (USDT, PYUSD, DAI, USDe) — mainnet-bound; testnet App Kit currently supports USDC/EURC only.
+- Everything in [section 12](#12-what-stands-between-us-and-mainnet).
+
+### Forward phases
+
+**v2.0 — Cross-chain USDC source (demo in development).** Customer pays USDC from any CCTP-supported EVM chain (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex). Routes through Arc App Kit Bridge — not raw CCTP — so the bridge surface stays in Circle's supported primitives. Merchant still settles in their chosen Arc stable.
 
 **v2.1 — Source-side aggregator.** Customer pays in any token on the source chain (native ETH, any ERC20), not only USDC. Odos / 1inch / 0x / Paraswap router on each source chain; reverse route engine computes max-in given target output and slippage.
 
@@ -333,11 +371,11 @@ The intended end-state is *intent-based cross-chain*: customer signs one intent,
 
 ---
 
-## 11. What stands between us and mainnet
+## 12. What stands between us and mainnet
 
 Concrete items, none of them hypothetical. Each has a defined trigger.
 
-1. **Arc Network mainnet launch.** Out of our control — Arc is on testnet, so we are too.
+1. **Arc Network mainnet launch.** Out of our control — Arc is on testnet, so we are too. Circle has signalled a summer-2026 target for Arc mainnet; we treat that as Arc's timeline, not ours to promise.
 2. **External audit.** Spearbit / Cantina / Sherlock RFP. Trigger: first paying merchant *or* funding round close.
 3. **Multisig admin migration.** `DEFAULT_ADMIN_ROLE` is a single EOA today; 2-of-3 or 3-of-5 at T-0.
 4. **KYB go-live.** `ManualKybProvider` (testnet, $0) + `PersonaProvider` (post-revenue) wired into the merchant signup flow.
@@ -346,12 +384,13 @@ Concrete items, none of them hypothetical. Each has a defined trigger.
 7. **Compliance provider activation.** Flip `COMPLIANCE_PROVIDER` from `noop` to `elliptic` or `trmlabs`.
 8. **Domain canonicalisation.** `arcorapay.xyz` is live; consolidate on the canonical mainnet domain at T-0.
 9. **Bug bounty.** Immunefi engagement with first paying merchant.
+10. **V12 gateway redeploy.** The contract-hardening items surfaced by the internal audits all require source changes; they ship as one unit with the next deployment, which mainnet T-0 forces anyway.
 
-Items 1–4 and 9 require coordination beyond the protocol. Items 5–8 are reversible single-host or single-config changes.
+Items 1–4 and 9 require coordination beyond the protocol. Items 5–8 and 10 are changes within our own deploy surface.
 
 ---
 
-## 12. Glossary
+## 13. Glossary
 
 - **Permit2** — Uniswap's canonical EIP-712 transfer authorisation contract at `0x000000000022D473030F116dDEE9F6B43aC78BA3`. Lets a customer authorise a single transfer without an on-chain `approve`. With a *witness*, the authorisation is scoped to a specific application context — here `(invoiceId, relayer)` — so a signature cannot be replayed against a different invoice or by a different relayer.
 - **App Kit Swap** — Circle's RFQ-based stablecoin swap on Arc. Maker network fills swap requests; integration via the `@circle-fin/app-kit` SDK. Used by Arcora's relayer for the FX leg.

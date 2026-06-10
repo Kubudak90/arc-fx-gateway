@@ -1,149 +1,114 @@
-# Arcora Roadmap
+# Arcorapay Roadmap
 
-The forward-looking work for this repo. All prior plans (Plans 1 – 10, the
-2026-05-18 redesign, the 2026-05-19 audit-fix sweep, the 2026-05-20 V10
-retirement) shipped and are now in git history only — they are not tracked
-as live documents.
+**Updated 2026-06-10.** Arcorapay — an Arcora Labs product — is stablecoin
+checkout & settlement on **Arc testnet**, public beta at
+[arcorapay.xyz](https://arcorapay.xyz). This is the only forward-looking
+planning doc in the repo; the litepaper's roadmap section mirrors it.
 
-The multi-stable track (USDT / PYUSD / DAI / USDe on testnet) has moved to
-a separate project and is no longer part of this repo's plan.
-
----
-
-## Operational hygiene
-
-Small bits left over from the 2026-05-20 cutover. Each is a single
-command or a small ops touch, but it should happen.
-
-- **Delete the retired Neon project.** Disconnected from Vercel on
-  2026-05-20 but the DB is still attached to the Neon account. After the
-  Neon free-tier compute quota resets (monthly), pull a final pg_dump for
-  the archive and run `vercel integration-resource remove
-  neon-erin-umbrella --yes`.
+One honesty note up front: everything here runs on testnet. No real money
+moves, no external audit has happened yet, and mainnet is hard-gated on Arc
+Network's own mainnet launch (Circle has signalled a summer-2026 target —
+Arc's timeline, not ours to promise) plus the checklist at the bottom.
 
 ---
 
-## V12 contracts — design carry from 2026-05-24 audit
+## Shipped
 
-The 2026-05-24 audit's smart-contract pass found nothing exploitable on
-the deployed V11 bytecode, but it surfaced nine items that all need
-contract-source changes — i.e. they can't ship without a redeploy. None
-individually justify an emergency V12; they're collected here so the
-next planned redeploy (with multi-stable, with mainnet, or with a
-deliberate hardening cycle) carries them as a unit.
+- **v1.0 — Arc-only checkout.** USDC + EURC, Permit2 gas-less settlement,
+  hosted checkout, merchant dashboard (SIWE), refunds, treasury reporting,
+  `@arcora/sdk` + `@arcora/sdk-react` + WooCommerce plugin published to npm.
+- **v1.1 — Custody escrow.** Escrow-per-invoice gateway with a 7-day refund
+  window and permissionless claim, admin recovery for abandoned merchants,
+  compliance gate (Phase 0, Noop provider on testnet), Vault-backed relayer
+  key isolation.
+- **v1.2 — Hardening.** Internal-audit remediation closed across the
+  off-chain surface: checkout rate limiting, constant-time cron-secret
+  comparison, server-side Permit2 signature verification, SSRF + https-only
+  guards, invoice input bounds, dependency-audit cleanup, dead-domain default
+  fixes.
+- **UI v2 redesign (deployed 2026-06-10).** New design system with dual
+  light/dark themes, rebranded Arcorapay identity (new wordmark, Hanken
+  Grotesk / IBM Plex Mono), landing + checkout + merchant area restyled.
+- **Public-beta launch hardening.** Browser-safe publishable keys
+  (`pk_` / `ak_` split — AFG-019), terms of service + privacy policy,
+  `/api/health` uptime endpoint, ops health-check cron with on-alert runbook,
+  and the 2026-06-06 internal full-scope audit sweep — all off-chain findings
+  remediated in-repo.
 
-The two off-chain commits that mitigate the contract-level risks until
-V12 lands are already in (the rest of the audit follow-up below):
-- The relayer's persist-before-await for refund (Ops-H2) makes the
-  customer-payout side of the contracts' refund flow recoverable
-  regardless of any contract-side issue.
-- The admin-recovery edge in the contracts H-1 finding requires admin
-  action to weaponise, which today's single-EOA `DEFAULT_ADMIN_ROLE`
-  already exposes — the pre-mainnet multisig migration on the checklist
-  below closes the same blast radius from a different angle.
-
-### V12 items
-
-| Sev | Item | Where | Why it needs V12 |
-|---|---|---|---|
-| H-1 | `adminRecoverEscrow` reads current `merchants[m].active` instead of the merchant's deactivation epoch — a reactivate→deactivate cycle lets admin sweep old escrows. | `ArcFXGateway.sol:409` | Needs `uint64 deactivatedAt` on the merchant struct + guard `escrow.claimableAt >= merchants[m].deactivatedAt`. |
-| M-1 | `claim()` and `adminRecoverEscrow()` are not `whenNotPaused`. Tests treat this as intentional; either it is (and needs NatSpec) or it isn't (and needs the guard). | `ArcFXGateway.sol:358, 409` | Either decision is a source edit. |
-| M-2 | Delegate-expiry boundary inconsistent: `createInvoiceFor` uses `<`, `refundInvoice` uses `>=`. Standardize on `>` ("expires after this block"). | `ArcFXGateway.sol:195, refund path` | One-line semantic change in each branch. |
-| L-1 | `protocolFeesAccrued` conflates relayer-submitted swap surplus with actual fees — withdrawable as one bucket, no path to refund a buggy relayer's over-submission. Either split mappings or NatSpec the conflation. | `ArcFXGateway.sol:279, 375` | Storage shape change OR doc change in source. |
-| L-2 | `revokeDelegate` emits `DelegateRevoked` for any caller with any target — indexer-log spam, no fund risk. Guard with "delegate exists" or "caller is a registered merchant" check. | `ArcFXGateway.sol:234-237` | One-line guard. |
-| L-3 | `claim()` reads `inv.merchant` from the storage pointer after the external `safeTransfer`. Currently safe (no field mutation in between) but the pattern would silently break a future edit. Cache `address merchant_ = inv.merchant` before the transfer. | `ArcFXGateway.sol:373-379` | One-line CEI nit. |
-| I-1 | `authorizeDelegate` has no upper bound on `expiresAt` — type(uint64).max creates an effectively permanent delegation. Add a `MAX_DELEGATE_WINDOW` constant + guard. | `ArcFXGateway.sol:226-231` | New constant + one revert. |
-| I-2 | `_createInvoice` accepts `expiresAt = 0` / past — invoice is immediately uncollectable. One-line `if (expiresAt <= block.timestamp) revert InvalidExpiry()`. | `ArcFXGateway.sol:200-224` | Trivial guard. |
-| I-3 | `MintableERC20` testnet faucet has no mint cap. Not a production contract today, but the file would be unsafe to copy as a stub for any mainnet wrapped-stable. Add an inline "TESTNET ONLY — DO NOT COPY" header. | `MintableERC20.sol:23` | Comment only. |
-
-### Additional carry from the 2026-05-31 audit
-
-The 2026-05-31 full-stack audit's contract pass found nothing exploitable on
-the live bytecode but surfaced three more source-level items (all need a
-redeploy). Folded into the same V12 unit; the "(31)" suffix disambiguates
-them from the 2026-05-24 labels above. The off-chain audit findings shipped
-in the same sweep (see commit log `[audit App-*/Ops-*/SDK-*]`).
-
-| Sev | Item | Where | Why it needs V12 |
-|---|---|---|---|
-| L-1 (31) | `registerMerchant`/`updateMerchant` validate `payoutToken` support only at registration. If an admin later `setTokenSupport(token,false)`s a stable, already-Created invoices still escrow + settle in it. Re-check `supportedTokens[inv.payoutToken]` at `settleInvoice`, or NatSpec the admin-trust intent. | `ArcFXGateway.sol:110-121, 200-224, 260-297` | settle-path source edit (or doc). |
-| L-2 (31) | `recordPayerRefund` moves no funds and emits `PayerRefunded` with caller-supplied amount/token/payer that are never reconciled against on-chain state — a compromised RELAYER_ROLE can emit arbitrary refund events that downstream consumers treat as authoritative. Document as attestation-only, or bind the event to a verifiable transfer. | `ArcFXGateway.sol:436-449` | semantics/doc or storage change in source. |
-| I-4 (31) | `_createInvoice` doesn't require `amountOut > 0`: a zero-value invoice escrows `amount:0`, emits zero-value `InvoicePaid`/`EscrowCreated`, and takes a zero fee — indexer/treasury noise (off-chain L-7 now blocks the app path, but the contract guard is missing). Add `require(amountOut > 0)` alongside the I-2 `expiresAt` guard. | `ArcFXGateway.sol:200-224, 273-285` | one-line guard (pairs with I-2). |
-
-### V12 cut criteria
-
-Trigger one of:
-- Multi-stable expansion (USDT / PYUSD / DAI / USDe). Adds a contract
-  axis already, V12 fixes ride along.
-- Mainnet T-0 cutover. Pairs naturally with the multisig migration on
-  the pre-mainnet checklist below.
-- A new High/Critical finding in a later audit that needs source-level
-  work anyway.
-
-Until then, V11 stays live and the off-chain fixes above are the
-mitigation surface.
+The internal audit passes (2026-05-19, 2026-05-24, 2026-05-31, 2026-06-06)
+found nothing exploitable on the deployed V11 gateway bytecode. They did
+surface contract-hardening items that need source-level changes; those are
+tracked for the next gateway deployment (V12) and ship as one unit with the
+next planned redeploy. Until then the shipped off-chain mitigations are the
+active surface.
 
 ---
 
-## Backlog — audit findings consciously deferred
+## Now
 
-The 2026-05-19 audit Low-severity backlog was cleared in the
-2026-05-21 sweep (commits 8fa56e2 / a25b184 / c67c6d2 / and the
-low-severity-backlog branch — env hygiene, V10/V11 doc cleanup, test
-SSL conditional, all six Low items). Two items remain:
-
-- **`pnpm audit` — 11 moderate transitive advisories.** None are in
-  direct deps; the chain is wallet-stack-internal (`@metamask/*`,
-  `wagmi` connectors, `thirdweb`'s `x402` route, `vite`/`esbuild`
-  through dev deps). No known exploit path against our usage. Fix is to
-  wait for upstream wagmi / thirdweb minor bumps or add `pnpm.overrides`
-  at the workspace root once the bumps are no longer churning.
-  Acceptable for testnet; closed at pre-mainnet T-0.
-- **Wagmi SSR `indexedDB` warning.** The `lib/chain/wagmi-config.tsx`
-  side is correct (`ssr: true` + `noopStorage` on the server). The
-  residual warning comes from the WalletConnect / thirdweb client which
-  ignores wagmi's `createStorage` abstraction and touches its own
-  IndexedDB store at module-eval time. Build still exits clean; static
-  pages still generate. Proper fix is to wrap `ChainProviders` in a
-  client-only `dynamic({ ssr: false })` boundary, which is a structural
-  layout change — folded into the v2.0 redesign work.
+- **Public testnet beta.** Open at [arcorapay.xyz](https://arcorapay.xyz) —
+  faucet-funded USDC/EURC, working demo, not a production payment rail.
+  Rough edges are tracked in [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md).
+- **Cross-chain v2 demo (in development, feature-flagged).** Customer pays
+  USDC from another EVM chain; merchant still settles on Arc. Built against
+  Sepolia / Base Sepolia with a CCTP attestation adapter, cross-chain payment
+  schema, and a relayer payment state machine. Not enabled in the public
+  beta yet.
 
 ---
 
-## Roadmap — what comes after v1.2
+## Next
 
-The product roadmap captured in `LITEPAPER.md` section 10 is the
-canonical source. The summary view:
+- **Beta feedback.** Issues, merchant onboarding friction, and checkout
+  drop-off reports drive the queue.
+- **Observability + failover maturation.** Multi-relayer with rolling
+  failover (today: single-instance relayer on one VPS), longer webhook retry
+  policy, deeper health/queue metrics on top of the new health-check cron.
+- **npm publish of `@arcora/sdk` / `@arcora/sdk-react` 1.2.0.** Both are
+  version-synced in-tree; the publish step is pending.
+- **Shopify plugin** — same shape as the WooCommerce one.
+
+---
+
+## Gated on Arc mainnet
+
+Triggered by Arc Network mainnet launch *or* first paying merchant *or*
+funding round close — whichever comes first. None of these have happened;
+every item below is open.
+
+- **External audit RFP** (Spearbit / Cantina / Sherlock). No external audit
+  has been performed to date.
+- **Multisig admin migration:** `DEFAULT_ADMIN_ROLE` from single EOA to
+  2-of-3 or 3-of-5.
+- **KYB go-live:** `ManualKybProvider` ($0, testnet pattern) +
+  `PersonaProvider` (post-revenue) wired into merchant signup.
+- **Vault hardening:** TLS on listener (cert + dedicated host), dedicated
+  Unix user for `relayer`/`indexer`/`webhooks`, migration of the relayer key
+  to an HSM-isolated signer.
+- **Real Chainlink price feeds** — replace mock feeds per stable; oracle
+  keepalive timer becomes obsolete.
+- **Compliance provider activation** — flip `COMPLIANCE_PROVIDER` from
+  `noop` to `elliptic` or `trmlabs`.
+- **Populate `packages/contracts/deployments/arc-mainnet.json`** — currently
+  a null placeholder with the same shape as `arc-testnet.json`.
+- **Bug bounty** — Immunefi engagement with first paying merchant.
+- **V12 gateway redeploy** — carries the tracked contract-hardening items
+  from the internal audits as one unit. Also the natural vehicle for
+  multi-stable expansion (USDT / PYUSD / DAI / USDe), which is
+  mainnet-bound — testnet App Kit supports USDC/EURC only.
+
+---
+
+## Forward phases (direction, not commitments)
 
 | Phase | Ships |
 |---|---|
-| **v2.0** | Crosschain USDC source via Arc App Kit Bridge (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex). Routes through App Kit Bridge, not raw CCTP. Merchant still settles in their chosen Arc stable. |
+| **v2.0** | Cross-chain USDC source via Arc App Kit Bridge (Ethereum, Arbitrum, Optimism, Base, Polygon, Avalanche, Linea, Codex). Routes through App Kit Bridge, not raw CCTP. Merchant still settles in their chosen Arc stable. The feature-flagged testnet demo above is the first slice. |
 | **v2.1** | Source-side aggregator — customer pays in any token on the source chain (native ETH, any ERC-20), via Odos/1inch/0x/Paraswap on each source chain. Reverse route engine computes max-in given target output and slippage. |
 | **v2.2** | Non-EVM sources — Solana, Sui. Same product surface, different wallet stack. |
 | **v3.0** | Intent / solver model. One-signature one-click; Arcora's solver executes the full route. Multi-month research on ERC-7683, Across, DeBridge-Liquid. Not started until v2.0 and v2.1 are stable. |
 
-### Pre-mainnet checklist
-
-Triggered by Arc Network mainnet launch *or* first paying merchant *or*
-funding round close — whichever comes first.
-
-- External audit RFP (Spearbit / Cantina / Sherlock).
-- Multisig admin migration: `DEFAULT_ADMIN_ROLE` from single EOA to
-  2-of-3 or 3-of-5.
-- KYB go-live: `ManualKybProvider` ($0, testnet pattern) + `PersonaProvider`
-  (post-revenue) wired into merchant signup.
-- Vault hardening: TLS on listener (cert + dedicated host), dedicated
-  Unix user for `relayer`/`indexer`/`webhooks`, eventual migration of
-  the relayer key to an HSM-isolated signer.
-- Real Chainlink price feeds — replace mock feeds per stable; oracle
-  keepalive timer becomes obsolete.
-- Compliance provider activation — flip `COMPLIANCE_PROVIDER` from
-  `noop` to `elliptic` or `trmlabs`.
-- Populate `packages/contracts/deployments/arc-mainnet.json` — currently
-  a null placeholder with the same shape as `arc-testnet.json`.
-- Bug bounty — Immunefi engagement with first paying merchant.
-
 ---
 
-*Last updated 2026-05-24. Edits go inline; this file is the only
+*Last updated 2026-06-10. Edits go inline; this file is the only
 forward-looking planning doc in the repo.*

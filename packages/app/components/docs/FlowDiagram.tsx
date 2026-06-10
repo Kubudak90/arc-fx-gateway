@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
  */
 export function FlowDiagram() {
   return (
-    <div className="my-8 rounded-2xl border border-arcora-border bg-arcora-gray/40 p-5 sm:p-7">
+    <div className="my-8 rounded-2xl border bg-[var(--surface-2)] p-5 sm:p-7">
       <Step
         primary={<MainBox title="Customer wallet" />}
       />
@@ -51,9 +51,9 @@ function Step({
       {side && (
         <div className="flex items-center gap-2 sm:gap-3 sm:flex-1 sm:min-w-0 ml-5 sm:ml-0">
           <CornerArrow className="sm:hidden" />
-          <span className="hidden sm:inline-block flex-1 h-px bg-arcora-slate/20 max-w-12" />
+          <span className="hidden sm:inline-block flex-1 h-px bg-[var(--border-strong)] max-w-12" />
           {sideLabel && (
-            <span className="font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-[0.14em] text-muted-foreground whitespace-nowrap">
+            <span className="mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground whitespace-nowrap">
               {sideLabel}
             </span>
           )}
@@ -69,10 +69,10 @@ function Connector({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3 ml-5 sm:ml-7 my-1.5">
       <div className="flex flex-col items-center">
-        <span className="block w-px h-6 bg-arcora-slate/25" />
+        <span className="block w-px h-6 bg-[var(--border-strong)]" />
         <ArrowDown />
       </div>
-      <span className="font-[family-name:var(--font-mono)] text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+      <span className="mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </span>
     </div>
@@ -81,10 +81,10 @@ function Connector({ label }: { label: string }) {
 
 function MainBox({ title, sub }: { title: string; sub?: string }) {
   return (
-    <div className="rounded-xl bg-gradient-to-br from-arcora-blue/10 to-arcora-teal/10 border border-arcora-blue/25 px-4 py-3 sm:min-w-[200px]">
-      <div className="font-semibold text-arcora-slate text-[15px] leading-tight">{title}</div>
+    <div className="rounded-xl bg-[var(--acc-soft)] border border-[var(--acc-line)] px-4 py-3 sm:min-w-[200px]">
+      <div className="font-semibold text-foreground text-[15px] leading-tight">{title}</div>
       {sub && (
-        <div className="font-[family-name:var(--font-mono)] text-[10.5px] text-muted-foreground mt-0.5">
+        <div className="mono text-[10.5px] text-muted-foreground mt-0.5">
           {sub}
         </div>
       )}
@@ -94,10 +94,10 @@ function MainBox({ title, sub }: { title: string; sub?: string }) {
 
 function SideBox({ title, sub }: { title: string; sub?: string }) {
   return (
-    <div className="rounded-xl bg-white border border-arcora-border px-4 py-3 min-w-0">
-      <div className="font-semibold text-arcora-slate text-[15px] leading-tight">{title}</div>
+    <div className="rounded-xl bg-[var(--surface)] border px-4 py-3 min-w-0">
+      <div className="font-semibold text-foreground text-[15px] leading-tight">{title}</div>
       {sub && (
-        <div className="font-[family-name:var(--font-mono)] text-[10.5px] text-muted-foreground mt-0.5">
+        <div className="mono text-[10.5px] text-muted-foreground mt-0.5">
           {sub}
         </div>
       )}
@@ -107,7 +107,7 @@ function SideBox({ title, sub }: { title: string; sub?: string }) {
 
 function ArrowRight() {
   return (
-    <svg width="14" height="10" viewBox="0 0 14 10" fill="none" className="text-arcora-slate/45 flex-none">
+    <svg width="14" height="10" viewBox="0 0 14 10" fill="none" className="text-[var(--fg-3)] flex-none">
       <path d="M0 5h12m0 0L8 1m4 4L8 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -115,7 +115,7 @@ function ArrowRight() {
 
 function ArrowDown() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-arcora-slate/45 flex-none -mt-0.5">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="text-[var(--fg-3)] flex-none -mt-0.5">
       <path d="M5 0v8m0 0L1 4m4 4l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -126,7 +126,7 @@ function CornerArrow({ className }: { className?: string }) {
   return (
     <svg
       width="14" height="14" viewBox="0 0 14 14" fill="none"
-      className={`text-arcora-slate/45 flex-none ${className ?? ""}`}
+      className={`text-[var(--fg-3)] flex-none ${className ?? ""}`}
     >
       <path
         d="M3 1v6a3 3 0 0 0 3 3h7m0 0L9 6m4 4l-4 4"

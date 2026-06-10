@@ -40,21 +40,6 @@
   --color-green-950: #0d1514;
   --color-green-990: #080e0d;
 
-  /* Logo hues — ONLY for the brand mark, never for UI accents */
-  --color-arcora-blue: #2563ff;
-  --color-arcora-teal: #00c2a8;
-
-  /* TRANSITIONAL old-brand tokens — keep unmigrated pages coherent.
-     DELETE in the final sweep task together with the alias block. */
-  --color-arcora-blue-light: #3d7cff;
-  --color-arcora-slate: #0b1426;
-  --color-arcora-deep: #1e2940;
-  --color-arcora-gray: #e6ecf2;
-  --color-arcora-link: #2563ff;
-  --color-arcora-border: rgba(11, 20, 38, 0.12);
-  --color-arcora-muted-fg: #5b6478;
-  --color-arcora-canvas: #f4f4f4;
-
   /* Radii */
   --radius: 0.75rem; /* NOTE: redefines bare `rounded` from Tailwind's 0.25rem default */
   --radius-card: 24px;
@@ -188,7 +173,7 @@
   --glass-blur: 18px;
 }
 
-/* Accent knobs + motion + legacy aliases */
+/* Accent knobs + motion */
 :root {
   --acc: var(--accent);
   --acc-soft: rgba(200, 242, 74, 0.12);
@@ -201,21 +186,6 @@
 
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-emph: cubic-bezier(0.3, 0, 0, 1);
-
-  /* TRANSITIONAL aliases — keep unmigrated pages coherent.
-     DELETE in the final sweep task once no consumers remain. */
-  --ink: var(--fg-1);
-  --ink-2: var(--fg-2);
-  --ink-3: var(--fg-3);
-  --line: var(--border);
-  --line-strong: var(--border-strong);
-  --bg-elev: var(--surface-2);
-  --bg-elev-2: var(--surface);
-  --accent-ink: var(--fg-on-accent);
-  --accent-soft: var(--acc-soft);
-  --warn: var(--warning);
-  --popover: var(--surface);
-  --popover-foreground: var(--fg-1);
 }
 
 @layer base {
@@ -529,33 +499,5 @@ textarea.field:focus-visible,
   .hide-sm { display: none !important; }
   .foot-grid { grid-template-columns: 1fr !important; }
 }
-
-/* ============================================================
-   LEGACY classes — restyled to v2 so unmigrated pages stay
-   coherent. DELETE in the final sweep task.
-   ============================================================ */
-.glass { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
-.tag {
-  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 4px;
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
-  background: var(--acc-soft); color: color-mix(in oklch, var(--acc) 75%, var(--fg-1)); font-weight: 600;
-}
-.tag.muted { background: color-mix(in oklch, var(--fg-1) 6%, transparent); color: var(--fg-3); }
-.hairline { height: 1px; background: var(--border); }
-.btn-arcora-pill {
-  border-radius: var(--radius-pill); background: var(--acc); color: var(--acc-ink);
-  font: 600 16px/1.2 var(--font-sans); letter-spacing: 0.16px; padding: 14px 32px;
-  transition: background 150ms ease; cursor: pointer;
-}
-.btn-arcora-pill:hover { background: var(--accent-hover); }
-.btn-arcora-pill:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.btn-arcora-pill:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-arcora-pill-light {
-  border-radius: var(--radius-pill); background: color-mix(in oklch, var(--fg-1) 6%, transparent);
-  color: var(--fg-1); border: 1px solid var(--border-strong);
-  font: 600 16px/1.2 var(--font-sans); letter-spacing: 0.16px; padding: 14px 32px;
-  transition: background 150ms ease, color 150ms ease; cursor: pointer;
-}
-.btn-arcora-pill-light:hover { background: color-mix(in oklch, var(--fg-1) 11%, transparent); }
 
 } /* @layer components */

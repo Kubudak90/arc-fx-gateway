@@ -44,8 +44,19 @@
   --color-arcora-blue: #2563ff;
   --color-arcora-teal: #00c2a8;
 
+  /* TRANSITIONAL old-brand tokens — keep unmigrated pages coherent.
+     DELETE in the final sweep task together with the alias block. */
+  --color-arcora-blue-light: #3d7cff;
+  --color-arcora-slate: #0b1426;
+  --color-arcora-deep: #1e2940;
+  --color-arcora-gray: #e6ecf2;
+  --color-arcora-link: #2563ff;
+  --color-arcora-border: rgba(11, 20, 38, 0.12);
+  --color-arcora-muted-fg: #5b6478;
+  --color-arcora-canvas: #f4f4f4;
+
   /* Radii */
-  --radius: 0.75rem;
+  --radius: 0.75rem; /* NOTE: redefines bare `rounded` from Tailwind's 0.25rem default */
   --radius-card: 24px;
   --radius-field: 16px;
   --radius-pill: 999px;
@@ -197,6 +208,8 @@
   --accent-ink: var(--fg-on-accent);
   --accent-soft: var(--acc-soft);
   --warn: var(--warning);
+  --popover: var(--surface);
+  --popover-foreground: var(--fg-1);
 }
 
 @layer base {
@@ -221,6 +234,8 @@
 /* ============================================================
    UI v2 component recipes — ported from prototype arcora.css
    ============================================================ */
+
+@layer components {
 
 /* Ambient page background + grid texture (landing/checkout chrome) */
 .page-bg {
@@ -513,3 +528,5 @@ h2.disp { font-weight: 400; letter-spacing: -0.025em; line-height: 1.06; }
   transition: background 150ms ease, color 150ms ease; cursor: pointer;
 }
 .btn-arcora-pill-light:hover { background: color-mix(in oklch, var(--fg-1) 11%, transparent); }
+
+} /* @layer components */

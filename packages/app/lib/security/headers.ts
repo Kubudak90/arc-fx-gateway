@@ -11,6 +11,11 @@
  * tightened to nonce/hash-based CSP in a post-demo polish pass.
  */
 export function securityHeaders(): { key: string; value: string }[] {
+  // `next dev` serves its client bundles through eval-based source maps, so a
+  // CSP without 'unsafe-eval' kills hydration on every client page in dev
+  // (and with it the Playwright e2e suite, which runs against `pnpm dev`).
+  // Production builds don't eval — the shipped CSP is unchanged.
+  const isDev = process.env.NODE_ENV === "development";
   return [
     {
       key: "X-Frame-Options",
@@ -33,7 +38,7 @@ export function securityHeaders(): { key: string; value: string }[] {
       // 'unsafe-inline' intentionally kept for demo phase — see note above.
       value: [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline'",
+        `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: https:",
         "font-src 'self' data:",

@@ -34,7 +34,7 @@
 #   cat > /etc/cron.d/arcora-health <<EOF
 #   SHELL=/bin/bash
 #   MAILTO=root
-#   */10 * * * * root /root/arcora-ops/health/arcora-health.sh
+#   */10 * * * * root flock -n /run/arcora-health.lock /root/arcora-ops/health/arcora-health.sh
 #   EOF
 set -euo pipefail
 
@@ -49,9 +49,22 @@ VERBOSE=${ARCORA_HEALTH_VERBOSE:-0}
 
 RESULTS=()
 FAILS=0
+CA_FILE=""   # script-scoped so the EXIT trap (global scope) can clean it up
 ok()   { RESULTS+=("[health] OK:   $1"); }
 warn() { RESULTS+=("[health] WARN: $1"); }
 fail() { RESULTS+=("[health] FAIL: $1"); FAILS=$((FAILS + 1)); }
+
+# Belt-and-suspenders: under `set -euo pipefail` any unexpected non-zero
+# (an unguarded command, a missing var) would otherwise abort the script
+# silently. Flush whatever we've gathered so far and emit a CRITICAL line to
+# stderr so the cron MAILTO surfaces the abort instead of mailing nothing.
+on_err() {
+  local rc=$?
+  if ((${#RESULTS[@]})); then printf '%s\n' "${RESULTS[@]}" >&2; fi
+  echo "[health] CRITICAL: script aborted unexpectedly (exit $rc) on $(hostname) at $(date -Iseconds)" >&2
+  exit "$rc"
+}
+trap on_err ERR
 
 # ── 1. systemd units ─────────────────────────────────────────────────
 for u in $UNITS; do
@@ -76,7 +89,7 @@ queue_check() {
     return
   fi
   local dsn
-  dsn=$(grep -E '^POSTGRES_URL_NON_POOLING=' "$RELAYER_ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//')
+  dsn=$(grep -E '^POSTGRES_URL_NON_POOLING=' "$RELAYER_ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' || true)
   if [[ -z "$dsn" ]]; then
     fail "queue: POSTGRES_URL_NON_POOLING not set in $RELAYER_ENV_FILE"
     return
@@ -91,6 +104,10 @@ queue_check() {
   local ca_ts="$RELAYER_DIR/supabase-ca.ts"
   if [[ -f "$ca_ts" ]]; then
     ca_file=$(mktemp)
+    # Register cleanup immediately so the temp file is removed on any exit
+    # path (normal, error trap, or the empty-extraction fallback below).
+    CA_FILE="$ca_file"
+    trap 'rm -f "${CA_FILE:-}"' EXIT
     chmod 600 "$ca_file"
     grep -o '"-----BEGIN CERTIFICATE-----.*-----END CERTIFICATE-----\\n"' "$ca_ts" \
       | sed -e 's/^"//' -e 's/"$//' \
@@ -100,6 +117,13 @@ queue_check() {
     warn "queue: could not extract Supabase CA from $ca_ts — falling back to sslmode=require"
     sslmode="require"
     ca_file=""
+    # Surface degraded TLS without mailing every 10 min: drop a marker file
+    # (see README — its presence means the queue check ran without verify-full).
+    touch /run/arcora-health-tls-degraded 2>/dev/null || true
+  else
+    # verify-full is in effect — clear any stale degraded marker so the file's
+    # presence always reflects the most recent run.
+    rm -f /run/arcora-health-tls-degraded 2>/dev/null || true
   fi
 
   local sql="select coalesce(extract(epoch from (now() - min(created_at)))::int, 0)
@@ -107,9 +131,11 @@ queue_check() {
   local age rc=0
   # `env` (not bare prefix assignments): the PGSSLROOTCERT word comes from a
   # parameter expansion, which bash would otherwise parse as a command name.
-  age=$(env PGCONNECT_TIMEOUT=10 PGSSLMODE="$sslmode" ${ca_file:+"PGSSLROOTCERT=$ca_file"} \
+  # `timeout 30` caps a hung connection so a stuck psql can't pile up across
+  # overlapping cron runs (flock in the cron line is the other half of this).
+  age=$(timeout 30 env PGCONNECT_TIMEOUT=10 PGSSLMODE="$sslmode" ${ca_file:+"PGSSLROOTCERT=$ca_file"} \
         psql "$dsn" -tAc "$sql" 2>&1) || rc=$?
-  [[ -n "$ca_file" ]] && rm -f "$ca_file"
+  # Temp CA file is cleaned up by the EXIT trap (registered at mktemp time).
 
   if [[ $rc -ne 0 ]]; then
     # psql error text can embed the DSN on some failure modes — keep the
@@ -131,7 +157,7 @@ queue_check() {
 queue_check
 
 # ── 3. app health endpoint ───────────────────────────────────────────
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$APP_HEALTH_URL" || echo "000")
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$APP_HEALTH_URL") || code="000"
 case "$code" in
   200) ok "app: $APP_HEALTH_URL → 200" ;;
   404)

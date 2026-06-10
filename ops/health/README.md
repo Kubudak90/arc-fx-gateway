@@ -22,6 +22,15 @@ AFG-011 trust anchor the daemons use. `crosschain_payments` is deliberately
 not age-checked: its attestation-poll states are legitimately long-lived
 (up to 2 h by `CROSSCHAIN_ATTESTATION_DEADLINE_MS`).
 
+If the CA can't be extracted, the queue check degrades to `sslmode=require`
+(encrypted but unverified) rather than going blind — a WARN, not a FAIL. To
+avoid mailing that WARN every 10 minutes, the script instead touches the
+marker file **`/run/arcora-health-tls-degraded`**. Its presence means the most
+recent run could not pin the Supabase CA; the file is removed automatically on
+the next run that successfully extracts it. Check for it with
+`ls -l /run/arcora-health-tls-degraded`; if present, verify
+`/opt/arcora-ops/relayer/supabase-ca.ts` still contains the PEM.
+
 ## TODO — flip the app-endpoint 404 to FAIL after Task 10
 
 `/api/health` exists in the app code but is **not deployed to production
@@ -34,7 +43,7 @@ quiet about it (no mail every 10 minutes). Anything else that isn't a 200 —
 `ARCORA_APP_404=fail` to the cron file (or change the script default):
 
 ```
-*/10 * * * * root ARCORA_APP_404=fail /root/arcora-ops/health/arcora-health.sh
+*/10 * * * * root ARCORA_APP_404=fail flock -n /run/arcora-health.lock /root/arcora-ops/health/arcora-health.sh
 ```
 
 ## Install on the VPS
@@ -50,9 +59,13 @@ chmod +x /root/arcora-ops/health/arcora-health.sh
 cat > /etc/cron.d/arcora-health <<EOF
 SHELL=/bin/bash
 MAILTO=root
-*/10 * * * * root /root/arcora-ops/health/arcora-health.sh
+*/10 * * * * root flock -n /run/arcora-health.lock /root/arcora-ops/health/arcora-health.sh
 EOF
 ```
+
+The `flock -n /run/arcora-health.lock` wrapper makes the cron run a no-op if a
+previous run is still in flight (e.g. a slow DB), so overlapping invocations
+can never pile up. It pairs with the in-script `timeout 30` around `psql`.
 
 Using a dedicated `/etc/cron.d/arcora-health` file (rather than editing the
 root crontab) means existing cron entries are never touched.
@@ -71,3 +84,20 @@ Knobs (all env, all optional): `ARCORA_UNITS`, `ARCORA_RELAYER_DIR`,
 `ARCORA_RELAYER_ENV_FILE`, `ARCORA_QUEUE_MAX_AGE_SECONDS`,
 `ARCORA_APP_HEALTH_URL`, `ARCORA_APP_404` (`warn`|`fail`),
 `ARCORA_HEALTH_VERBOSE`.
+
+## When you get an alert
+
+The mail body is the full set of check lines plus a `[health] CRITICAL: …`
+footer. Match the failing line to the row below.
+
+| FAIL | First look | Then |
+|---|---|---|
+| `unit <name> is '…'` | `journalctl -u <unit> -n 100` | `systemctl restart <unit>` once you understand why it died |
+| `queue: … row is …s old …` (relayer not draining) | Inspect stuck rows: `psql "$DSN" -c "select id, status, attempts, last_error, created_at from relayer_queue where status in ('pending','processing') order by created_at limit 5;"` | Check the relayer journal: `journalctl -u arcora-relayer -n 100` (look for a crash/retry loop or a stalled attestation poll) |
+| `queue: relayer_queue query failed …` | Same stuck-rows SQL above to confirm DB reachability | If it's a TLS pin failure, check `ls -l /run/arcora-health-tls-degraded` and `/opt/arcora-ops/relayer/supabase-ca.ts` |
+| `app: … → <code>` | Check the Vercel deploy/status dashboard | `curl -i https://arcorapay.xyz/api/health` to see the live response/headers |
+| `CRITICAL: script aborted unexpectedly` | Re-run manually with `ARCORA_HEALTH_VERBOSE=1 bash -x /root/arcora-ops/health/arcora-health.sh` | The accumulated check lines are mailed above the CRITICAL line — start there |
+
+For the queue SQL, `$DSN` is the relayer's `POSTGRES_URL_NON_POOLING`
+(`grep POSTGRES_URL_NON_POOLING /opt/arcora-ops/relayer/.env`). A bare 404 on
+the app endpoint is still WARN-only pre-Task-10 (see above) and won't mail.

@@ -4,7 +4,10 @@ import { db } from "@/lib/db/client";
 import { publicClient } from "@/lib/chain/client";
 import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
-import { version } from "@/package.json";
+import { version as pkgVersion } from "@/package.json";
+
+/** Deploy identity: Vercel commit SHA when available, package version locally. */
+const version = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? pkgVersion;
 
 /**
  * Liveness/readiness probe for uptime monitoring (a VPS cron curls this).
@@ -53,11 +56,15 @@ export async function GET(req: NextRequest) {
   // (or the limiter) is down, health must still report — so swallow errors and
   // treat them as "allowed".
   try {
-    const allowed = await takeToken(
-      `health:${clientIp(req)}`,
-      RATE_LIMIT_PER_WINDOW,
-      RATE_WINDOW_SECONDS,
-    );
+    // Race the limiter against the probe timeout: a *hung* DB must not stall
+    // the handler before the probes get to report { db: false }.
+    const allowed = await Promise.race([
+      takeToken(`health:${clientIp(req)}`, RATE_LIMIT_PER_WINDOW, RATE_WINDOW_SECONDS),
+      new Promise<boolean>((resolve) => {
+        const t = setTimeout(() => resolve(true), PROBE_TIMEOUT_MS);
+        t.unref?.();
+      }),
+    ]);
     if (!allowed) {
       return NextResponse.json(
         { error: "rate_limited", retryAfterSeconds: RATE_WINDOW_SECONDS },

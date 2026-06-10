@@ -1,7 +1,7 @@
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "Compliance posture · Arcora docs",
+  title: "Compliance posture · Arcorapay docs",
   description: "Sanctions screening (Plan-5) and merchant KYB (Plan-8) — what's live, what's pending, what flips at mainnet.",
 };
 

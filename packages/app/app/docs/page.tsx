@@ -4,7 +4,7 @@ import { DocsShell } from "@/components/docs/DocsShell";
 import { FlowDiagram } from "@/components/docs/FlowDiagram";
 
 export const metadata = {
-  title: "Documentation · Arcora",
+  title: "Documentation · Arcorapay",
   description: "Developer documentation for Arcora — stablecoin checkout and settlement on Arc.",
 };
 

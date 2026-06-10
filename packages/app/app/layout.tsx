@@ -18,8 +18,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Arcora",
-  description: "Stablecoin checkout and FX settlement on Arc",
+  title: "Arcorapay",
+  description: "Stablecoin checkout & settlement on Arc",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

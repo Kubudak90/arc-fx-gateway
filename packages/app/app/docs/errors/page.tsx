@@ -1,7 +1,7 @@
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "Error reference · Arcora docs",
+  title: "Error reference · Arcorapay docs",
   description: "Every error code Arcora returns, what triggers it, and how to recover.",
 };
 

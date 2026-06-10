@@ -1,7 +1,7 @@
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "REST API · Arcora docs",
+  title: "REST API · Arcorapay docs",
   description: "Direct endpoints — create invoices, authorize checkouts, query state. Server-to-server.",
 };
 

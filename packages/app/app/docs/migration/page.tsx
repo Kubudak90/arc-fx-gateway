@@ -1,7 +1,7 @@
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "Migration · v0.9 → v0.10 · Arcora docs",
+  title: "Migration · v0.9 → v0.10 · Arcorapay docs",
   description: "How to move from v0.9 (refund-source binding) to v0.10 (custody escrow gateway).",
 };
 

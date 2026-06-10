@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { invoices, merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { abbreviateAddress } from "@/lib/ui/format";
+import { ArcoraSymbol, ArcoraLogo } from "@/components/brand/Logo";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { InvoiceCard } from "@/components/checkout/InvoiceCard";
 import CheckoutClient from "./CheckoutClient";
 
@@ -16,8 +19,6 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
       expiresAt: invoices.expiresAt,
       successUrl: invoices.successUrl,
       cancelUrl: invoices.cancelUrl,
-      paidBy: invoices.paidBy,
-      paidTx: invoices.paidTx,
       payoutToken: invoices.payoutToken,
       metadata: invoices.metadata,
       merchantAddress: merchants.address,
@@ -36,51 +37,70 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
   const inv = rows[0]!;
   const expired = inv.expiresAt.getTime() < Date.now();
   const initialStatus = expired && inv.status === "created" ? "expired" : inv.status;
+  const payable = initialStatus === "created";
 
   return (
-    <main className="min-h-screen bg-arcora-canvas">
-      {/* Topbar */}
-      <header className="h-14 px-6 flex items-center justify-between bg-white border-b border-arcora-border">
-        <div className="flex items-center gap-2 font-semibold text-[15px] tracking-tight text-arcora-slate">
-          <span className="font-[family-name:var(--font-display)]">Arcora</span>
-        </div>
-        <div className="hidden sm:flex items-center gap-3 font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg tracking-[0.1em] uppercase">
-          <span className="inline-block size-[5px] rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]" />
-          <span>Secure checkout</span>
-          <span className="opacity-40">·</span>
-          <span>Permit2 / EIP-712</span>
-        </div>
-      </header>
+    <main className="relative min-h-screen bg-[var(--bg)]">
+      <div className="page-bg" aria-hidden />
 
-      {/* Two-column grid */}
-      <div className="max-w-5xl mx-auto grid md:grid-cols-2 min-h-[calc(100vh-56px)]">
-        {/* Left column — invoice summary */}
-        <div className="bg-white border-r border-arcora-border p-10 md:p-14 flex flex-col gap-8">
-          <InvoiceCard
-            amountOut={inv.amountOut}
-            payoutTokenAddress={inv.payoutToken}
-            payInTokenAddress={inv.payInToken}
-            status={initialStatus as "created" | "paid" | "expired" | "failed"}
-            invoiceId={inv.id}
-            expiresAt={inv.expiresAt}
-            merchantAddress={inv.merchantAddress}
-            metadata={inv.metadata}
-          />
+      <div className="relative z-[1] mx-auto w-full max-w-[480px] px-4 py-8 sm:py-12 flex flex-col gap-5">
+        {/* Brand row */}
+        <header className="flex items-center justify-between gap-3">
+          <ArcoraLogo size={22} />
+          <div className="flex items-center gap-3">
+            <span className="mono hidden sm:inline-flex items-center gap-2 text-[10.5px] uppercase tracking-[0.1em] text-[var(--fg-3)]">
+              <span className="dot dot--live" aria-hidden />
+              Secure checkout · Permit2
+            </span>
+            <ThemeToggle />
+          </div>
+        </header>
+
+        {/* Checkout panel */}
+        <div className="card overflow-hidden shadow-[var(--elev-4)]">
+          {/* Merchant header row */}
+          <div className="px-5 sm:px-6 py-4 border-b border-[var(--border)] bg-[var(--bg-sunken)] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <ArcoraSymbol size={28} aria-hidden />
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-[var(--fg-1)] truncate">
+                  {abbreviateAddress(inv.merchantAddress)}
+                </div>
+                <div className="mono text-[11px] text-[var(--fg-3)]">
+                  {payable ? "awaiting payment" : initialStatus}
+                </div>
+              </div>
+            </div>
+            <span className="tagchip tagchip--mut">inv {inv.id.slice(0, 8)}…</span>
+          </div>
+
+          <div className="px-5 sm:px-6 py-6 flex flex-col gap-6">
+            <InvoiceCard
+              amountOut={inv.amountOut}
+              payoutTokenAddress={inv.payoutToken}
+              payInTokenAddress={inv.payInToken}
+              status={initialStatus}
+              expiresAt={inv.expiresAt}
+              merchantAddress={inv.merchantAddress}
+              metadata={inv.metadata}
+            />
+
+            <CheckoutClient
+              invoiceId={inv.id}
+              initialStatus={initialStatus}
+              payInTokenAddress={inv.payInToken}
+              payoutTokenAddress={inv.payoutToken}
+              amountOut={inv.amountOut}
+              successUrl={inv.successUrl}
+              cancelUrl={inv.cancelUrl ?? undefined}
+              allowedOrigins={inv.merchantAllowedOrigins ?? []}
+            />
+          </div>
         </div>
 
-        {/* Right column — quote + sign */}
-        <div className="bg-arcora-canvas p-10 md:p-14 flex flex-col gap-6">
-          <CheckoutClient
-            invoiceId={inv.id}
-            initialStatus={initialStatus as "created" | "paid" | "expired" | "failed"}
-            payInTokenAddress={inv.payInToken}
-            payoutTokenAddress={inv.payoutToken}
-            amountOut={inv.amountOut}
-            successUrl={inv.successUrl}
-            cancelUrl={inv.cancelUrl ?? undefined}
-            allowedOrigins={inv.merchantAllowedOrigins ?? []}
-          />
-        </div>
+        <p className="mono text-center text-[10.5px] uppercase tracking-[0.12em] text-[var(--fg-3)]">
+          Gas-less Permit2 / EIP-712 · settles on Arc
+        </p>
       </div>
     </main>
   );

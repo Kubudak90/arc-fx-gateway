@@ -1,12 +1,13 @@
 import { useId } from "react";
 
 /**
- * Marketing-side preview of the merchant dashboard. The chart shape and the
- * activity rows are deliberate placeholders — Arc testnet's real numbers are
- * tiny, and showing $5 of lifetime volume next to "Treasury that reads like a
- * P&L" would undersell the product. The footer disclaimer makes the
- * illustrative status explicit and points the reader at the actual live
- * dashboard at /m/treasury.
+ * Marketing-side preview of the merchant dashboard, reskinned to the UI v2
+ * tokens so it matches the real merchant area (dark surface card, sage chart,
+ * chartreuse accents). The chart shape and the activity rows are deliberate
+ * placeholders — Arc testnet's real numbers are tiny, and showing $5 of
+ * lifetime volume next to "Treasury that reads like a P&L" would undersell
+ * the product. The footer disclaimer makes the illustrative status explicit
+ * and points the reader at the actual live dashboard at /m/treasury.
  */
 
 const CHART = [10, 18, 14, 22, 30, 26, 38, 34, 44, 52, 48, 60, 56, 68, 74, 70, 82, 88, 84, 96];
@@ -38,83 +39,77 @@ export function DashboardPreview() {
   const last = points[points.length - 1]!;
 
   return (
-    <div className="border border-arcora-border bg-white overflow-hidden shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-0">
+    <div className="card overflow-hidden" style={{ boxShadow: "var(--elev-3)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr]">
         {/* Chart */}
-        <div className="p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-arcora-border">
-          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="border-b p-6 sm:p-7 lg:border-b-0 lg:border-r">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div>
-              <p className="eyebrow mb-3">Volume · last 30d</p>
-              <div className="font-[family-name:var(--font-display)] font-light text-3xl sm:text-4xl tabular-nums tracking-[-0.02em] text-arcora-slate">
-                $1,284,309<span className="text-arcora-muted-fg text-lg sm:text-xl ml-0.5">.42</span>
+              <p className="eyebrow mb-2.5">Volume · last 30d</p>
+              <div className="mono text-3xl font-light tabular-nums tracking-[-0.02em] sm:text-4xl">
+                $1,284,309<span className="text-lg sm:text-xl" style={{ color: "var(--fg-3)" }}>.42</span>
               </div>
-              <div className="mt-1 font-[family-name:var(--font-mono)] text-[11px] text-arcora-teal tracking-[0.04em]">
-                +24.1% vs prev period
+              <div className="mono mt-1 text-[11px] tracking-[0.04em]" style={{ color: "var(--sage)" }}>
+                ▲ +24.1% vs prev period
               </div>
             </div>
-            <div className="flex gap-0 border border-arcora-border shrink-0">
+            <div className="seg shrink-0" aria-hidden="true">
               {["1d", "7d", "30d", "All"].map((p, i) => (
-                <span
-                  key={p}
-                  className={`font-[family-name:var(--font-mono)] text-[11px] px-3 py-1.5 border-r last:border-r-0 border-arcora-border cursor-pointer ${
-                    i === 2
-                      ? "bg-arcora-slate text-white"
-                      : "bg-transparent text-arcora-muted-fg hover:bg-arcora-gray/50"
-                  }`}
-                >
+                <span key={p} className={i === 2 ? "on" : ""}>
                   {p}
                 </span>
               ))}
             </div>
           </div>
 
-          <svg viewBox="0 0 400 160" preserveAspectRatio="none" className="w-full h-[160px] mt-6">
+          <svg viewBox="0 0 400 160" preserveAspectRatio="none" className="mt-6 h-[160px] w-full">
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor="#00c2a8" stopOpacity="0.32" />
-                <stop offset="100%" stopColor="#00c2a8" stopOpacity="0" />
+                <stop offset="0%"   style={{ stopColor: "var(--sage)" }} stopOpacity="0.32" />
+                <stop offset="100%" style={{ stopColor: "var(--sage)" }} stopOpacity="0" />
               </linearGradient>
             </defs>
             {Array.from({ length: 4 }).map((_, i) => (
               <line key={i} x1="0" y1={40 * (i + 1)} x2="400" y2={40 * (i + 1)}
-                stroke="rgba(11,20,38,0.06)" strokeWidth="0.5" />
+                style={{ stroke: "var(--border)" }} strokeWidth="0.5" />
             ))}
-            <path d={areaPath}  fill={`url(#${gradientId})`} />
-            <path d={linePath}  fill="none" stroke="#00c2a8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx={last.x} cy={last.y} r="4" fill="#00c2a8" />
-            <circle cx={last.x} cy={last.y} r="8" fill="#00c2a8" opacity="0.25" />
+            <path d={areaPath} fill={`url(#${gradientId})`} />
+            <path d={linePath} fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: "var(--sage)" }} />
+            <circle cx={last.x} cy={last.y} r="4" style={{ fill: "var(--sage)" }} />
+            <circle cx={last.x} cy={last.y} r="8" opacity="0.25" style={{ fill: "var(--sage)" }} />
           </svg>
         </div>
 
         {/* Mini ledger */}
-        <div className="p-6 sm:p-8 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col p-6 sm:p-7">
+          <div className="mb-3.5 flex items-center justify-between">
             <p className="eyebrow">Recent settlements</p>
-            <span className="inline-flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[10px] tracking-[0.06em] uppercase text-arcora-muted-fg">
-              <span className="size-[5px] rounded-full bg-arcora-teal" />
+            <span className="eyebrow inline-flex items-center gap-1.5">
+              <span className="dot dot--live" />
               Live
             </span>
           </div>
-          <ul className="space-y-0 flex-1">
+          <ul className="flex-1">
             {SETTLEMENTS.map((s, i) => {
               const isNeg = s.amt.startsWith("−");
               return (
                 <li
                   key={s.id}
-                  className={`grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-2.5 py-2.5 border-b last:border-b-0 border-arcora-border/60 text-[12px] ${
-                    i === 0 ? "bg-arcora-teal/10" : ""
-                  }`}
+                  className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 rounded-[10px] border-b px-2.5 py-2.5 text-[12px] last:border-b-0"
+                  style={{
+                    borderColor: "var(--border-faint)",
+                    background: i === 0 ? "var(--acc-soft)" : "transparent",
+                  }}
                 >
-                  <span className="font-[family-name:var(--font-mono)] text-arcora-muted-fg">{s.id}</span>
-                  <span className={`font-[family-name:var(--font-mono)] tabular-nums text-right ${
-                    isNeg ? "text-arcora-muted-fg" : "text-arcora-slate"
-                  }`}>
+                  <span className="mono" style={{ color: "var(--fg-3)" }}>{s.id}</span>
+                  <span
+                    className="mono text-right font-medium tabular-nums"
+                    style={{ color: isNeg ? "var(--fg-3)" : "var(--fg-1)" }}
+                  >
                     {s.amt}
                   </span>
-                  <span className="text-[10px] tracking-[0.06em] uppercase px-1.5 py-0.5 font-[family-name:var(--font-mono)] border border-arcora-border bg-arcora-gray text-arcora-muted-fg">
-                    {s.ccy}
-                  </span>
-                  <span className="font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg tabular-nums">
+                  <span className="tagchip tagchip--mut" style={{ height: 20 }}>{s.ccy}</span>
+                  <span className="mono text-[11px] tabular-nums" style={{ color: "var(--fg-3)" }}>
                     {s.t} ago
                   </span>
                 </li>

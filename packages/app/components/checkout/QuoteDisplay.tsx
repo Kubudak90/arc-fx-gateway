@@ -118,26 +118,26 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
   const payoutSym = symbolForAddress(props.payoutTokenAddress);
 
   return (
-    <div className={`bg-white border ${stale ? "border-arcora-blue" : "border-arcora-border"}`}>
+    <div className={`field overflow-hidden ${stale ? "border-[var(--warning)]" : ""}`}>
       {/* Quote card header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-arcora-border">
+      <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
-          <span className={`inline-block size-[6px] rounded-full ${stale ? "bg-amber-400" : "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]"}`} />
-          <span className="text-[12px] font-medium text-arcora-slate">
+          <span
+            className={stale ? "dot" : "dot dot--live"}
+            style={stale ? { background: "var(--warning)" } : undefined}
+            aria-hidden
+          />
+          <span className="text-[12px] font-medium text-[var(--fg-1)]">
             {sameToken ? "Direct payment" : "Live quote · App Kit Swap RFQ"}
           </span>
         </div>
-        {sameToken && (
-          <span className="font-[family-name:var(--font-mono)] text-[10px] font-semibold tracking-[0.08em] uppercase text-emerald-700 border border-emerald-200 bg-emerald-50 px-2 py-[2px]">
-            No swap
-          </span>
-        )}
+        {sameToken && <span className="tagchip tagchip--ok">No swap</span>}
         {stale && (
           <button
             type="button"
             onClick={() => void fetchQuote()}
             disabled={loading}
-            className="flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-[11px] font-medium text-arcora-blue hover:underline disabled:opacity-50"
+            className="mono flex items-center gap-1.5 text-[11px] font-medium text-[var(--action)] hover:underline disabled:opacity-50"
           >
             <RefreshCw className="size-3" /> Refresh
           </button>
@@ -145,17 +145,17 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
       </div>
 
       {/* Quote body — two-column with arrow */}
-      <div className="p-5">
+      <div className="p-4 sm:p-5">
         <div className="grid grid-cols-[1fr_32px_1fr] items-center gap-3">
           {/* You pay */}
           <div>
             <div className="eyebrow mb-2">You pay</div>
             {loading && !payInAmount ? (
-              <div className="h-8 w-28 bg-arcora-gray animate-pulse" />
+              <div className="h-7 w-24 rounded-[6px] bg-[var(--surface-3)] animate-pulse" />
             ) : (
-              <div className="font-[family-name:var(--font-display)] font-light text-[32px] leading-[1] tracking-[-0.02em] text-arcora-slate">
+              <div className="mono font-light text-[26px] leading-[1] tracking-[-0.02em] text-[var(--fg-1)]">
                 {payInAmount ? formatTokenAmount(payInAmount) : "—"}
-                <span className="text-[14px] text-arcora-muted-fg font-normal ml-1.5 tracking-[0.02em]">
+                <span className="text-[13px] text-[var(--fg-3)] font-normal ml-1.5 tracking-[0.02em]">
                   {payInSym}
                 </span>
               </div>
@@ -163,7 +163,7 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
           </div>
 
           {/* Arrow */}
-          <div className="flex items-center justify-center size-8 border border-arcora-border text-arcora-muted-fg text-[15px] self-end mb-1">
+          <div className="flex items-center justify-center size-8 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] text-[var(--fg-3)] text-[15px] self-end mb-1">
             →
           </div>
 
@@ -171,13 +171,13 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
           <div className="text-right">
             <div className="eyebrow mb-2">Merchant receives</div>
             {loading && !estimateOut ? (
-              <div className="h-8 w-28 bg-arcora-gray animate-pulse ml-auto" />
+              <div className="h-7 w-24 rounded-[6px] bg-[var(--surface-3)] animate-pulse ml-auto" />
             ) : error ? (
-              <div className="text-[13px] text-red-600">{error}</div>
+              <div className="text-[13px] text-[var(--danger)]">{error}</div>
             ) : (
-              <div className="font-[family-name:var(--font-display)] font-light text-[32px] leading-[1] tracking-[-0.02em] text-arcora-slate">
+              <div className="mono font-light text-[26px] leading-[1] tracking-[-0.02em] text-[var(--fg-1)]">
                 {estimateOut ? formatTokenAmount(estimateOut) : "—"}
-                <span className="text-[14px] text-arcora-muted-fg font-normal ml-1.5 tracking-[0.02em]">
+                <span className="text-[13px] text-[var(--fg-3)] font-normal ml-1.5 tracking-[0.02em]">
                   {payoutSym}
                 </span>
               </div>
@@ -187,19 +187,17 @@ export function QuoteDisplay(props: QuoteDisplayProps) {
 
         {/* Rate footer */}
         {!sameToken && !loading && !error && payInAmount && estimateOut && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-arcora-border font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg">
+          <div className="mono flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)] text-[11px] text-[var(--fg-3)]">
             <span>
               Rate{" "}
-              <span className="text-arcora-slate">
+              <span className="text-[var(--fg-1)]">
                 1 {payInSym} = {(Number(estimateOut) / Number(payInAmount)).toFixed(4)} {payoutSym}
               </span>
             </span>
             {stale ? (
-              <span className="text-amber-600 font-semibold tracking-[0.06em] uppercase">QUOTE STALE</span>
+              <span className="text-[var(--warning)] font-semibold tracking-[0.06em] uppercase">Quote stale</span>
             ) : (
-              <span className="bg-arcora-blue/10 text-arcora-blue font-semibold tracking-[0.04em] uppercase px-2 py-[2px]">
-                FIXED
-              </span>
+              <span className="tagchip">Fixed</span>
             )}
           </div>
         )}

@@ -75,7 +75,7 @@ export function ConnectMerchantButton() {
         <button
           onClick={() => handleSignIn("injected")}
           disabled={busy !== null}
-          className="btn-arcora-pill"
+          className="pill pill--acc w-full"
         >
           {busy === "injected" ? "Signing in…" : "Connect browser wallet"}
         </button>
@@ -83,7 +83,7 @@ export function ConnectMerchantButton() {
       <button
         onClick={() => handleSignIn("walletconnect")}
         disabled={busy !== null}
-        className={hasInjected ? "btn-arcora-pill-light" : "btn-arcora-pill"}
+        className={`${hasInjected ? "pill pill--ghost" : "pill pill--acc"} w-full`}
       >
         {busy === "walletconnect"
           ? "Waiting on wallet…"

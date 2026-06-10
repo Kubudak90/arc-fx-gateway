@@ -1,11 +1,8 @@
 "use client";
 
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { QrCode } from "lucide-react";
 import { formatCurrency, formatRelativeTime, symbolForAddress } from "@/lib/ui/format";
+import { Coin } from "@/components/ui/Coin";
 import { InvoiceShareQRDialog } from "./InvoiceShareQRDialog";
 import { RefundButton } from "./RefundButton";
 import { useState } from "react";
@@ -35,29 +32,34 @@ export function InvoiceTable({ invoices, payoutToken, onChange }: InvoiceTablePr
 
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>ID</TableHead>
-            <TableHead>Amount</TableHead>
-            <TableHead>Pay-in</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Amount</th>
+            <th>Pay-in</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th className="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
           {invoices.map(inv => (
-            <TableRow key={inv.id}>
-              <TableCell className="font-mono text-xs">{inv.id.slice(0, 10)}…</TableCell>
-              <TableCell>{formatCurrency(inv.amountOut, payoutToken)}</TableCell>
-              <TableCell>{symbolForAddress(inv.payInToken)}</TableCell>
-              <TableCell>
+            <tr key={inv.id}>
+              <td className="mono text-[var(--fg-2)]">{inv.id.slice(0, 10)}…</td>
+              <td className="mono font-medium">{formatCurrency(inv.amountOut, payoutToken)}</td>
+              <td>
+                <span className="inline-flex items-center gap-[7px]">
+                  <Coin sym={symbolForAddress(inv.payInToken)} />
+                  <span className="mono text-[12px]">{symbolForAddress(inv.payInToken)}</span>
+                </span>
+              </td>
+              <td>
                 <StatusBadge status={inv.status} />
-              </TableCell>
-              <TableCell className="text-muted-foreground">{formatRelativeTime(inv.createdAt)}</TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
+              </td>
+              <td className="mono text-[12px] text-[var(--fg-3)]">{formatRelativeTime(inv.createdAt)}</td>
+              <td>
+                <div className="flex justify-end items-center gap-1.5">
                   <RefundButton
                     invoiceId={inv.id}
                     payoutToken={payoutToken}
@@ -66,22 +68,29 @@ export function InvoiceTable({ invoices, payoutToken, onChange }: InvoiceTablePr
                     status={inv.status}
                     onRefunded={onChange}
                   />
-                  <Button size="sm" variant="ghost" onClick={() => setQrInvoiceId(inv.id)}>
-                    <QrCode className="size-4" />
-                  </Button>
+                  <button
+                    type="button"
+                    className="iconbtn"
+                    style={{ width: 30, height: 30 }}
+                    title="Share QR"
+                    aria-label="Share QR"
+                    onClick={() => setQrInvoiceId(inv.id)}
+                  >
+                    <QrCode className="size-3.5" />
+                  </button>
                 </div>
-              </TableCell>
-            </TableRow>
+              </td>
+            </tr>
           ))}
           {invoices.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+            <tr>
+              <td colSpan={6} className="mono text-center text-[var(--fg-3)] py-12">
                 No invoices yet — create one to get started.
-              </TableCell>
-            </TableRow>
+              </td>
+            </tr>
           )}
-        </TableBody>
-      </Table>
+        </tbody>
+      </table>
       {qrInvoiceId && (
         <InvoiceShareQRDialog
           invoiceId={qrInvoiceId}
@@ -92,33 +101,30 @@ export function InvoiceTable({ invoices, payoutToken, onChange }: InvoiceTablePr
   );
 }
 
+/** Status → [label, color] per the UI v2 STATUS map (m-shell.jsx). */
+const STATUS: Record<InvoiceStatus, [string, string, string]> = {
+  paid:      ["Paid",      "var(--success)", "var(--success-bg)"],
+  created:   ["Pending",   "var(--warning)", "var(--warning-bg)"],
+  expired:   ["Expired",   "var(--fg-3)",    "transparent"],
+  refunded:  ["Refunded",  "var(--info)",    "var(--info-bg)"],
+  failed:    ["Failed",    "var(--danger)",  "var(--danger-bg)"],
+  claimed:   ["Claimed",   "var(--status-claimed)",   "var(--status-claimed-bg)"],
+  recovered: ["Recovered", "var(--status-recovered)", "var(--status-recovered-bg)"],
+};
+
 function StatusBadge({ status }: { status: InvoiceStatus }) {
-  const variants: Record<InvoiceStatus, string> = {
-    paid:      "bg-emerald-50 text-emerald-700 border-emerald-200",
-    created:   "bg-amber-50 text-amber-700 border-amber-200",
-    expired:   "bg-neutral-100 text-neutral-600 border-neutral-200",
-    refunded:  "bg-sky-50 text-sky-700 border-sky-200",
-    failed:    "bg-rose-50 text-rose-700 border-rose-200",
-    claimed:   "bg-violet-50 text-violet-700 border-violet-200",
-    recovered: "bg-orange-50 text-orange-700 border-orange-200",
-  };
-  const labels: Record<InvoiceStatus, string> = {
-    paid: "Paid", created: "Pending", expired: "Expired", refunded: "Refunded",
-    failed: "Failed", claimed: "Claimed", recovered: "Recovered",
-  };
-  const dotColor: Record<InvoiceStatus, string> = {
-    paid:      "bg-emerald-500",
-    created:   "bg-amber-500",
-    expired:   "bg-neutral-400",
-    refunded:  "bg-sky-500",
-    failed:    "bg-rose-500",
-    claimed:   "bg-violet-500",
-    recovered: "bg-orange-500",
-  };
+  const [label, color, bg] = STATUS[status] ?? STATUS.paid;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${variants[status]}`}>
-      <span className={`size-1.5 rounded-full ${dotColor[status]}`} />
-      {labels[status]}
+    <span
+      className="inline-flex items-center gap-1.5 px-[9px] py-[3px] rounded-full text-[11px] font-semibold whitespace-nowrap"
+      style={{
+        color,
+        background: bg,
+        border: `1px solid color-mix(in oklch, ${color} 30%, transparent)`,
+      }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+      {label}
     </span>
   );
 }

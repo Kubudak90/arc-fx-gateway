@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { ArcoraLogo } from "@/components/brand/Logo";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { SiteFooter } from "@/components/landing/SiteFooter";
 import { AddArcTestnetButton } from "@/components/quickstart/AddArcTestnetButton";
 
@@ -30,21 +31,21 @@ const STEPS: Array<{ n: string; title: string; body: React.ReactNode }> = [
           <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground select-none">
             Or add it manually with these values
           </summary>
-          <dl className="mt-3 grid grid-cols-[140px_1fr] gap-y-2 text-sm font-[family-name:var(--font-mono)]">
+          <dl className="mono mt-3 grid grid-cols-[140px_1fr] gap-y-2 text-sm">
             <dt className="text-muted-foreground">Network name</dt>
-            <dd className="text-arcora-slate">{NETWORK.name}</dd>
+            <dd className="text-foreground">{NETWORK.name}</dd>
             <dt className="text-muted-foreground">Chain ID</dt>
-            <dd className="text-arcora-slate">{NETWORK.chainId}</dd>
+            <dd className="text-foreground">{NETWORK.chainId}</dd>
             <dt className="text-muted-foreground">RPC URL</dt>
-            <dd className="text-arcora-slate break-all">{NETWORK.rpcUrl}</dd>
+            <dd className="text-foreground break-all">{NETWORK.rpcUrl}</dd>
             <dt className="text-muted-foreground">Symbol</dt>
-            <dd className="text-arcora-slate">{NETWORK.symbol}</dd>
+            <dd className="text-foreground">{NETWORK.symbol}</dd>
             <dt className="text-muted-foreground">Explorer</dt>
-            <dd className="text-arcora-slate break-all">{NETWORK.explorer}</dd>
+            <dd className="text-foreground break-all">{NETWORK.explorer}</dd>
           </dl>
         </details>
         <p className="mt-4 text-xs text-muted-foreground">
-          On Arc, gas is paid in <span className="font-[family-name:var(--font-mono)]">USDC</span>, not ETH.
+          On Arc, gas is paid in <span className="mono">USDC</span>, not ETH.
           Native USDC has 18 decimals; the ERC-20 interface (the one you&apos;ll see in dapps) is 6 decimals.
         </p>
       </>
@@ -62,7 +63,7 @@ const STEPS: Array<{ n: string; title: string; body: React.ReactNode }> = [
           href={FAUCET}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-5 inline-flex btn-arcora-pill-light"
+          className="pill pill--ghost mt-5"
         >
           Open Circle Faucet →
         </a>
@@ -82,7 +83,7 @@ const STEPS: Array<{ n: string; title: string; body: React.ReactNode }> = [
           Open the merchant portal and authenticate with Sign-In-with-Ethereum. The wallet you sign with becomes your
           merchant identity — there&apos;s no signup form on testnet, just a signature.
         </p>
-        <Link href="/m/login" className="mt-5 inline-flex btn-arcora-pill">
+        <Link href="/m/login" className="pill pill--acc mt-5">
           Open merchant portal →
         </Link>
         <p className="mt-4 text-xs text-muted-foreground">
@@ -102,7 +103,7 @@ const STEPS: Array<{ n: string; title: string; body: React.ReactNode }> = [
           token (the customer&apos;s side — can be different from your payout), and a success URL. Arcora returns a
           hosted checkout link.
         </p>
-        <Link href="/m/dashboard" className="mt-5 inline-flex btn-arcora-pill-light">
+        <Link href="/m/dashboard" className="pill pill--ghost mt-5">
           Go to dashboard →
         </Link>
         <p className="mt-4 text-xs text-muted-foreground">
@@ -121,7 +122,7 @@ const STEPS: Array<{ n: string; title: string; body: React.ReactNode }> = [
           one Permit2 message — no transaction popup, no gas. Arcora&apos;s relayer handles the on-chain side.
         </p>
         <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-          Watch settlement land on the merchant dashboard&apos;s <Link href="/m/treasury" className="text-arcora-link hover:underline">treasury page</Link> within ~30 seconds.
+          Watch settlement land on the merchant dashboard&apos;s <Link href="/m/treasury" className="ulink">treasury page</Link> within ~30 seconds.
           Try a refund from the invoice row to round-trip the flow.
         </p>
       </>
@@ -159,48 +160,45 @@ const KNOWN_ISSUES: Array<{ headline: string; detail: string }> = [
 export default function QuickstartPage() {
   return (
     <main className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-white/80 px-4 sm:px-6 py-4 flex items-center justify-between gap-3 border-b border-arcora-border">
-        <Link href={"/" as Route} className="inline-flex items-center" aria-label="Arcora home">
-          <ArcoraLogo size={28} />
-        </Link>
-        <nav className="flex items-center gap-3 sm:gap-4 text-sm">
-          <Link href={"/" as Route} className="text-muted-foreground hover:text-foreground">Home</Link>
-          <Link href={"/m/login" as Route} className="text-arcora-link hover:underline whitespace-nowrap">Merchants</Link>
-          <a
-            href="https://github.com/Kubudak90/arc-fx-gateway"
-            className="text-muted-foreground hover:text-foreground"
-          >
-            GitHub
-          </a>
-        </nav>
+      <div className="page-bg" aria-hidden="true" />
+
+      <header className="topbar">
+        <div className="px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+          <Link href={"/" as Route} className="inline-flex items-center" aria-label="Arcora home">
+            <ArcoraLogo size={28} />
+          </Link>
+          <nav className="flex items-center gap-4 sm:gap-5">
+            <Link href={"/" as Route} className="navlink">Home</Link>
+            <Link href={"/m/login" as Route} className="navlink whitespace-nowrap">Merchants</Link>
+            <a href="https://github.com/Kubudak90/arc-fx-gateway" className="navlink">GitHub</a>
+            <ThemeToggle />
+          </nav>
+        </div>
       </header>
 
-      <section className="px-4 sm:px-6 pt-12 sm:pt-20 pb-12">
+      <section className="relative z-[1] px-4 sm:px-6 pt-12 sm:pt-20 pb-12">
         <div className="max-w-3xl mx-auto text-center">
-          <p className="text-xs sm:text-sm tracking-[0.2em] uppercase text-muted-foreground">Tester quickstart</p>
-          <h1 className="mt-6 font-[family-name:var(--font-display)] text-[34px] sm:text-[44px] md:text-[52px] leading-[1.08] tracking-tight text-arcora-slate text-balance">
+          <p className="eyebrow eyebrow--acc">Tester quickstart</p>
+          <h1 className="disp mt-6" style={{ fontSize: "clamp(34px, 5vw, 52px)" }}>
             From zero to a settled testnet payment in five steps.
           </h1>
-          <p className="mt-6 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+          <p className="lead mt-6 text-base sm:text-lg max-w-2xl mx-auto">
             Should take ten minutes including the wallet setup. If anything sticks, open an issue on
-            GitHub or email <span className="font-[family-name:var(--font-mono)]">support@arcorapay.xyz</span> — we&apos;d rather hear about a bug now than once
+            GitHub or email <span className="mono">support@arcorapay.xyz</span> — we&apos;d rather hear about a bug now than once
             mainnet money is moving.
           </p>
         </div>
       </section>
 
-      <section className="px-4 sm:px-6 pb-20">
+      <section className="relative z-[1] px-4 sm:px-6 pb-20">
         <ol className="max-w-3xl mx-auto space-y-6">
           {STEPS.map((step) => (
-            <li
-              key={step.n}
-              className="rounded-2xl border border-arcora-border p-6 sm:p-8 bg-white"
-            >
+            <li key={step.n} className="card p-6 sm:p-8">
               <div className="flex items-baseline gap-4 mb-3">
-                <span className="font-[family-name:var(--font-mono)] text-xs font-semibold tracking-[0.18em] text-arcora-teal">
+                <span className="mono text-xs font-semibold tracking-[0.18em]" style={{ color: "var(--sage)" }}>
                   STEP {step.n}
                 </span>
-                <h2 className="font-semibold text-arcora-slate text-lg sm:text-xl">{step.title}</h2>
+                <h2 className="font-semibold text-lg sm:text-xl">{step.title}</h2>
               </div>
               {step.body}
             </li>
@@ -208,26 +206,21 @@ export default function QuickstartPage() {
         </ol>
       </section>
 
-      <section className="px-4 sm:px-6 pb-24">
+      <section className="relative z-[1] px-4 sm:px-6 pb-24">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-8">
-            <p className="text-xs sm:text-sm tracking-[0.2em] uppercase text-arcora-teal font-semibold">
-              Known issues
-            </p>
-            <h2 className="mt-3 font-[family-name:var(--font-display)] text-[24px] sm:text-[28px] leading-tight tracking-tight text-arcora-slate text-balance">
+            <p className="eyebrow eyebrow--acc">Known issues</p>
+            <h2 className="disp mt-3" style={{ fontSize: "clamp(24px, 3vw, 28px)" }}>
               What&apos;s rough, on purpose.
             </h2>
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="lead mt-3 text-sm">
               We&apos;d rather you hit these expecting them than be surprised mid-test.
             </p>
           </div>
           <ul className="space-y-4">
             {KNOWN_ISSUES.map((issue) => (
-              <li
-                key={issue.headline}
-                className="rounded-xl border border-arcora-border p-5 bg-arcora-gray/30"
-              >
-                <p className="font-semibold text-arcora-slate">{issue.headline}</p>
+              <li key={issue.headline} className="field p-5">
+                <p className="font-semibold">{issue.headline}</p>
                 <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{issue.detail}</p>
               </li>
             ))}

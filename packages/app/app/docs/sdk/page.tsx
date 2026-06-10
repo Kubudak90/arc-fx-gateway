@@ -1,7 +1,7 @@
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "SDK reference · Arcora docs",
+  title: "SDK reference · Arcorapay docs",
   description: "@arcora/sdk and @arcora/sdk-react — installation, types, and method-by-method walkthrough.",
 };
 

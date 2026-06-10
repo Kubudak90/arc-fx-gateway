@@ -1,7 +1,7 @@
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "Token reference · Arcora docs",
+  title: "Token reference · Arcorapay docs",
   description: "Supported stablecoins, contract addresses, App Kit aliases, and decimals.",
 };
 

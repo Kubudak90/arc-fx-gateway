@@ -49,12 +49,15 @@ function fmt(microUnits: number): string {
   return (microUnits / 1_000_000).toFixed(6).replace(/\.?0+$/, "");
 }
 
+const PHASE_IDX: Record<Phase, number> = { quote: 0, pay: 1, settled: 2 };
+
 export function LiveSettlement() {
   const [scenarioIdx, setScenarioIdx] = useState(0);
   const [phase, setPhase] = useState<Phase>("quote");
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     // Phase progression: quote(1.4s) → pay(1.4s) → settled(2.2s) → next scenario
     const sched: Array<[Phase, number]> = [
       ["quote",   1400],
@@ -83,31 +86,26 @@ export function LiveSettlement() {
   const amountIn   = calcAmountIn(s);
   const payout     = calcMerchantPayout(s);
   const fee        = s.amountOutMicro - payout;
+  const phaseIdx   = PHASE_IDX[phase];
 
   return (
-    <div className="border border-arcora-border bg-white overflow-hidden shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
-      {/* Header — monospace data-strip treatment (Direction B influence) */}
-      <div className="px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-3 border-b border-arcora-border bg-arcora-gray/30">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="relative flex size-[6px] shrink-0">
-            <span className="absolute inline-flex h-full w-full rounded-full bg-arcora-teal opacity-75 animate-ping" />
-            <span className="relative inline-flex rounded-full size-[6px] bg-arcora-teal" />
-          </span>
-          <span className="font-[family-name:var(--font-mono)] text-[10px] sm:text-[11px] tracking-[0.12em] uppercase text-arcora-muted-fg truncate">
-            <span className="sm:hidden">Live · Arc testnet</span>
-            <span className="hidden sm:inline">Live · Arc testnet · Gateway {GATEWAY_ADDR}</span>
-          </span>
-        </div>
-        <span className="font-[family-name:var(--font-mono)] text-[10px] sm:text-[11px] text-arcora-muted-fg tabular-nums whitespace-nowrap">
+    <div className="card overflow-hidden" style={{ boxShadow: "var(--elev-3)" }}>
+      {/* Header — live strip */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3.5" style={{ background: "var(--bg-sunken)" }}>
+        <span className="mono inline-flex items-center gap-2.5 text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--fg-3)" }}>
+          <span className="dot dot--live shrink-0" />
+          <span className="sm:hidden">Live · Arc testnet</span>
+          <span className="hidden sm:inline">Live · Arc testnet · gateway {GATEWAY_ADDR}</span>
+        </span>
+        <span className="mono text-[11px] tabular-nums whitespace-nowrap" style={{ color: "var(--fg-3)" }}>
           oracle 1 EUR = {ORACLE.toFixed(4)} USD
         </span>
       </div>
 
-      {/* Body */}
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-stretch">
-        {/* Customer side */}
+      {/* Body — customer / gateway / merchant panes */}
+      <div className="settle-grid grid items-stretch" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
         <Side
-          side="CUSTOMER"
+          side="Customer"
           token={s.payIn}
           amountMicro={amountIn}
           highlight={phase === "quote" || phase === "pay"}
@@ -115,51 +113,46 @@ export function LiveSettlement() {
           subline={phase === "quote" ? "Quote ready" : phase === "pay" ? "Approving + paying…" : "Tx confirmed"}
         />
 
-        {/* Middle column — gateway + flow */}
-        <div className="flex flex-col items-center justify-between border-y md:border-y-0 md:border-x border-arcora-border bg-arcora-gray/20 py-6 md:py-7 px-5 gap-3 md:min-w-[260px]">
+        {/* Middle pane — gateway + flow */}
+        <div
+          className="settle-mid flex flex-col justify-between gap-3.5 px-5 py-6"
+          style={{
+            borderLeft: "1px solid var(--border)",
+            borderRight: "1px solid var(--border)",
+            background: "var(--bg-sunken)",
+            minWidth: 280,
+          }}
+        >
           <div className="text-center">
-            <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.12em] uppercase text-arcora-muted-fg">
-              {sameToken ? "Same-token · No swap" : "Swap via App Kit · Permit2 settle"}
+            <div className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: "var(--fg-3)" }}>
+              {sameToken ? "Same-token · no swap" : "Swap via App Kit · Permit2"}
             </div>
-            <div className="mt-1 font-[family-name:var(--font-display)] font-semibold text-arcora-slate text-lg">
-              ArcFXGateway
-            </div>
+            <div className="mt-1 text-[18px] font-semibold">ArcFXGateway</div>
           </div>
 
           {/* Flow line with moving dot */}
-          <div className="relative w-full h-[2px] bg-arcora-border my-2">
+          <div className="relative my-1.5 h-[2px] w-full" style={{ background: "var(--border)" }}>
             <span
               key={`${scenarioIdx}-${phase}-${tick}`}
-              className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-arcora-blue shadow-[0_0_10px_rgba(37,99,255,0.55)]"
+              className={`absolute top-1/2 h-[9px] w-[9px] -translate-y-1/2 rounded-full${phase === "settled" ? "" : " anim-flow-dot"}`}
               style={{
-                animation: phase === "settled" ? "none" : "flow-dot 2.6s ease-in-out infinite",
-                left: phase === "settled" ? "calc(100% - 4px)" : undefined,
+                background: "var(--acc)",
+                boxShadow: "0 0 12px var(--acc-glow)",
+                left: phase === "settled" ? "98%" : undefined,
               }}
             />
           </div>
 
           {/* Cost breakdown */}
-          <div className="w-full text-[11px] font-[family-name:var(--font-mono)] tabular-nums text-arcora-muted-fg space-y-1">
-            <div className="flex justify-between">
-              <span>amountIn</span>
-              <span className="text-arcora-slate">{fmt(amountIn)} {s.payIn}</span>
-            </div>
-            {!sameToken && (
-              <div className="flex justify-between">
-                <span>swap fee · {POOL_FEE_BPS} bps</span>
-                <span className="text-arcora-slate">— pool</span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span>protocol fee · {PROTOCOL_FEE_BPS} bps</span>
-              <span className="text-arcora-slate">{fmt(fee)} {s.payout}</span>
-            </div>
+          <div className="mono flex w-full flex-col gap-1.5 text-[10.5px] tabular-nums" style={{ color: "var(--fg-3)" }}>
+            <Row k="amount in" v={`${fmt(amountIn)} ${s.payIn}`} />
+            {!sameToken && <Row k={`swap fee · ${POOL_FEE_BPS} bps`} v="pool" />}
+            <Row k={`protocol · ${PROTOCOL_FEE_BPS} bps`} v={`${fmt(fee)} ${s.payout}`} />
           </div>
         </div>
 
-        {/* Merchant side */}
         <Side
-          side="MERCHANT"
+          side="Merchant"
           token={s.payout}
           amountMicro={payout}
           highlight={phase === "settled"}
@@ -169,35 +162,26 @@ export function LiveSettlement() {
         />
       </div>
 
-      {/* Footer scenario strip */}
-      <div className="px-4 sm:px-6 py-3 border-t border-arcora-border flex items-center justify-between gap-3 bg-arcora-gray/20">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <span className="font-[family-name:var(--font-mono)] text-[10px] sm:text-[11px] text-arcora-muted-fg tracking-[0.06em] truncate">
-            invoice <span className="text-arcora-slate">{s.id}</span>
-          </span>
-          <span className="text-arcora-border">·</span>
-          <span className="font-[family-name:var(--font-mono)] text-[10px] sm:text-[11px] text-arcora-muted-fg whitespace-nowrap uppercase tracking-[0.06em]">{s.payIn} → {s.payout}</span>
-        </div>
-        <div className="flex gap-1 shrink-0">
-          {SCENARIOS.map((_, i) => (
-            <span
-              key={i}
-              className={`w-6 h-[3px] rounded-full transition-colors ${
-                i === scenarioIdx ? "bg-arcora-blue" : "bg-arcora-border"
-              }`}
-            />
+      {/* Footer — invoice + phase progress */}
+      <div className="flex items-center justify-between gap-3 border-t px-5 py-3" style={{ background: "var(--bg-sunken)" }}>
+        <span className="mono min-w-0 truncate text-[11px] tracking-[0.06em]" style={{ color: "var(--fg-3)" }}>
+          invoice <span style={{ color: "var(--fg-1)" }}>{s.id}</span> · {s.payIn} → {s.payout}
+        </span>
+        <div className="steps-rail w-[90px] shrink-0">
+          {[0, 1, 2].map(i => (
+            <i key={`${scenarioIdx}-${tick}-${i}`} className={phaseIdx > i ? "done" : phaseIdx === i ? "cur" : ""} />
           ))}
         </div>
       </div>
+    </div>
+  );
+}
 
-      <style>{`
-        @keyframes flow-dot {
-          0%   { left: 0;            opacity: 0; }
-          20%  { opacity: 1; }
-          80%  { opacity: 1; }
-          100% { left: calc(100% - 4px); opacity: 0; }
-        }
-      `}</style>
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-3 whitespace-nowrap">
+      <span>{k}</span>
+      <span style={{ color: "var(--fg-1)" }}>{v}</span>
     </div>
   );
 }
@@ -205,7 +189,7 @@ export function LiveSettlement() {
 function Side({
   side, token, amountMicro, highlight, dim, subline, align,
 }: {
-  side: "CUSTOMER" | "MERCHANT";
+  side: "Customer" | "Merchant";
   token: "USDC" | "EURC";
   amountMicro: number;
   highlight: boolean;
@@ -215,28 +199,29 @@ function Side({
 }) {
   return (
     <div
-      className={`px-5 sm:px-7 py-6 sm:py-7 flex flex-col gap-2 transition-opacity duration-500 ${
-        dim ? "opacity-55" : "opacity-100"
+      className={`flex flex-col gap-2 px-6 py-7 transition-opacity duration-500 ${
+        dim ? "opacity-50" : "opacity-100"
       } ${align === "right" ? "md:items-end md:text-right" : ""}`}
     >
-      <div className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.12em] uppercase text-arcora-muted-fg">
+      <div className="mono text-[10px] uppercase tracking-[0.12em]" style={{ color: "var(--fg-3)" }}>
         {side}
       </div>
-      <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl font-light tabular-nums tracking-[-0.02em] text-arcora-slate">
-          {(amountMicro / 1_000_000).toFixed(6).replace(/\.?0+$/, "")}
+      <div className="flex flex-wrap items-baseline gap-2.5">
+        <span className="mono text-[30px] font-light tabular-nums tracking-[-0.02em]">
+          {fmt(amountMicro)}
         </span>
         <span
-          className={`font-[family-name:var(--font-mono)] text-[10px] tracking-[0.06em] uppercase px-2 py-[3px] border ${
+          className="mono rounded-lg border px-2 py-[3px] text-[10px] uppercase tracking-[0.06em] transition-all"
+          style={
             highlight
-              ? "border-arcora-blue text-arcora-blue bg-arcora-blue/10"
-              : "border-arcora-border text-arcora-muted-fg bg-arcora-gray"
-          }`}
+              ? { borderColor: "var(--acc)", background: "var(--acc)", color: "var(--acc-ink)" }
+              : { borderColor: "var(--border)", background: "transparent", color: "var(--fg-3)" }
+          }
         >
           {token}
         </span>
       </div>
-      <div className="text-xs text-arcora-muted-fg font-[family-name:var(--font-mono)]">{subline}</div>
+      <div className="mono text-[12px]" style={{ color: "var(--fg-3)" }}>{subline}</div>
     </div>
   );
 }

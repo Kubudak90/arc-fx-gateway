@@ -31,7 +31,7 @@ export function ClaimAllButton({ globalIds }: ClaimAllButtonProps) {
   const { isSuccess } = useWaitForTransactionReceipt({ hash });
 
   if (globalIds.length === 0) {
-    return <p className="text-sm text-muted-foreground">No matured escrows to claim.</p>;
+    return <p className="mono text-[11px] text-[var(--fg-3)]">No matured escrows to claim.</p>;
   }
 
   if (isSuccess && step !== "done") setStep("done");
@@ -71,18 +71,18 @@ export function ClaimAllButton({ globalIds }: ClaimAllButtonProps) {
         type="button"
         onClick={onClick}
         disabled={step === "submitting" || step === "confirming" || step === "done"}
-        className="inline-flex items-center gap-2 rounded-full bg-arcora-slate text-white px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="pill pill--acc pill--sm"
       >
         {label}
       </button>
       {hash && (
-        <p className="text-xs text-muted-foreground font-mono">
+        <p className="mono text-xs text-[var(--fg-3)]">
           tx:{" "}
           <a
             href={`https://testnet.arcscan.app/tx/${hash}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-arcora-link hover:underline"
+            className="text-[var(--action)] hover:underline"
           >
             {hash.slice(0, 10)}…
           </a>

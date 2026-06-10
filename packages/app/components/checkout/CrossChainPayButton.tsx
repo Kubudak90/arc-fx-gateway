@@ -419,18 +419,18 @@ export function CrossChainPayButton(props: {
   return (
     <div className="space-y-3">
       {blocked?.kind === "review" && (
-        <div className="border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
-          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--warning)_40%,transparent)] bg-[var(--warning-bg)] p-3 flex items-start gap-2 text-xs text-[var(--fg-1)]">
+          <ShieldAlert className="size-4 mt-0.5 flex-none text-[var(--warning)]" />
           <div>
             <div className="font-semibold mb-0.5">Compliance review required</div>
             We&apos;re confirming a few details before this wallet can pay. The merchant has been notified and will follow up within 24h.
-            {blocked.ticketId && <div className="font-[family-name:var(--font-mono)] text-[10px] mt-1 opacity-70">Ref: {blocked.ticketId}</div>}
+            {blocked.ticketId && <div className="mono text-[10px] mt-1 opacity-70">Ref: {blocked.ticketId}</div>}
           </div>
         </div>
       )}
       {blocked?.kind === "reject" && (
-        <div className="border border-red-300 bg-red-50 p-3 flex items-start gap-2 text-xs text-red-900">
-          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--danger)_40%,transparent)] bg-[var(--danger-bg)] p-3 flex items-start gap-2 text-xs text-[var(--fg-1)]">
+          <ShieldAlert className="size-4 mt-0.5 flex-none text-[var(--danger)]" />
           <div>
             <div className="font-semibold mb-0.5">This wallet can&apos;t be used for this payment</div>
             Try a different wallet or contact the merchant if you believe this is an error.
@@ -438,12 +438,12 @@ export function CrossChainPayButton(props: {
         </div>
       )}
       {state === "binding_error" && bindingErrorHash && (
-        <div className="border border-red-300 bg-red-50 p-3 flex items-start gap-2 text-xs text-red-900">
-          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--danger)_40%,transparent)] bg-[var(--danger-bg)] p-3 flex items-start gap-2 text-xs text-[var(--fg-1)]">
+          <ShieldAlert className="size-4 mt-0.5 flex-none text-[var(--danger)]" />
           <div className="min-w-0">
             <div className="font-semibold mb-0.5">Bridge transaction could not be matched to this payment.</div>
             Contact support with transaction{" "}
-            <code className="font-[family-name:var(--font-mono)] break-all">{bindingErrorHash}</code>.
+            <code className="mono break-all">{bindingErrorHash}</code>.
           </div>
         </div>
       )}
@@ -455,7 +455,7 @@ export function CrossChainPayButton(props: {
           !isConnected || !address || busy || state === "success" ||
           state === "still_processing" || state === "binding_error" || blocked !== null
         }
-        className="btn-arcora-pill w-full"
+        className="pill pill--acc w-full"
         aria-live="polite"
         aria-busy={busy || undefined}
       >
@@ -463,7 +463,7 @@ export function CrossChainPayButton(props: {
       </button>
 
       {state === "still_processing" && (
-        <p className="text-[12px] text-arcora-muted-fg leading-[1.55]" role="status">
+        <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]" role="status">
           Bridging can take up to ~20 minutes. Keep this page open; it will update automatically.
         </p>
       )}

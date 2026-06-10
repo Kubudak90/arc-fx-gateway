@@ -8,6 +8,10 @@ import { useEffect, useState } from "react";
  * the merchant's preferred stable. Pure illustration; nothing here claims to be
  * live. The label on the surrounding card says "v2.0 · in design" so the
  * animation can't be misread as production reality.
+ *
+ * Colors come from the UI v2 semantic tokens: accent = var(--acc), secondary
+ * = var(--sage), lines = var(--border), labels = var(--fg-3). SVG presentation
+ * attributes don't support var(), so token colors are set via `style`.
  */
 
 const SOURCES = [
@@ -25,6 +29,7 @@ export function CrosschainRouteDiagram() {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const id = setInterval(() => {
       setActiveStep(s => (s + 1) % SOURCES.length);
       setTick(t => t + 1);
@@ -37,24 +42,24 @@ export function CrosschainRouteDiagram() {
       <svg viewBox="0 0 880 360" className="w-full h-full" style={{ overflow: "visible" }}>
         <defs>
           <linearGradient id="ax-line-grad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stopColor="#2563ff" stopOpacity="0" />
-            <stop offset="50%"  stopColor="#2563ff" stopOpacity="1" />
-            <stop offset="100%" stopColor="#2563ff" stopOpacity="0" />
+            <stop offset="0%"   style={{ stopColor: "var(--acc)" }} stopOpacity="0" />
+            <stop offset="50%"  style={{ stopColor: "var(--acc)" }} stopOpacity="1" />
+            <stop offset="100%" style={{ stopColor: "var(--acc)" }} stopOpacity="0" />
           </linearGradient>
           <radialGradient id="ax-hub-glow" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0%"   stopColor="#00c2a8" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#00c2a8" stopOpacity="0" />
+            <stop offset="0%"   style={{ stopColor: "var(--sage)" }} stopOpacity="0.28" />
+            <stop offset="100%" style={{ stopColor: "var(--sage)" }} stopOpacity="0" />
           </radialGradient>
           <filter id="ax-soft-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="3" />
           </filter>
         </defs>
 
-        {/* Grid backdrop (light) */}
+        {/* Grid backdrop */}
         <g opacity="0.5">
           {Array.from({ length: 7 }).map((_, i) => (
             <line key={`h${i}`} x1="0" y1={50 + i * 45} x2="880" y2={50 + i * 45}
-              stroke="rgba(11,20,38,0.08)" strokeWidth="0.5" strokeDasharray="2 4" />
+              style={{ stroke: "var(--border)" }} strokeWidth="0.5" strokeDasharray="2 4" />
           ))}
         </g>
 
@@ -69,7 +74,7 @@ export function CrosschainRouteDiagram() {
           const path = `M 110 ${s.y} C ${110 + dx * 0.5} ${s.y}, ${arcEdge - dx * 0.5} ${yMid}, ${arcEdge} ${yMid}`;
           return (
             <g key={s.code}>
-              <path d={path} stroke="rgba(11,20,38,0.16)" strokeWidth="1" fill="none" />
+              <path d={path} style={{ stroke: "var(--border)" }} strokeWidth="1" fill="none" />
               {isActive && (
                 <path
                   key={tick + "-" + i}
@@ -87,21 +92,20 @@ export function CrosschainRouteDiagram() {
           );
         })}
 
-        {/* Arc → Settlement: solid teal connector that always reads end-to-end,
+        {/* Arc → Settlement: solid sage connector that always reads end-to-end,
             with a short pulse traveling on top for the "in flight" feel. The
             line ends at the LEFT EDGE of the settle rect (x = SETTLE_X − 30),
             not the box center, so nothing is hidden under the rect fill. */}
         <line x1={ARC_X + 40} y1="165" x2={SETTLE_X - 30} y2="165"
-          stroke="#00c2a8" strokeOpacity="0.55" strokeWidth="2" strokeLinecap="round" />
+          style={{ stroke: "var(--sage)" }} strokeOpacity="0.55" strokeWidth="2" strokeLinecap="round" />
         <line
           key={"out-" + tick}
           x1={ARC_X + 40} y1="165" x2={SETTLE_X - 30} y2="165"
           pathLength={100}
-          stroke="#00c2a8"
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeDasharray="18 100"
-          style={{ animation: "ax-flow 1.6s 0.4s ease-out forwards" }}
+          style={{ stroke: "var(--sage)", animation: "ax-flow 1.6s 0.4s ease-out forwards" }}
         />
 
         {/* Source nodes */}
@@ -109,16 +113,16 @@ export function CrosschainRouteDiagram() {
           const isActive = i === activeStep;
           return (
             <g key={s.code} transform={`translate(60, ${s.y})`}>
-              <circle r="22" fill="#ffffff"
-                stroke={isActive ? "#2563ff" : "rgba(11,20,38,0.16)"} strokeWidth="1.5" />
+              <circle r="22" strokeWidth="1.5"
+                style={{ fill: "var(--surface)", stroke: isActive ? "var(--acc)" : "var(--border)" }} />
               <text x="0" y="4" textAnchor="middle"
                 fontFamily="var(--font-mono)" fontSize="9.5" fontWeight="600"
-                fill={isActive ? "#2563ff" : "#5b6478"}>
+                style={{ fill: isActive ? "color-mix(in oklch, var(--acc) 80%, var(--fg-1))" : "var(--fg-3)" }}>
                 {s.code}
               </text>
               <text x="50" y="4" textAnchor="start"
                 fontFamily="var(--font-sans)" fontSize="11.5" fontWeight="500"
-                fill={isActive ? "#0b1426" : "#5b6478"}>
+                style={{ fill: isActive ? "var(--fg-1)" : "var(--fg-3)" }}>
                 {s.label}
               </text>
             </g>
@@ -127,35 +131,36 @@ export function CrosschainRouteDiagram() {
 
         {/* Arc hub */}
         <circle cx={ARC_X} cy="165" r="80" fill="url(#ax-hub-glow)" />
-        <circle cx={ARC_X} cy="165" r="38" fill="#ffffff" stroke="#00c2a8" strokeWidth="1.5" />
-        <circle cx={ARC_X} cy="165" r="38" fill="none" stroke="#00c2a8" strokeWidth="1" opacity="0.4" filter="url(#ax-soft-glow)" />
+        <circle cx={ARC_X} cy="165" r="38" strokeWidth="1.5" style={{ fill: "var(--surface)", stroke: "var(--sage)" }} />
+        <circle cx={ARC_X} cy="165" r="38" fill="none" strokeWidth="1" opacity="0.4" filter="url(#ax-soft-glow)" style={{ stroke: "var(--sage)" }} />
         <text x={ARC_X} y="160" textAnchor="middle"
           fontFamily="var(--font-mono)" fontSize="9" fontWeight="600"
-          fill="#5b6478" letterSpacing="2">ARC</text>
+          letterSpacing="2" style={{ fill: "var(--fg-3)" }}>ARC</text>
         <text x={ARC_X} y="178" textAnchor="middle"
           fontFamily="var(--font-display)" fontSize="14" fontWeight="600"
-          fill="#0b1426">AMM</text>
+          style={{ fill: "var(--fg-1)" }}>AMM</text>
 
         {/* Pulsing ring */}
         <circle cx={ARC_X} cy="165" r="50"
-          fill="none" stroke="#00c2a8" strokeWidth="1" opacity="0.35"
-          style={{ transformOrigin: `${ARC_X}px 165px`, animation: "ax-pulse-ring 2s ease-out infinite" }} />
+          className="anim-pulse-ring"
+          fill="none" strokeWidth="1" opacity="0.35"
+          style={{ stroke: "var(--sage)", transformOrigin: `${ARC_X}px 165px` }} />
 
         {/* Settlement node */}
         <g transform={`translate(${SETTLE_X}, 165)`}>
           <rect x="-32" y="-30" width="124" height="60" rx="10"
-            fill="#ffffff" stroke="rgba(11,20,38,0.16)" strokeWidth="1" />
+            strokeWidth="1" style={{ fill: "var(--surface)", stroke: "var(--border)" }} />
           <text x="30" y="-8" textAnchor="middle"
-            fontFamily="var(--font-mono)" fontSize="9" fill="#5b6478" letterSpacing="1.5">SETTLE</text>
+            fontFamily="var(--font-mono)" fontSize="9" letterSpacing="1.5" style={{ fill: "var(--fg-3)" }}>SETTLE</text>
           <text x="30" y="14" textAnchor="middle"
-            fontFamily="var(--font-display)" fontSize="14" fontWeight="600" fill="#0b1426">USDC · EURC</text>
+            fontFamily="var(--font-display)" fontSize="14" fontWeight="600" style={{ fill: "var(--fg-1)" }}>USDC · EURC</text>
         </g>
 
         {/* Labels */}
         <text x="60" y="30" textAnchor="middle"
-          fontFamily="var(--font-mono)" fontSize="10" fill="#5b6478" letterSpacing="1.5">CUSTOMER</text>
+          fontFamily="var(--font-mono)" fontSize="10" letterSpacing="1.5" style={{ fill: "var(--fg-3)" }}>CUSTOMER</text>
         <text x={SETTLE_X + 30} y="120" textAnchor="middle"
-          fontFamily="var(--font-mono)" fontSize="10" fill="#5b6478" letterSpacing="1.5">MERCHANT</text>
+          fontFamily="var(--font-mono)" fontSize="10" letterSpacing="1.5" style={{ fill: "var(--fg-3)" }}>MERCHANT</text>
       </svg>
 
       <style>{`
@@ -165,10 +170,6 @@ export function CrosschainRouteDiagram() {
         @keyframes ax-flow {
           0%   { stroke-dashoffset: 120; }
           100% { stroke-dashoffset: -20; }
-        }
-        @keyframes ax-pulse-ring {
-          0%   { r: 38; opacity: 0.6; }
-          100% { r: 70; opacity: 0; }
         }
       `}</style>
     </div>

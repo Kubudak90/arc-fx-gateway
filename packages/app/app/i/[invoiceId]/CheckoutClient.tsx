@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import { ConnectButton } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { QuoteDisplay } from "@/components/checkout/QuoteDisplay";
@@ -11,14 +12,24 @@ import { SuccessScreen, ExpiredScreen } from "@/components/checkout/StatusScreen
 import { MobileWalletQR } from "@/components/checkout/MobileWalletQR";
 import { Smartphone } from "lucide-react";
 import type { Address } from "viem";
+import type { invoiceStatus } from "@/lib/db/schema";
 
 const thirdwebClient = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ?? "",
 });
 
+/** Mirrors the DB `invoice_status` enum (type-only import — drizzle never
+ *  reaches the client bundle). All 7 states, not just the happy-path 4:
+ *  a refunded/claimed/recovered invoice must never render as payable. */
+export type InvoiceStatus = (typeof invoiceStatus.enumValues)[number];
+
+/** Every non-`created` state is terminal for the 3s poll. */
+const TERMINAL_STATUSES: readonly InvoiceStatus[] =
+  ["paid", "expired", "failed", "refunded", "claimed", "recovered"];
+
 interface CheckoutClientProps {
   invoiceId: string;
-  initialStatus: "created" | "paid" | "expired" | "failed";
+  initialStatus: InvoiceStatus;
   payInTokenAddress: string;
   payoutTokenAddress: string;
   amountOut: string;
@@ -31,6 +42,7 @@ interface CheckoutClientProps {
 }
 
 export default function CheckoutClient(props: CheckoutClientProps) {
+  const { resolvedTheme } = useTheme();
   const [status, setStatus] = useState(props.initialStatus);
   // QuoteDisplay quotes the forward direction: the customer commits to a
   // payIn upfront and the relayer's kit.swap converts it; the merchant gets
@@ -55,15 +67,23 @@ export default function CheckoutClient(props: CheckoutClientProps) {
     const t = setInterval(async () => {
       const res = await fetch(`/api/invoices/${props.invoiceId}`);
       const data = await res.json();
-      if (data.status === "paid") setStatus("paid");
-      else if (data.status === "expired") setStatus("expired");
-      else if (data.status === "failed") setStatus("failed");
+      // Any terminal state stops the poll: setStatus re-runs this effect,
+      // which bails out above and clears the interval. Previously only
+      // paid/expired/failed terminated, so refunded/claimed/recovered
+      // invoices polled forever and stayed on the payable screen.
+      if (TERMINAL_STATUSES.includes(data.status)) setStatus(data.status as InvoiceStatus);
     }, 3000);
     return () => clearInterval(t);
   }, [status, props.invoiceId]);
 
-  if (status === "paid") return <SuccessScreen successUrl={props.successUrl} allowedOrigins={props.allowedOrigins} />;
-  if (status === "expired" || status === "failed") return <ExpiredScreen cancelUrl={props.cancelUrl} allowedOrigins={props.allowedOrigins} />;
+  // claimed/recovered are custody-escrow settlements — the payer's view is
+  // the same as paid, so they render the success family.
+  if (status === "paid" || status === "claimed" || status === "recovered") {
+    return <SuccessScreen successUrl={props.successUrl} allowedOrigins={props.allowedOrigins} />;
+  }
+  if (status === "expired" || status === "failed" || status === "refunded") {
+    return <ExpiredScreen variant={status} cancelUrl={props.cancelUrl} allowedOrigins={props.allowedOrigins} />;
+  }
 
   if (showQR) {
     return <MobileWalletQR url={typeof window !== "undefined" ? window.location.href : ""} onBack={() => setShowQR(false)} />;
@@ -86,8 +106,14 @@ export default function CheckoutClient(props: CheckoutClientProps) {
 
         <ConnectButton
           client={thirdwebClient}
-          connectButton={{ label: "Connect wallet", className: "btn-arcora-pill w-full" }}
-          theme="light"
+          connectButton={{
+            label: "Connect wallet",
+            className: "pill pill--acc w-full",
+            // thirdweb injects its own emotion styles after ours; inline
+            // styles keep the accent pill colors authoritative in both themes.
+            style: { background: "var(--acc)", color: "var(--acc-ink)" },
+          }}
+          theme={resolvedTheme === "light" ? "light" : "dark"}
         />
 
         {crosschainEnabled && (
@@ -98,10 +124,10 @@ export default function CheckoutClient(props: CheckoutClientProps) {
               onPaid={() => setStatus("paid")}
               onFailed={() => setStatus("failed")}
             />
-            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+            <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]">
               If bridging completes but settlement cannot proceed before a swap, any automatic refund is sent as USDC to this same address on Arc.
             </p>
-            <p className="text-center text-[13px] text-arcora-muted-fg">or pay directly on Arc</p>
+            <p className="text-center text-[13px] text-[var(--fg-3)]">or pay directly on Arc</p>
           </div>
         )}
 
@@ -117,24 +143,24 @@ export default function CheckoutClient(props: CheckoutClientProps) {
         <button
           type="button"
           onClick={() => setShowQR(true)}
-          className="w-full inline-flex items-center justify-center gap-2 text-[13px] text-arcora-link hover:underline py-2"
+          className="w-full inline-flex items-center justify-center gap-2 text-[13px] text-[var(--action)] hover:underline py-2"
         >
           <Smartphone className="size-4" /> Pay with mobile wallet
         </button>
       </div>
 
       {/* What you're signing — compact EIP-712 info panel */}
-      <div className="border border-arcora-border bg-white mt-2">
-        <div className="grid grid-cols-2 divide-x divide-arcora-border">
+      <div className="field mt-2 overflow-hidden">
+        <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[var(--border)]">
           <div className="p-4">
             <p className="eyebrow mb-2">What you&apos;re signing</p>
-            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+            <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]">
               EIP-712{" "}
-              <code className="font-[family-name:var(--font-mono)] text-arcora-slate bg-arcora-gray px-[3px] py-[1px] text-[11px]">
+              <code className="mono text-[11px] text-[var(--fg-1)] bg-[var(--surface-3)] rounded-[4px] px-[4px] py-[1px]">
                 PermitWitnessTransferFrom
               </code>
               . Witness binds to{" "}
-              <code className="font-[family-name:var(--font-mono)] text-arcora-slate bg-arcora-gray px-[3px] py-[1px] text-[11px] break-all">
+              <code className="mono text-[11px] text-[var(--fg-1)] bg-[var(--surface-3)] rounded-[4px] px-[4px] py-[1px] break-all">
                 {props.invoiceId}
               </code>{" "}
               and the Arcora relayer only. Signature cannot be replayed on another transaction.
@@ -142,7 +168,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
           </div>
           <div className="p-4">
             <p className="eyebrow mb-2">What happens next</p>
-            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+            <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]">
               The relayer pulls funds via Permit2, runs the FX swap via Arc&apos;s App Kit, and delivers the merchant&apos;s preferred stablecoin. Under 30 seconds.
             </p>
           </div>
@@ -160,7 +186,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
         } catch { return null; }
         return (
           <div className="text-center pt-1">
-            <a href={props.cancelUrl} className="text-[13px] text-arcora-muted-fg hover:underline">Cancel</a>
+            <a href={props.cancelUrl} className="text-[13px] text-[var(--fg-3)] hover:underline">Cancel</a>
           </div>
         );
       })()}

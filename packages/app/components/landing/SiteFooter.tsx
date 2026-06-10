@@ -44,40 +44,42 @@ const COLUMNS: FooterColumn[] = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-arcora-border bg-white">
-      <div className="max-w-5xl mx-auto px-6 sm:px-8 py-16 grid gap-12 grid-cols-1 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-        <div className="flex flex-col gap-5 max-w-xs">
-          <ArcoraLogo size={22} />
-          <p className="text-[13px] text-arcora-muted-fg leading-[1.5] max-w-[280px]">
-            Stablecoin checkout &amp; settlement infrastructure. Built on Arc.
-          </p>
-          <span className="font-[family-name:var(--font-mono)] text-[11px] text-arcora-muted-fg/80 tracking-[0.08em]">
-            © 2026 Arcora · Arc testnet
-          </span>
-        </div>
-        {COLUMNS.map(col => (
-          <div key={col.title} className="flex flex-col gap-3">
-            <p className="eyebrow">{col.title}</p>
-            <ul className="flex flex-col gap-2.5">
-              {col.items.map(it => (
-                <li key={it.label}>
-                  <a
-                    href={it.href}
-                    {...(it.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                    className="text-[13px] text-arcora-muted-fg hover:text-arcora-slate transition-colors"
-                  >
-                    {it.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
+    <footer className="relative z-[1] border-t" style={{ background: "var(--bg-sunken)" }}>
+      <div className="wrap pb-12 pt-14">
+        <div className="foot-grid grid" style={{ gridTemplateColumns: "1.4fr repeat(3, 1fr)", gap: 32 }}>
+          <div className="flex max-w-xs flex-col gap-4">
+            <ArcoraLogo size={24} showTagline />
+            <p className="lead max-w-[280px] text-[13px]">
+              Stablecoin checkout &amp; settlement infrastructure. Built on Arc.
+            </p>
+            <span className="mono text-[11px] tracking-[0.08em]" style={{ color: "var(--fg-3)" }}>
+              © 2026 Arcora · Arc testnet
+            </span>
           </div>
-        ))}
+          {COLUMNS.map(col => (
+            <div key={col.title} className="flex flex-col gap-3.5">
+              <p className="eyebrow">{col.title}</p>
+              <ul className="flex flex-col gap-2.5">
+                {col.items.map(it => (
+                  <li key={it.label}>
+                    <a
+                      href={it.href}
+                      {...(it.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      className="navlink text-[13px]"
+                    >
+                      {it.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="border-t border-arcora-border">
-        <div className="max-w-5xl mx-auto px-6 sm:px-8 py-4 flex items-center justify-between text-[11px] text-arcora-muted-fg/80 font-[family-name:var(--font-mono)] tracking-[0.06em]">
+      <div className="border-t">
+        <div className="wrap mono flex flex-wrap items-center justify-between gap-2 py-4 text-[11px] tracking-[0.06em]" style={{ color: "var(--fg-3)" }}>
           <span>v1.2 · gateway 0x07BAC123…aE3a3 · arc testnet</span>
-          <span><a href="https://docs.arcorapay.xyz" className="hover:text-arcora-link transition-colors">docs.arcorapay.xyz</a></span>
+          <span><a href="https://docs.arcorapay.xyz" className="ulink">docs.arcorapay.xyz</a></span>
         </div>
       </div>
     </footer>

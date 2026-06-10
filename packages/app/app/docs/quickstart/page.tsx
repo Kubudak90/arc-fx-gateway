@@ -3,7 +3,7 @@ import type { Route } from "next";
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "Developer quickstart · Arcora docs",
+  title: "Developer quickstart · Arcorapay docs",
   description: "Install the SDK, create an invoice, listen for the webhook — ten minutes end-to-end.",
 };
 

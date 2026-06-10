@@ -1,7 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -51,32 +49,31 @@ export function AllowedOriginsCard({ initialOrigins }: { initialOrigins: readonl
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Allowed redirect origins</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          URLs in this list can receive your customers after payment success or cancellation.
-          We accept <code className="font-mono text-xs">https://</code> URLs everywhere; <code className="font-mono text-xs">http://localhost</code> is allowed for development.
-        </p>
+    <section className="card p-[22px]">
+      <h3 className="text-base font-semibold m-0">Allowed redirect origins</h3>
+      <p className="lead text-[13px] mt-1 mb-4">
+        URLs in this list can receive your customers after payment success or cancellation.
+        We accept <code className="mono text-xs">https://</code> URLs everywhere; <code className="mono text-xs">http://localhost</code> is allowed for development.
+      </p>
+      <div className="space-y-4">
         <textarea
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
           placeholder={"https://your-shop.com\nhttps://staging.your-shop.com"}
           rows={4}
-          className="w-full rounded border border-input bg-background px-3 py-2 text-sm font-mono"
+          aria-label="Allowed redirect origins"
+          className="field mono w-full px-3 py-2 text-[12.5px] text-[var(--fg-1)] outline-none focus:border-[var(--focus-ring)]"
         />
         {parsed.bad.length > 0 && (
-          <p className="text-xs text-red-600">
+          <p className="text-xs text-[var(--danger)]">
             Skipped {parsed.bad.length} invalid line{parsed.bad.length === 1 ? "" : "s"} (use a full https URL).
           </p>
         )}
-        <div className="flex items-center gap-2">
-          <Button onClick={save} disabled={busy || !canSave}>Save</Button>
-          <span className="text-xs text-muted-foreground">{parsed.ok.length} valid origin{parsed.ok.length === 1 ? "" : "s"}</span>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={save} disabled={busy || !canSave} className="pill pill--acc pill--sm">Save</button>
+          <span className="mono text-xs text-[var(--fg-3)]">{parsed.ok.length} valid origin{parsed.ok.length === 1 ? "" : "s"}</span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

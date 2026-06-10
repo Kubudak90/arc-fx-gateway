@@ -31,25 +31,25 @@ export function MerchantSidebar({ merchantAddress }: Props) {
   const shortAddr = `${merchantAddress.slice(0, 6)}…${merchantAddress.slice(-4)}`;
 
   return (
-    <aside className="hidden md:flex flex-col w-[232px] shrink-0 px-4 py-6 gap-1 bg-[var(--bg-elev-2)] border-r border-[var(--line)] min-h-screen sticky top-0 self-start">
-      <Link href={"/m/dashboard" as Route} aria-label="Arcora home" className="px-2.5 pb-3 inline-flex">
-        <ArcoraLogo size={22} />
+    <aside className="hidden md:flex flex-col w-[244px] shrink-0 px-4 py-[22px] gap-1 bg-[var(--surface-2)] border-r border-[var(--border)] min-h-screen sticky top-0 self-start">
+      <Link href={"/m/dashboard" as Route} aria-label="Arcorapay home" className="px-2.5 pb-3 inline-flex">
+        <ArcoraLogo size={26} />
       </Link>
 
       <div className="px-2.5 pb-3.5 flex flex-col gap-1.5">
-        <span className="eyebrow text-[var(--ink-3)]">Merchant</span>
+        <span className="eyebrow">Merchant</span>
         <div className="flex items-center gap-2.5">
-          <div className="w-[30px] h-[30px] rounded-lg bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center mono font-bold text-[12px]">
+          <div className="w-8 h-8 rounded-[10px] bg-[var(--acc-soft)] border border-[var(--acc-line)] text-[color-mix(in_oklch,var(--acc)_80%,var(--fg-1))] flex items-center justify-center mono font-bold text-[12px]">
             {initials}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[13px] font-medium truncate text-[var(--ink)]">{shortAddr}</span>
-            <span className="mono text-[10.5px] text-[var(--ink-3)]">arc · {IS_TESTNET ? "testnet" : "live"}</span>
+            <span className="text-[13px] font-semibold text-[var(--fg-1)] truncate">{shortAddr}</span>
+            <span className="mono text-[10.5px] text-[var(--fg-3)]">arc · {IS_TESTNET ? "testnet" : "live"}</span>
           </div>
         </div>
       </div>
 
-      <div className="hairline my-2" />
+      <div className="divider my-2 -mx-4" />
 
       <nav className="flex flex-col gap-0.5">
         {NAV_ITEMS.map(item => {
@@ -58,20 +58,15 @@ export function MerchantSidebar({ merchantAddress }: Props) {
             <Link
               key={item.id}
               href={item.href as Route}
-              className={[
-                "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13.5px] transition-colors",
-                active
-                  ? "bg-[var(--bg-elev)] text-[var(--accent)] font-medium"
-                  : "text-[var(--ink-2)] hover:bg-[var(--bg-elev)] hover:text-[var(--ink)]",
-              ].join(" ")}
+              className={`m-navitem ${active ? "on" : ""}`}
             >
               <svg
-                width="15"
-                height="15"
+                width="17"
+                height="17"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="1.7"
+                strokeWidth="1.75"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 aria-hidden="true"
@@ -86,19 +81,32 @@ export function MerchantSidebar({ merchantAddress }: Props) {
 
       <div className="mt-auto pt-3 flex flex-col gap-2">
         {IS_TESTNET && (
-          <div className="p-3 border border-[var(--line)] rounded-[10px] bg-[var(--bg-elev)]">
+          <div className="field p-3">
             <div className="flex items-center gap-1.5 mb-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
-              <span className="mono text-[10.5px] text-[var(--ink-3)] tracking-wider">ARC TESTNET</span>
+              <span className="dot" />
+              <span className="mono text-[10px] text-[var(--fg-3)] tracking-[.1em]">ARC TESTNET</span>
             </div>
-            <p className="text-[11.5px] text-[var(--ink-2)] leading-snug m-0">
+            <p className="text-[11.5px] text-[var(--fg-2)] leading-snug m-0">
               You&apos;re on testnet. Switch network to go live.
             </p>
           </div>
         )}
         <div className="px-2.5 flex items-center justify-between">
           <form action="/api/auth/logout" method="POST">
-            <button type="submit" className="text-[var(--ink-3)] hover:text-[var(--accent)] hover:underline text-[12px]">
+            <button type="submit" className="m-link inline-flex items-center gap-1.5 text-[12px]">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+              </svg>
               Sign out
             </button>
           </form>

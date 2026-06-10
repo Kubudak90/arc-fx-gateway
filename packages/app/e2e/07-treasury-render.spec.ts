@@ -54,7 +54,8 @@ test.describe("merchant treasury · KPI rendering", () => {
     await loginAsMerchant(context, m.address);
     await page.goto("/m/treasury");
 
-    await expect(page.getByRole("heading", { name: "Treasury" })).toBeVisible();
+    // Generous timeout: first hit compiles the page + API routes in dev mode.
+    await expect(page.getByRole("heading", { name: "Treasury" })).toBeVisible({ timeout: 30_000 });
 
     // The empty state should NOT be visible — we have invoices.
     await expect(page.getByText(/No paid invoices yet/i)).toHaveCount(0);
@@ -66,7 +67,8 @@ test.describe("merchant treasury · KPI rendering", () => {
     // the route test for the math, but the labels prove the layout rendered).
     await expect(page.getByText("Net received")).toBeVisible();
     await expect(page.getByText("Gross volume")).toBeVisible();
-    await expect(page.getByText("Refunded")).toBeVisible();
+    // exact: the token header's "2 paid · 1 refunded" line substring-matches otherwise.
+    await expect(page.getByText("Refunded", { exact: true })).toBeVisible();
     await expect(page.getByText("Fees paid to Arcora")).toBeVisible();
 
     // Activity feed: 3 rows seeded, both phrasings ("Payment" + "Refund") show.
@@ -81,7 +83,7 @@ test.describe("merchant treasury · KPI rendering", () => {
     // Logged-in session, but no merchant row in the DB.
     await loginAsMerchant(context, MERCHANT_ADDRESS);
     await page.goto("/m/treasury");
-    await expect(page.getByRole("heading", { name: "Treasury" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Treasury" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/Set up a merchant profile/i)).toBeVisible();
   });
 });

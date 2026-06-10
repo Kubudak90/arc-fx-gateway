@@ -1,7 +1,7 @@
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "Self-host & deploy · Arcora docs",
+  title: "Self-host & deploy · Arcorapay docs",
   description: "Stand up your own Arcora — env vars, infra, and the runbook.",
 };
 

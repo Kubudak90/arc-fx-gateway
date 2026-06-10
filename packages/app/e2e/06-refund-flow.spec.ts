@@ -58,7 +58,8 @@ test.describe("merchant dashboard · refund visibility", () => {
     await page.goto("/m/dashboard");
 
     // Wait for the dashboard to fetch /api/merchant and render the table.
-    await expect(page.getByRole("heading", { name: "Invoices" })).toBeVisible();
+    // Generous timeout: first hit compiles the page + API route in dev mode.
+    await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible({ timeout: 30_000 });
 
     const paidRow     = page.locator("tr", { hasText: paidInvoice.slice(0, 10) });
     const refundedRow = page.locator("tr", { hasText: refundedInvoice.slice(0, 10) });

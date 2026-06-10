@@ -26,22 +26,22 @@ export function InvoiceShareQRDialog({ invoiceId, onClose }: { invoiceId: string
       <DialogContent>
         <DialogHeader><DialogTitle>Share invoice</DialogTitle></DialogHeader>
         <div className="space-y-4 text-center">
-          <div className="mx-auto inline-block p-6 bg-white rounded-2xl border border-arcora-border print:border-0">
-            <QRCodeSVG value={url} size={224} level="M" />
+          <div className="mx-auto inline-block p-[14px] bg-white rounded-[14px] print:border-0">
+            <QRCodeSVG value={url} size={224} level="M" fgColor="#0D1514" bgColor="#ffffff" />
           </div>
-          <code className="block text-xs text-muted-foreground break-all px-2">{url}</code>
+          <code className="mono block text-xs text-[var(--fg-3)] break-all px-2">{url}</code>
           <div className="flex gap-2 justify-center print:hidden">
             <button
               type="button"
               onClick={copy}
-              className="inline-flex items-center gap-2 rounded-full bg-arcora-slate text-white px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-blue transition-colors"
+              className="pill pill--acc pill--sm"
             >
               <Copy className="size-4" /> {copied ? "Copied!" : "Copy URL"}
             </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-2 rounded-full border border-arcora-border bg-white text-arcora-slate px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-gray/60 transition-colors"
+              className="pill pill--ghost pill--sm"
             >
               <Printer className="size-4" /> Print
             </button>

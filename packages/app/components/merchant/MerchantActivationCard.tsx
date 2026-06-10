@@ -104,19 +104,22 @@ export function MerchantActivationCard({ payoutAddress, payoutToken }: Props) {
   if (registered !== false) return null;
 
   return (
-    <div className="rounded-2xl border border-arcora-blue/30 bg-gradient-to-br from-arcora-blue/5 to-arcora-teal/5 p-5 sm:p-6">
-      <div className="flex items-start gap-4">
-        <div className="rounded-xl bg-white border border-arcora-border p-2 flex-none">
-          <ShieldCheck className="size-5 text-arcora-blue" />
+    <div
+      className="card border-[var(--acc-line)] p-5 sm:px-[18px] sm:py-4"
+      style={{ background: "color-mix(in oklch, var(--acc) 5%, var(--surface))" }}
+    >
+      <div className="flex items-start gap-[14px]">
+        <div className="w-9 h-9 rounded-full bg-[var(--acc-soft)] border border-[var(--acc-line)] flex items-center justify-center flex-none text-[color-mix(in_oklch,var(--acc)_75%,var(--fg-1))]">
+          <ShieldCheck className="size-[18px]" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-arcora-slate">Activate the gateway</h3>
-          <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+          <h3 className="font-semibold text-sm text-[var(--fg-1)]">Activate the gateway</h3>
+          <p className="mt-1 text-sm text-[var(--fg-2)] leading-relaxed">
             Arcora&apos;s custody-escrow gateway settles funds into per-invoice
             escrow for 7 days (the refundable window) before they&apos;re
             claimable. Register once on-chain to start accepting payments.
             After this you&apos;ll be prompted to authorize the server delegate
-            from <span className="font-medium">Settings</span>.
+            from <span className="font-medium text-[var(--fg-1)]">Settings</span>.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
@@ -124,11 +127,11 @@ export function MerchantActivationCard({ payoutAddress, payoutToken }: Props) {
               onClick={handleActivate}
               disabled={!address || busy}
               aria-busy={busy || undefined}
-              className="inline-flex items-center gap-2 rounded-full bg-arcora-slate text-white px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="pill pill--acc pill--sm"
             >
               {busy ? "Registering…" : "Activate gateway →"}
             </button>
-            <span className="font-[family-name:var(--font-mono)] text-[11px] text-muted-foreground">
+            <span className="mono text-[11px] text-[var(--fg-3)]">
               One-time signature, ~10s.
             </span>
           </div>

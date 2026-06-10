@@ -56,7 +56,7 @@ export function AddArcTestnetButton() {
       type="button"
       onClick={handleClick}
       disabled={busy}
-      className="inline-flex items-center gap-2 rounded-full bg-arcora-slate text-white px-5 py-2.5 text-sm font-semibold shadow-sm hover:bg-arcora-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      className="pill pill--acc"
     >
       {busy ? "Adding…" : "Add Arc Testnet to my wallet →"}
     </button>

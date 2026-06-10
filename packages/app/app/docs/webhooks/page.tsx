@@ -1,7 +1,7 @@
 import { DocsShell } from "@/components/docs/DocsShell";
 
 export const metadata = {
-  title: "Webhooks · Arcora docs",
+  title: "Webhooks · Arcorapay docs",
   description: "Event payloads, signing, and the retry policy.",
 };
 

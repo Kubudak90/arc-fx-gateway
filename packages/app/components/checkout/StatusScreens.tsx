@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { safeClientRedirect } from "@/lib/security/redirect";
 
-const screenHeadingCls = "font-[family-name:var(--font-display)] font-light text-[32px] tracking-[-0.02em] text-arcora-slate";
+const screenHeadingCls = "disp text-[30px] font-medium";
 
 /** Returns true when `url` is safe to render as a clickable link from this
  *  page — same rules as `safeClientRedirect` minus the `window.location` write. */
@@ -41,14 +41,13 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
     // target. Show a clean confirmation; no "merchant" attribution.
     return (
       <div className="flex flex-col items-center gap-5 py-16 text-center">
-        <div className="size-16 rounded-full bg-emerald-50 border border-emerald-200 grid place-items-center">
-          <Check className="size-8 text-emerald-600" />
-        </div>
+        <SuccessGlyph />
         <div>
+          <span className="tagchip tagchip--ok mb-3">Paid</span>
           <h2 className={screenHeadingCls}>
             Payment received
           </h2>
-          <p className="mt-2 text-[14px] text-arcora-muted-fg">Thanks — you can close this tab.</p>
+          <p className="mt-2 text-[14px] text-[var(--fg-2)]">Thanks — you can close this tab.</p>
         </div>
       </div>
     );
@@ -61,14 +60,13 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
     // attacker-controlled page.
     return (
       <div className="flex flex-col items-center gap-5 py-16 text-center">
-        <div className="size-16 rounded-full bg-emerald-50 border border-emerald-200 grid place-items-center">
-          <Check className="size-8 text-emerald-600" />
-        </div>
+        <SuccessGlyph />
         <div>
+          <span className="tagchip tagchip--ok mb-3">Paid</span>
           <h2 className={screenHeadingCls}>
             Payment received
           </h2>
-          <p className="mt-2 text-[14px] text-arcora-muted-fg max-w-sm mx-auto">
+          <p className="mt-2 text-[14px] text-[var(--fg-2)] max-w-sm mx-auto">
             We can&apos;t safely return you to the merchant — the redirect target isn&apos;t in their allowlist. Close this tab or contact the merchant directly.
           </p>
         </div>
@@ -78,34 +76,75 @@ export function SuccessScreen({ successUrl, allowedOrigins }: { successUrl: stri
 
   return (
     <div className="flex flex-col items-center gap-5 py-16 text-center">
-      <div className="size-16 rounded-full bg-emerald-50 border border-emerald-200 grid place-items-center">
-        <Check className="size-8 text-emerald-600" />
-      </div>
+      <SuccessGlyph />
       <div>
+        <span className="tagchip tagchip--ok mb-3">Paid</span>
         <h2 className={screenHeadingCls}>
           Payment received
         </h2>
-        <p className="mt-2 text-[14px] text-arcora-muted-fg">Redirecting to merchant in {seconds}s…</p>
+        <p className="mt-2 text-[14px] text-[var(--fg-2)]">Redirecting to merchant in {seconds}s…</p>
       </div>
     </div>
   );
 }
 
-export function ExpiredScreen({ cancelUrl, allowedOrigins }: { cancelUrl?: string; allowedOrigins: readonly string[] }) {
+/** Shared success roundel — semantic success tokens in both themes. */
+function SuccessGlyph() {
+  return (
+    <div
+      className="size-16 rounded-full grid place-items-center bg-[var(--success-bg)] border"
+      style={{ borderColor: "color-mix(in oklch, var(--success) 30%, transparent)" }}
+    >
+      <Check className="size-8 text-[var(--success)]" />
+    </div>
+  );
+}
+
+/** Non-success terminal states share this screen; the copy must not claim
+ *  "expired" for invoices that failed or were refunded (review 2026-06-10). */
+export type TerminalVariant = "expired" | "failed" | "refunded";
+
+const TERMINAL_COPY: Record<TerminalVariant, { chip: string; heading: string; body: string }> = {
+  expired: {
+    chip: "Expired",
+    heading: "Invoice expired",
+    body: "Please request a new invoice from the merchant.",
+  },
+  failed: {
+    chip: "Failed",
+    heading: "Payment failed",
+    body: "The payment could not be completed. If funds were taken, they have been returned.",
+  },
+  refunded: {
+    chip: "Refunded",
+    heading: "Invoice refunded",
+    body: "The payment was returned to the payer.",
+  },
+};
+
+export function ExpiredScreen({ variant = "expired", cancelUrl, allowedOrigins }: {
+  variant?: TerminalVariant;
+  cancelUrl?: string;
+  allowedOrigins: readonly string[];
+}) {
+  const copy = TERMINAL_COPY[variant];
+  // Audit H1 (2026-05-05): the return link stays allowlist-gated for every
+  // variant — same isOriginAllowed check, no weakening.
   const safe = isOriginAllowed(cancelUrl, allowedOrigins);
   return (
     <div className="flex flex-col items-center gap-5 py-16 text-center">
-      <div className="size-16 rounded-full bg-arcora-gray border border-arcora-border grid place-items-center">
-        <span className="font-[family-name:var(--font-mono)] text-[20px] text-arcora-muted-fg">×</span>
+      <div className="size-16 rounded-full bg-[var(--surface-3)] border border-[var(--border)] grid place-items-center">
+        <span className="mono text-[20px] text-[var(--fg-3)]">×</span>
       </div>
       <div>
+        <span className="tagchip tagchip--mut mb-3">{copy.chip}</span>
         <h2 className={screenHeadingCls}>
-          Invoice expired
+          {copy.heading}
         </h2>
-        <p className="mt-2 text-[14px] text-arcora-muted-fg">Please request a new invoice from the merchant.</p>
+        <p className="mt-2 text-[14px] text-[var(--fg-2)]">{copy.body}</p>
       </div>
       {safe && cancelUrl && (
-        <a href={cancelUrl} className="btn-arcora-pill-light inline-block mt-2">Return to merchant</a>
+        <a href={cancelUrl} className="pill pill--ghost mt-2">Return to merchant</a>
       )}
     </div>
   );
@@ -118,7 +157,7 @@ export function NotFoundScreen() {
         <h2 className={screenHeadingCls}>
           Invoice not found
         </h2>
-        <p className="mt-2 text-[14px] text-arcora-muted-fg">This invoice doesn&apos;t exist or has been removed.</p>
+        <p className="mt-2 text-[14px] text-[var(--fg-2)]">This invoice doesn&apos;t exist or has been removed.</p>
       </div>
     </div>
   );

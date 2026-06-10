@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import { ConnectButton } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { QuoteDisplay } from "@/components/checkout/QuoteDisplay";
@@ -31,6 +32,7 @@ interface CheckoutClientProps {
 }
 
 export default function CheckoutClient(props: CheckoutClientProps) {
+  const { resolvedTheme } = useTheme();
   const [status, setStatus] = useState(props.initialStatus);
   // QuoteDisplay quotes the forward direction: the customer commits to a
   // payIn upfront and the relayer's kit.swap converts it; the merchant gets
@@ -86,8 +88,14 @@ export default function CheckoutClient(props: CheckoutClientProps) {
 
         <ConnectButton
           client={thirdwebClient}
-          connectButton={{ label: "Connect wallet", className: "btn-arcora-pill w-full" }}
-          theme="light"
+          connectButton={{
+            label: "Connect wallet",
+            className: "pill pill--acc w-full",
+            // thirdweb injects its own emotion styles after ours; inline
+            // styles keep the accent pill colors authoritative in both themes.
+            style: { background: "var(--acc)", color: "var(--acc-ink)" },
+          }}
+          theme={resolvedTheme === "light" ? "light" : "dark"}
         />
 
         {crosschainEnabled && (
@@ -98,10 +106,10 @@ export default function CheckoutClient(props: CheckoutClientProps) {
               onPaid={() => setStatus("paid")}
               onFailed={() => setStatus("failed")}
             />
-            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+            <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]">
               If bridging completes but settlement cannot proceed before a swap, any automatic refund is sent as USDC to this same address on Arc.
             </p>
-            <p className="text-center text-[13px] text-arcora-muted-fg">or pay directly on Arc</p>
+            <p className="text-center text-[13px] text-[var(--fg-3)]">or pay directly on Arc</p>
           </div>
         )}
 
@@ -117,24 +125,24 @@ export default function CheckoutClient(props: CheckoutClientProps) {
         <button
           type="button"
           onClick={() => setShowQR(true)}
-          className="w-full inline-flex items-center justify-center gap-2 text-[13px] text-arcora-link hover:underline py-2"
+          className="w-full inline-flex items-center justify-center gap-2 text-[13px] text-[var(--action)] hover:underline py-2"
         >
           <Smartphone className="size-4" /> Pay with mobile wallet
         </button>
       </div>
 
       {/* What you're signing — compact EIP-712 info panel */}
-      <div className="border border-arcora-border bg-white mt-2">
-        <div className="grid grid-cols-2 divide-x divide-arcora-border">
+      <div className="field mt-2 overflow-hidden">
+        <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[var(--border)]">
           <div className="p-4">
             <p className="eyebrow mb-2">What you&apos;re signing</p>
-            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+            <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]">
               EIP-712{" "}
-              <code className="font-[family-name:var(--font-mono)] text-arcora-slate bg-arcora-gray px-[3px] py-[1px] text-[11px]">
+              <code className="mono text-[11px] text-[var(--fg-1)] bg-[var(--surface-3)] rounded-[4px] px-[4px] py-[1px]">
                 PermitWitnessTransferFrom
               </code>
               . Witness binds to{" "}
-              <code className="font-[family-name:var(--font-mono)] text-arcora-slate bg-arcora-gray px-[3px] py-[1px] text-[11px] break-all">
+              <code className="mono text-[11px] text-[var(--fg-1)] bg-[var(--surface-3)] rounded-[4px] px-[4px] py-[1px] break-all">
                 {props.invoiceId}
               </code>{" "}
               and the Arcora relayer only. Signature cannot be replayed on another transaction.
@@ -142,7 +150,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
           </div>
           <div className="p-4">
             <p className="eyebrow mb-2">What happens next</p>
-            <p className="text-[12px] text-arcora-muted-fg leading-[1.55]">
+            <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]">
               The relayer pulls funds via Permit2, runs the FX swap via Arc&apos;s App Kit, and delivers the merchant&apos;s preferred stablecoin. Under 30 seconds.
             </p>
           </div>
@@ -160,7 +168,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
         } catch { return null; }
         return (
           <div className="text-center pt-1">
-            <a href={props.cancelUrl} className="text-[13px] text-arcora-muted-fg hover:underline">Cancel</a>
+            <a href={props.cancelUrl} className="text-[13px] text-[var(--fg-3)] hover:underline">Cancel</a>
           </div>
         );
       })()}

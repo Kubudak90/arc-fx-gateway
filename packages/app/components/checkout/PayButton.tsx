@@ -242,18 +242,18 @@ export function PayButton(props: PayButtonProps) {
   return (
     <div className="space-y-3">
       {compliance.status === "review" && (
-        <div className="border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
-          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--warning)_40%,transparent)] bg-[var(--warning-bg)] p-3 flex items-start gap-2 text-xs text-[var(--fg-1)]">
+          <ShieldAlert className="size-4 mt-0.5 flex-none text-[var(--warning)]" />
           <div>
             <div className="font-semibold mb-0.5">Compliance review required</div>
             We&apos;re confirming a few details before this wallet can pay. The merchant has been notified and will follow up within 24h.
-            {compliance.ticketId && <div className="font-[family-name:var(--font-mono)] text-[10px] mt-1 opacity-70">Ref: {compliance.ticketId}</div>}
+            {compliance.ticketId && <div className="mono text-[10px] mt-1 opacity-70">Ref: {compliance.ticketId}</div>}
           </div>
         </div>
       )}
       {compliance.status === "reject" && (
-        <div className="border border-red-300 bg-red-50 p-3 flex items-start gap-2 text-xs text-red-900">
-          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--danger)_40%,transparent)] bg-[var(--danger-bg)] p-3 flex items-start gap-2 text-xs text-[var(--fg-1)]">
+          <ShieldAlert className="size-4 mt-0.5 flex-none text-[var(--danger)]" />
           <div>
             <div className="font-semibold mb-0.5">This wallet can&apos;t be used for this payment</div>
             Try a different wallet or contact the merchant if you believe this is an error.
@@ -261,27 +261,29 @@ export function PayButton(props: PayButtonProps) {
         </div>
       )}
       {compliance.status === "error" && (
-        <div className="border border-amber-300 bg-amber-50 p-3 flex items-start gap-2 text-xs text-amber-900">
-          <ShieldAlert className="size-4 mt-0.5 flex-none" />
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--warning)_40%,transparent)] bg-[var(--warning-bg)] p-3 flex items-start gap-2 text-xs text-[var(--fg-1)]">
+          <ShieldAlert className="size-4 mt-0.5 flex-none text-[var(--warning)]" />
           <div className="flex-1">
             <div className="font-semibold mb-0.5">Couldn&apos;t verify wallet</div>
             We couldn&apos;t reach the compliance check. This is usually a
             transient network blip — retry, or refresh the page.
-            <button
-              type="button"
-              onClick={compliance.refresh}
-              className="mt-2 px-2 py-1 border border-amber-400 bg-amber-100 hover:bg-amber-200 font-semibold"
-            >
-              Retry verification
-            </button>
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={compliance.refresh}
+                className="pill pill--ghost pill--sm"
+              >
+                Retry verification
+              </button>
+            </div>
           </div>
         </div>
       )}
       {needsPermit2Setup && state === "idle" && !complianceBlocked && (
-        <div className="border border-arcora-border bg-arcora-gray/30 p-3 flex items-start gap-2 text-xs">
-          <Info className="size-4 mt-0.5 flex-none text-arcora-blue" />
+        <div className="field p-3 flex items-start gap-2 text-xs text-[var(--fg-2)]">
+          <Info className="size-4 mt-0.5 flex-none text-[var(--info)]" />
           <div>
-            <div className="font-semibold mb-0.5">First-time wallet setup</div>
+            <div className="font-semibold mb-0.5 text-[var(--fg-1)]">First-time wallet setup</div>
             You&apos;ll see two prompts the first time: one wallet approval to Permit2 (one-time per token, costs ~$0.05 USDC in gas), then a gas-less signature. Subsequent payments only need the signature.
           </div>
         </div>
@@ -296,7 +298,7 @@ export function PayButton(props: PayButtonProps) {
         }
         aria-live="polite"
         aria-busy={inFlight || undefined}
-        className="btn-arcora-pill w-full"
+        className="pill pill--acc w-full"
       >
         {complianceLoading ? "Verifying wallet…" : complianceBlocked ? "Unavailable" : label[state]}
       </button>
@@ -308,7 +310,7 @@ export function PayButton(props: PayButtonProps) {
           href={`https://testnet.arcscan.app/tx/${settleTx}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="block text-center text-xs text-arcora-link hover:underline"
+          className="block text-center text-xs text-[var(--action)] hover:underline"
         >
           View settlement →
         </a>
@@ -331,29 +333,41 @@ function ProgressList({ state }: { state: State }) {
   // by `state` jumping straight from idle to signing.
   const order = ["idle", "checking_allowance", "approving_permit2", "signing", "submitting", "settling", "success", "failed"];
   const idx   = order.indexOf(state);
+  const visible = STEPS.filter(s => s.key[0] !== "checking_allowance" || idx >= order.indexOf("approving_permit2"));
 
   return (
-    <ul className="space-y-1.5 font-[family-name:var(--font-mono)] text-[11px] tracking-[0.02em]">
-      {STEPS.filter(s => s.key[0] !== "checking_allowance" || idx >= order.indexOf("approving_permit2")).map((step) => {
-        const stepIdx = Math.max(...step.key.map(k => order.indexOf(k)));
-        const done    = idx > stepIdx || state === "success";
-        const active  = step.key.includes(state);
-        return (
-          <li key={step.label} className="flex items-center gap-2">
-            {done ? (
-              <Check className="size-4 text-emerald-600 flex-none" />
-            ) : active ? (
-              <Loader2 className="size-4 text-arcora-blue animate-spin flex-none" />
-            ) : (
-              <span className="size-4 border border-arcora-border flex-none" />
-            )}
-            <span className={done ? "text-arcora-muted-fg line-through" : active ? "font-medium text-arcora-slate" : "text-arcora-muted-fg"}>
-              {step.label}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+    <div>
+      {/* Progress rail mirrors the checklist below it — decorative only */}
+      <div className="steps-rail mb-2.5" aria-hidden="true">
+        {visible.map((step) => {
+          const stepIdx = Math.max(...step.key.map(k => order.indexOf(k)));
+          const done    = idx > stepIdx || state === "success";
+          const active  = step.key.includes(state);
+          return <i key={step.label} className={done ? "done" : active ? "cur" : ""} />;
+        })}
+      </div>
+      <ul className="mono space-y-1.5 text-[11px] tracking-[0.02em]">
+        {visible.map((step) => {
+          const stepIdx = Math.max(...step.key.map(k => order.indexOf(k)));
+          const done    = idx > stepIdx || state === "success";
+          const active  = step.key.includes(state);
+          return (
+            <li key={step.label} className="flex items-center gap-2">
+              {done ? (
+                <Check className="size-4 text-[var(--success)] flex-none" />
+              ) : active ? (
+                <Loader2 className="size-4 text-[var(--action)] animate-spin flex-none" />
+              ) : (
+                <span className="size-4 rounded-[4px] border border-[var(--border)] flex-none" />
+              )}
+              <span className={done ? "text-[var(--fg-3)] line-through" : active ? "font-medium text-[var(--fg-1)]" : "text-[var(--fg-3)]"}>
+                {step.label}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

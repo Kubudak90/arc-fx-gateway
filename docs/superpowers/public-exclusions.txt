@@ -1,0 +1,69 @@
+# Public-tree exclusion manifest — arcorapay public-beta launch (Task 8)
+# ---------------------------------------------------------------------
+# The public repo (github.com/arcoralabs/arcorapay) ships the current HEAD
+# tree MINUS the paths below. Old git history is NOT carried, so only the
+# working tree matters. One git path per line; a trailing "/" means the
+# whole directory. Lines starting with "#" are comments.
+#
+# This file lives ONLY in the private tree — it is itself excluded because
+# docs/superpowers/ is excluded.
+#
+# Secret-sweep status (2026-06-10): tracked tree greps for the ops-VPS IP,
+# its password, PEM private keys, live API-key values, personal emails and
+# real DB DSNs are all ZERO. The only 64-hex values in first-party files are
+# tx hashes, event/zero hashes, and the obvious 0x…01 placeholder in
+# packages/contracts/.env.example. .env discipline verified: only
+# .env.example files are tracked (all placeholder values); .env/.env.local
+# variants are gitignored. .vercel/ is NOT tracked and is gitignored —
+# nothing to exclude there.
+
+# ── Mandatory exclusions ────────────────────────────────────────────────
+# Internal strategy, funding asks, plans and specs (incl. this manifest).
+docs/superpowers/
+# OPEN contract findings (V12 carry incl. a High) against the LIVE testnet
+# contract, plus PoCs/validation artifacts. Never ships while findings are
+# open. (Fixed-finding IDs referenced in CHANGELOG/code comments are fine —
+# they describe shipped fixes, not open vulns.)
+docs/audit/
+# Claude Code session state — untracked + gitignored already; listed for
+# defense-in-depth in case it ever gets tracked.
+.claude/
+# Superpowers local state — untracked + gitignored already; defense-in-depth.
+.superpowers/
+
+# ── docs/runbooks/ — reviewed file-by-file ──────────────────────────────
+# EXCLUDE: vault unseal/rekey ceremony, unseal-key custody (1Password/paper),
+# VPS filesystem paths, rotation-token location. Pure ops-infra runbook.
+docs/runbooks/vault-recovery.md
+# EXCLUDE: deprecated V9 historical runbook; references private
+# docs/superpowers/specs/ paths and a non-existent v10-deploy runbook.
+# No public value, would only confuse readers about the live custody model.
+docs/runbooks/h4-refund-approval.md
+# SHIP (not listed): docs/runbooks/crosschain-v2-demo.md — generic demo
+# runbook: env var names, public Circle sandbox URL, test commands. No
+# hostnames/IPs/key material.
+
+# ── Other docs reviewed ────────────────────────────────────────────────
+# EXCLUDE: internal video-production script for a grant submission
+# (recording tips, staging notes, wallet prep). Not user documentation.
+docs/loom-script.md
+# EXCLUDE: investor pitch deck (marp source). Contains a pre-seed funding
+# ask ("pre-seed for KYB + audit + branding"), go-to-market/moat framing,
+# and an honest security-posture gap list (single-EOA admin today, Vault
+# TLS/HSM hardening pending, single host) that we don't hand to attackers
+# in the repo itself. The public-safe product story already ships via
+# README.md, docs/LITEPAPER.md and docs/ROADMAP.md.
+docs/PITCH.md
+
+# ── Reviewed and SHIPPING (recorded here for the audit trail) ───────────
+# KNOWN_ISSUES.md — re-read in full 2026-06-10: no secrets, no IPs, no key
+#   material, no open-vuln details (single-VPS relayer + drizzle-journal
+#   drift are honest ops notes already mirrored on /quickstart). SHIPS.
+# docs/LITEPAPER.md, docs/ROADMAP.md, README.md, CHANGELOG.md, SECURITY.md,
+#   RELEASING.md — public-facing by design; sweep-clean. SHIP.
+# ops/ (health/indexer/relayer/vault/webhooks) — open-source ops tooling;
+#   VPS IP scrubbed to <ops-vps> placeholders in the scrub commit; secret
+#   values (ntfy topic, tokens, secret_ids) live only on the box. SHIP.
+# packages/contracts/deployments/arc-testnet.json — public on-chain
+#   addresses + deploy tx hash; leaked-deployer note describes an already
+#   de-privileged EOA, no key material. SHIPS.

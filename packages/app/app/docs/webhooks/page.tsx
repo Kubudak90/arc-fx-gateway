@@ -20,16 +20,54 @@ export default function WebhooksDocs() {
 
       <h2>Signing</h2>
       <p>
-        Every webhook request carries <code>X-Arcora-Signature: &lt;hex&gt;</code> where the value is{" "}
-        <code>HMAC-SHA256(rawBody, secret)</code>. Verify before trusting:
+        Every delivery is dual-signed. Both signature headers carry a <code>sha256=</code> prefix followed by the
+        lowercase hex HMAC — the prefix is part of the header value, so compare against it, do not strip it before
+        you have a constant-time match.
+      </p>
+      <ul>
+        <li>
+          <code>X-Arcora-Signature</code> (legacy) — <code>sha256=HMAC-SHA256(rawBody, secret)</code>.
+        </li>
+        <li>
+          <code>X-Arcora-Signature-V2</code> — <code>sha256=HMAC-SHA256(&quot;&lt;timestamp&gt;.&quot; + rawBody, secret)</code>,
+          paired with <code>X-Arcora-Timestamp</code> (unix seconds). Binding the timestamp into the signed payload
+          gives you replay protection: reject any delivery whose timestamp is outside a tolerance window
+          (we use <strong>±300 seconds</strong>).
+        </li>
+      </ul>
+      <p>
+        <strong>Prefer V2 when both are present.</strong> The legacy header has no timestamp, so a captured legacy
+        delivery can be replayed indefinitely — only V2 closes that. Verify before trusting:
       </p>
       <pre><code>{`import { createHmac, timingSafeEqual } from 'node:crypto';
 
-function verify(rawBody: string, signatureHex: string, secret: string) {
-  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
-  const a = Buffer.from(expected, 'hex');
-  const b = Buffer.from(signatureHex, 'hex');
-  return a.length === b.length && timingSafeEqual(a, b);
+const TOLERANCE_SECONDS = 300; // ±5 min replay window
+
+// Both headers are 'sha256=<hex>'. Compare the whole value in constant time.
+function safeEqual(a: string, b: string) {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+function verifyWebhook(headers: Headers, rawBody: string, secret: string) {
+  const sigV2 = headers.get('x-arcora-signature-v2');
+  const ts    = headers.get('x-arcora-timestamp');
+
+  // Prefer V2: timestamp-bound, replay-protected.
+  if (sigV2 && ts) {
+    const tsNum = Number(ts);
+    if (!Number.isFinite(tsNum) || Math.abs(Date.now() / 1000 - tsNum) > TOLERANCE_SECONDS) {
+      return false; // outside the replay window
+    }
+    const expected = 'sha256=' + createHmac('sha256', secret).update(ts + '.' + rawBody).digest('hex');
+    return safeEqual(expected, sigV2);
+  }
+
+  // Legacy fallback (no replay protection): sha256=HMAC(rawBody).
+  const sig = headers.get('x-arcora-signature') ?? '';
+  const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
+  return safeEqual(expected, sig);
 }`}</code></pre>
       <p>
         Verification deliberately stays out of the SDK — the snippet above is all you need, and it works in any

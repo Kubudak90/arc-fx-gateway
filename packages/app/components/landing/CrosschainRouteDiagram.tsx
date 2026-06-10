@@ -171,10 +171,6 @@ export function CrosschainRouteDiagram() {
           0%   { stroke-dashoffset: 120; }
           100% { stroke-dashoffset: -20; }
         }
-        @keyframes ax-pulse-ring {
-          0%   { r: 38; opacity: 0.6; }
-          100% { r: 70; opacity: 0; }
-        }
       `}</style>
     </div>
   );

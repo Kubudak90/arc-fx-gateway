@@ -108,7 +108,7 @@ export default function CheckoutDemoPage() {
             <div className="card p-5 sm:p-8 min-h-[520px] flex flex-col">
               {step() === "Invoice"  && <StepInvoice merchant={merchant} invoice={invoice} onNext={() => setStepIdx(1)} />}
               {step() === "Wallet"   && <StepWallet  source={source} setSource={setSource} onNext={() => setStepIdx(2)} />}
-              {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} merchantPayout={merchantPayout} quoteSecs={quoteSecs} onPay={() => { setStepIdx(3); settleTimer.current = setTimeout(() => setStepIdx(4), 3200); }} />}
+              {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} merchantPayout={merchantPayout} quoteSecs={quoteSecs} onRefresh={() => setQuoteSecs(90)} onPay={() => { setStepIdx(3); settleTimer.current = setTimeout(() => setStepIdx(4), 3200); }} />}
               {step() === "Pay"      && <StepPaying  source={source} />}
               {step() === "Settled"  && <StepSettled merchant={merchant} invoice={invoice} source={source} sourceAmount={sourceAmount} merchantPayout={merchantPayout} fee={fee} onReset={reset} />}
             </div>
@@ -243,8 +243,8 @@ function StepWallet({ source, setSource, onNext }: {
 }
 
 /* ── Step 3: Quote ───────────────────────────────────────────────────── */
-function StepQuote({ source, sourceAmount, fee, merchantPayout, quoteSecs, onPay }: {
-  source: Source; sourceAmount: number; fee: number; merchantPayout: number; quoteSecs: number; onPay: () => void;
+function StepQuote({ source, sourceAmount, fee, merchantPayout, quoteSecs, onRefresh, onPay }: {
+  source: Source; sourceAmount: number; fee: number; merchantPayout: number; quoteSecs: number; onRefresh: () => void; onPay: () => void;
 }) {
   const expired = quoteSecs <= 0;
   const sameToken = source === "USDC";
@@ -273,7 +273,7 @@ function StepQuote({ source, sourceAmount, fee, merchantPayout, quoteSecs, onPay
         <Row label={`Protocol fee · ${PROTOCOL_FEE_BPS} bps`} value={`$${fee.toFixed(2)} (from merchant)`} muted />
       </div>
 
-      <button onClick={onPay} disabled={expired} className="pill pill--acc mt-auto self-start">
+      <button onClick={expired ? onRefresh : onPay} className="pill pill--acc mt-auto self-start">
         {expired ? "Quote expired — refresh" : `Sign and pay ${sourceAmount.toFixed(4)} ${source}`}
       </button>
     </div>

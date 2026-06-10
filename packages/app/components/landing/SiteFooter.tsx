@@ -55,6 +55,10 @@ export function SiteFooter() {
             <span className="mono text-[11px] tracking-[0.08em]" style={{ color: "var(--fg-3)" }}>
               © 2026 Arcora · Arc testnet
             </span>
+            <span className="flex items-center gap-3">
+              <a href="/terms" className="navlink text-[12px]">Terms</a>
+              <a href="/privacy" className="navlink text-[12px]">Privacy</a>
+            </span>
           </div>
           {COLUMNS.map(col => (
             <div key={col.title} className="flex flex-col gap-3.5">

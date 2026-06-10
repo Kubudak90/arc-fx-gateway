@@ -19,8 +19,6 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
       expiresAt: invoices.expiresAt,
       successUrl: invoices.successUrl,
       cancelUrl: invoices.cancelUrl,
-      paidBy: invoices.paidBy,
-      paidTx: invoices.paidTx,
       payoutToken: invoices.payoutToken,
       metadata: invoices.metadata,
       merchantAddress: merchants.address,
@@ -81,7 +79,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
               amountOut={inv.amountOut}
               payoutTokenAddress={inv.payoutToken}
               payInTokenAddress={inv.payInToken}
-              status={initialStatus as "created" | "paid" | "expired" | "failed"}
+              status={initialStatus}
               expiresAt={inv.expiresAt}
               merchantAddress={inv.merchantAddress}
               metadata={inv.metadata}
@@ -89,7 +87,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
 
             <CheckoutClient
               invoiceId={inv.id}
-              initialStatus={initialStatus as "created" | "paid" | "expired" | "failed"}
+              initialStatus={initialStatus}
               payInTokenAddress={inv.payInToken}
               payoutTokenAddress={inv.payoutToken}
               amountOut={inv.amountOut}

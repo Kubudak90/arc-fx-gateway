@@ -1,6 +1,11 @@
 import { formatCurrency, symbolForAddress, abbreviateAddress } from "@/lib/ui/format";
 import { Coin } from "@/components/ui/Coin";
 import { ExpiryCountdown } from "./ExpiryCountdown";
+import type { invoiceStatus } from "@/lib/db/schema";
+
+/** Full DB `invoice_status` enum (type-only import) — the card must badge
+ *  refunded/claimed/recovered too, not silently treat them as `created`. */
+type InvoiceStatus = (typeof invoiceStatus.enumValues)[number];
 
 interface LineItem {
   name?: string;
@@ -15,7 +20,7 @@ interface InvoiceCardProps {
   amountOut: string;
   payoutTokenAddress: string;
   payInTokenAddress: string;
-  status: "created" | "paid" | "expired" | "failed";
+  status: InvoiceStatus;
   invoiceId?: string;
   expiresAt?: Date;
   merchantAddress?: string;
@@ -58,9 +63,11 @@ export function InvoiceCard({
         <p className="text-[13px] text-[var(--fg-3)] mt-1">
           You&apos;ll pay in <span className="font-semibold text-[var(--fg-1)]">{payInSymbol}</span>
         </p>
-        {status === "paid" && <StatusBadge variant="paid" />}
+        {/* claimed/recovered are custody-escrow settlements — paid, from the payer's view */}
+        {(status === "paid" || status === "claimed" || status === "recovered") && <StatusBadge variant="paid" />}
         {status === "expired" && <StatusBadge variant="expired" />}
         {status === "failed" && <StatusBadge variant="failed" />}
+        {status === "refunded" && <StatusBadge variant="refunded" />}
       </div>
 
       {/* Invoice metadata row */}
@@ -126,7 +133,7 @@ export function InvoiceCard({
   );
 }
 
-function StatusBadge({ variant }: { variant: "paid" | "expired" | "failed" }) {
+function StatusBadge({ variant }: { variant: "paid" | "expired" | "failed" | "refunded" }) {
   if (variant === "paid") {
     return (
       <div className="mt-2">
@@ -152,7 +159,7 @@ function StatusBadge({ variant }: { variant: "paid" | "expired" | "failed" }) {
   }
   return (
     <div className="mt-2">
-      <span className="tagchip tagchip--mut">Expired</span>
+      <span className="tagchip tagchip--mut">{variant === "refunded" ? "Refunded" : "Expired"}</span>
     </div>
   );
 }

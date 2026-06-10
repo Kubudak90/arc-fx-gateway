@@ -100,7 +100,36 @@ function SuccessGlyph() {
   );
 }
 
-export function ExpiredScreen({ cancelUrl, allowedOrigins }: { cancelUrl?: string; allowedOrigins: readonly string[] }) {
+/** Non-success terminal states share this screen; the copy must not claim
+ *  "expired" for invoices that failed or were refunded (review 2026-06-10). */
+export type TerminalVariant = "expired" | "failed" | "refunded";
+
+const TERMINAL_COPY: Record<TerminalVariant, { chip: string; heading: string; body: string }> = {
+  expired: {
+    chip: "Expired",
+    heading: "Invoice expired",
+    body: "Please request a new invoice from the merchant.",
+  },
+  failed: {
+    chip: "Failed",
+    heading: "Payment failed",
+    body: "The payment could not be completed. If funds were taken, they have been returned.",
+  },
+  refunded: {
+    chip: "Refunded",
+    heading: "Invoice refunded",
+    body: "The payment was returned to the payer.",
+  },
+};
+
+export function ExpiredScreen({ variant = "expired", cancelUrl, allowedOrigins }: {
+  variant?: TerminalVariant;
+  cancelUrl?: string;
+  allowedOrigins: readonly string[];
+}) {
+  const copy = TERMINAL_COPY[variant];
+  // Audit H1 (2026-05-05): the return link stays allowlist-gated for every
+  // variant — same isOriginAllowed check, no weakening.
   const safe = isOriginAllowed(cancelUrl, allowedOrigins);
   return (
     <div className="flex flex-col items-center gap-5 py-16 text-center">
@@ -108,11 +137,11 @@ export function ExpiredScreen({ cancelUrl, allowedOrigins }: { cancelUrl?: strin
         <span className="mono text-[20px] text-[var(--fg-3)]">×</span>
       </div>
       <div>
-        <span className="tagchip tagchip--mut mb-3">Expired</span>
+        <span className="tagchip tagchip--mut mb-3">{copy.chip}</span>
         <h2 className={screenHeadingCls}>
-          Invoice expired
+          {copy.heading}
         </h2>
-        <p className="mt-2 text-[14px] text-[var(--fg-2)]">Please request a new invoice from the merchant.</p>
+        <p className="mt-2 text-[14px] text-[var(--fg-2)]">{copy.body}</p>
       </div>
       {safe && cancelUrl && (
         <a href={cancelUrl} className="pill pill--ghost mt-2">Return to merchant</a>

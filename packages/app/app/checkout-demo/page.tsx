@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArcoraLogo } from "@/components/brand/Logo";
 import { Coin } from "@/components/ui/Coin";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -29,8 +29,10 @@ type Step = (typeof STEPS)[number];
 export default function CheckoutDemoPage() {
   const [stepIdx, setStepIdx] = useState(0);
   const [source, setSource]   = useState<Source>("USDC");
-  const [paying, setPaying]   = useState(false);
   const [quoteSecs, setQuoteSecs] = useState(90);
+  // Pay → Settled transition timer. Held in a ref so Reset (and unmount) can
+  // cancel it — otherwise a stale timer yanks a freshly reset demo to Settled.
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const merchant = { name: "Demo Store", desc: "Order #ord_8124 · 2 items" };
   const invoice  = { amount: 49.0, currency: "USD", settle: "USDC" };
@@ -60,9 +62,19 @@ export default function CheckoutDemoPage() {
     if (STEPS[stepIdx] === "Quote") setQuoteSecs(90);
   }, [stepIdx]);
 
+  function clearSettleTimer() {
+    if (settleTimer.current !== null) {
+      clearTimeout(settleTimer.current);
+      settleTimer.current = null;
+    }
+  }
+
+  // Don't leak the pending transition past unmount.
+  useEffect(() => clearSettleTimer, []);
+
   function reset() {
+    clearSettleTimer();
     setStepIdx(0);
-    setPaying(false);
     setQuoteSecs(90);
   }
 
@@ -96,7 +108,7 @@ export default function CheckoutDemoPage() {
             <div className="card p-5 sm:p-8 min-h-[520px] flex flex-col">
               {step() === "Invoice"  && <StepInvoice merchant={merchant} invoice={invoice} onNext={() => setStepIdx(1)} />}
               {step() === "Wallet"   && <StepWallet  source={source} setSource={setSource} onNext={() => setStepIdx(2)} />}
-              {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} merchantPayout={merchantPayout} quoteSecs={quoteSecs} onPay={() => { setPaying(true); setStepIdx(3); setTimeout(() => setStepIdx(4), 3200); }} />}
+              {step() === "Quote"    && <StepQuote   source={source} sourceAmount={sourceAmount} fee={fee} merchantPayout={merchantPayout} quoteSecs={quoteSecs} onPay={() => { setStepIdx(3); settleTimer.current = setTimeout(() => setStepIdx(4), 3200); }} />}
               {step() === "Pay"      && <StepPaying  source={source} />}
               {step() === "Settled"  && <StepSettled merchant={merchant} invoice={invoice} source={source} sourceAmount={sourceAmount} merchantPayout={merchantPayout} fee={fee} onReset={reset} />}
             </div>
@@ -134,7 +146,7 @@ function Stepper({ current }: { current: number }) {
               i === current
                 ? "text-[var(--fg-1)] font-semibold"
                 : i < current
-                ? "text-[var(--sage)]"
+                ? "text-[var(--action)]"
                 : ""
             }
           >
@@ -272,7 +284,7 @@ function StepQuote({ source, sourceAmount, fee, merchantPayout, quoteSecs, onPay
 function StepPaying({ source }: { source: Source }) {
   return (
     <div className="flex flex-col flex-1 justify-center items-center gap-6">
-      <div className="size-14 rounded-full border-4 border-[var(--border)] border-t-[var(--acc)] animate-spin" />
+      <div className="size-14 rounded-full border-4 border-[var(--border)] border-t-[var(--action)] animate-spin" />
       <div className="text-center">
         <p className="eyebrow">Step 4 · Pay</p>
         <h2 className="disp mt-3 text-[26px] font-medium">

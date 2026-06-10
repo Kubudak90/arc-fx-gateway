@@ -12,14 +12,24 @@ import { SuccessScreen, ExpiredScreen } from "@/components/checkout/StatusScreen
 import { MobileWalletQR } from "@/components/checkout/MobileWalletQR";
 import { Smartphone } from "lucide-react";
 import type { Address } from "viem";
+import type { invoiceStatus } from "@/lib/db/schema";
 
 const thirdwebClient = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ?? "",
 });
 
+/** Mirrors the DB `invoice_status` enum (type-only import — drizzle never
+ *  reaches the client bundle). All 7 states, not just the happy-path 4:
+ *  a refunded/claimed/recovered invoice must never render as payable. */
+export type InvoiceStatus = (typeof invoiceStatus.enumValues)[number];
+
+/** Every non-`created` state is terminal for the 3s poll. */
+const TERMINAL_STATUSES: readonly InvoiceStatus[] =
+  ["paid", "expired", "failed", "refunded", "claimed", "recovered"];
+
 interface CheckoutClientProps {
   invoiceId: string;
-  initialStatus: "created" | "paid" | "expired" | "failed";
+  initialStatus: InvoiceStatus;
   payInTokenAddress: string;
   payoutTokenAddress: string;
   amountOut: string;
@@ -57,15 +67,23 @@ export default function CheckoutClient(props: CheckoutClientProps) {
     const t = setInterval(async () => {
       const res = await fetch(`/api/invoices/${props.invoiceId}`);
       const data = await res.json();
-      if (data.status === "paid") setStatus("paid");
-      else if (data.status === "expired") setStatus("expired");
-      else if (data.status === "failed") setStatus("failed");
+      // Any terminal state stops the poll: setStatus re-runs this effect,
+      // which bails out above and clears the interval. Previously only
+      // paid/expired/failed terminated, so refunded/claimed/recovered
+      // invoices polled forever and stayed on the payable screen.
+      if (TERMINAL_STATUSES.includes(data.status)) setStatus(data.status as InvoiceStatus);
     }, 3000);
     return () => clearInterval(t);
   }, [status, props.invoiceId]);
 
-  if (status === "paid") return <SuccessScreen successUrl={props.successUrl} allowedOrigins={props.allowedOrigins} />;
-  if (status === "expired" || status === "failed") return <ExpiredScreen cancelUrl={props.cancelUrl} allowedOrigins={props.allowedOrigins} />;
+  // claimed/recovered are custody-escrow settlements — the payer's view is
+  // the same as paid, so they render the success family.
+  if (status === "paid" || status === "claimed" || status === "recovered") {
+    return <SuccessScreen successUrl={props.successUrl} allowedOrigins={props.allowedOrigins} />;
+  }
+  if (status === "expired" || status === "failed" || status === "refunded") {
+    return <ExpiredScreen variant={status} cancelUrl={props.cancelUrl} allowedOrigins={props.allowedOrigins} />;
+  }
 
   if (showQR) {
     return <MobileWalletQR url={typeof window !== "undefined" ? window.location.href : ""} onBack={() => setShowQR(false)} />;

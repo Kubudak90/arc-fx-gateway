@@ -4,7 +4,7 @@ All notable changes to Arcora are documented here. Format follows [Keep a Change
 
 ## [Unreleased]
 
-Public-beta launch work on `feat/public-beta-launch`. Not yet tagged. The `@arcora/sdk` source carries the AFG-019 security rework below; `@arcora/sdk` and `@arcora/sdk-react` are both prepped at **1.1.0** for the npm publish that ships these client-facing changes.
+Public-beta launch work on `feat/public-beta-launch`. Not yet tagged. The `@arcora/sdk` source carries the AFG-019 security rework below; `@arcora/sdk` and `@arcora/sdk-react` are both prepped at **1.2.0** for the npm publish that ships these client-facing changes.
 
 ### Security
 - **AFG-019 — browser keys can no longer act as server keys.** The docs previously told merchants to embed the privileged `ak_live_` secret key (which creates invoices, spends server-wallet gas, lists escrows, and reads private invoice data) directly in browser / CDN / React code. Introduced a browser-safe **publishable key (`pk_live_…`)**: `POST /api/invoices` now routes by key class — `pk_` may only open a checkout from an allowlisted Origin, `ak_` keeps full capability, unknown prefix is rejected. `lookupMerchantByApiKey` matches `ak_` only, so a browser key can never authorize escrows or private invoice fields. SDK `escrows()` throws `PUBLISHABLE_KEY_FORBIDDEN` for a `pk_` key, and constructing the SDK with a secret key in a browser warns. Migration `0020` adds the publishable-key column (plaintext + prefix index), generated at bootstrap and lazily backfilled for existing merchants. Docs/READMEs/SDK page now show `pk_` in client code with an explicit "secret = server-side only" callout.

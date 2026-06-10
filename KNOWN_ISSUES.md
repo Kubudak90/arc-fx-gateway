@@ -39,7 +39,7 @@ If you hit something that **isn't** listed here, that's a bug — please report 
 |---|---|
 | Gateway `ArcFXGateway` (version-neutral) | live, canonical — `packages/contracts/src/ArcFXGateway.sol` |
 | Pre-retirement deploys (≤ v1.1) | retired 2026-05-20 (testnet wiped); kept in git history only, no `legacy/` dir |
-| `@arcora/sdk` + `@arcora/sdk-react` | 1.0.0 published on npm; 1.1.0 prepared (version-synced), publish pending (2FA user step) |
+| `@arcora/sdk` + `@arcora/sdk-react` | 1.0.0 published on npm; 1.2.0 prepared (version-synced, ships the publishable-key rework), publish pending (2FA user step) |
 | Compliance hooks | Phase 0 LIVE (Noop default) — Plan 5 |
 | Audit prep | Layers 1+2 LIVE (zero-budget path) — Plan 7 |
 | KYB | spec'd two-track (Manual + Persona), not built — Plan 8 |

@@ -4,7 +4,9 @@ import { useId } from "react";
 /**
  * Arcora "A" symbol — current brand mark. Matches the canonical SVG at
  * `public/brand/arcora-logo.svg` (June 2026 edit: no settlement dot).
- * Gradient ids are scoped via useId() so multiple instances don't collide.
+ * The mark is 4 paths: blue A + white counter triangle + teal swoosh +
+ * white "smile arc" stroke. Gradient ids are scoped via useId() so multiple
+ * instances don't collide.
  */
 export function ArcoraSymbol({
   size = 32, title = "Arcorapay", ...rest
@@ -51,6 +53,17 @@ export function ArcoraSymbol({
         <path
           d="M63.147 72.276 C97.633 25.096 141.819 0 196.781 0 C231.268 0 258.21 8.031 285.153 24.092 C294.852 30.115 297.008 43.165 289.464 51.195 L262.521 81.31 C256.055 88.337 244.2 90.345 235.579 85.326 C220.491 77.295 202.17 72.276 180.616 72.276 C138.586 72.276 101.944 90.345 73.924 126.483 C67.457 134.513 54.525 136.521 45.903 130.498 L8.184 104.398 C-1.516 97.372 -2.593 84.322 4.951 75.287 C21.116 55.211 38.359 37.142 57.758 22.084 C68.535 14.054 83.623 21.08 83.623 34.13 L83.623 53.203 C83.623 60.23 79.312 67.257 73.924 72.276 L63.147 72.276 Z"
           fill={`url(#${gTeal})`}
+        />
+      </g>
+      <g transform="translate(128 199)">
+        <path
+          d="M-4.943 67.779 C-7.274 70.508 -6.951 74.611 -4.221 76.943 C-1.492 79.274 2.611 78.951 4.943 76.221 L0 72 L-4.943 67.779 Z M151.481 0.483 L152.139 -5.983 L152.053 -5.992 L151.966 -5.999 L151.481 0.483 Z M222.135 34.316 C225.022 36.451 229.092 35.841 231.226 32.955 C233.361 30.068 232.751 25.998 229.865 23.864 L226 29.09 L222.135 34.316 Z M0 72 L4.943 76.221 C47.901 25.924 96.099 2.863 150.997 6.965 L151.481 0.483 L151.966 -5.999 C92.031 -10.478 40.056 15.092 -4.943 67.779 L0 72 Z M151.481 0.483 L150.823 6.95 C177.809 9.697 199.902 17.875 222.135 34.316 L226 29.09 L229.865 23.864 C205.677 5.977 181.348 -3.009 152.139 -5.983 L151.481 0.483 Z"
+          fill="none"
+          stroke="#ffffff"
+          strokeWidth="13"
+          strokeLinecap="round"
+          strokeLinejoin="miter"
+          fillRule="nonzero"
         />
       </g>
     </svg>

@@ -78,10 +78,11 @@ pnpm --filter @arcora/sdk-react publish --no-git-checks
 
 ## 7. Deploy hosted app
 
-GitHub is **not** connected to the Vercel project; the deploy is manual:
+GitHub is **not** connected to the Vercel project; the deploy is manual. The
+project's Root Directory setting is `packages/app`, so run from the repo root
+(running inside `packages/app` makes the CLI look for `packages/app/packages/app`):
 
 ```bash
-cd packages/app
 vercel --prod --yes
 ```
 

@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { securityHeaders } from "./headers";
+
+const savedNodeEnv = process.env.NODE_ENV;
+
+afterEach(() => {
+  if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = savedNodeEnv;
+});
 
 describe("securityHeaders (M14)", () => {
   it("returns an array of header objects", () => {
@@ -43,6 +50,32 @@ describe("securityHeaders (M14)", () => {
     const h = headers.find((x) => x.key === "X-Content-Type-Options");
     expect(h).toBeDefined();
     expect(h!.value).toBe("nosniff");
+  });
+
+  it("CSP script-src omits 'unsafe-eval' in production", () => {
+    process.env.NODE_ENV = "production";
+    const headers = securityHeaders();
+    const h = headers.find((x) => x.key === "Content-Security-Policy");
+    expect(h).toBeDefined();
+    const scriptSrc = h!.value
+      .split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("script-src"));
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).not.toContain("'unsafe-eval'");
+  });
+
+  it("CSP script-src includes 'unsafe-eval' in development", () => {
+    process.env.NODE_ENV = "development";
+    const headers = securityHeaders();
+    const h = headers.find((x) => x.key === "Content-Security-Policy");
+    expect(h).toBeDefined();
+    const scriptSrc = h!.value
+      .split(";")
+      .map((d) => d.trim())
+      .find((d) => d.startsWith("script-src"));
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).toContain("'unsafe-eval'");
   });
 
   it("does not contain duplicate keys", () => {

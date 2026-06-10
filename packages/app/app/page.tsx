@@ -180,11 +180,11 @@ export default function Home() {
                 <Link href="/checkout-demo" className="pill pill--lg pill--ghost">Try the checkout</Link>
                 <a href="https://github.com/Kubudak90/arc-fx-gateway" className="pill pill--lg pill--ghost hide-sm">View on GitHub</a>
               </div>
-              {/* Honest trust line — real test count, no fabricated logos */}
+              {/* Honest trust line — test count intentionally rounded down (suite currently runs 431), no fabricated logos */}
               <div className="mono flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] tracking-[0.04em]" style={{ color: "var(--fg-3)" }}>
                 <span className="inline-flex items-center gap-2">
                   <span className="dot dot--live" />
-                  <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">338 tests passing</a>
+                  <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">400+ tests passing</a>
                 </span>
                 <span>
                   · <a href="https://github.com/Kubudak90/arc-fx-gateway/blob/HEAD/SECURITY.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">audited</a>
@@ -213,7 +213,7 @@ export default function Home() {
         >
           <div className="marquee mono text-[12px] uppercase tracking-[0.1em]" style={{ color: "var(--fg-3)" }}>
             {[...TRUST_ITEMS, ...TRUST_ITEMS].map((t, i) => (
-              <span key={i} className="inline-flex items-center gap-3 whitespace-nowrap">
+              <span key={i} aria-hidden={i >= TRUST_ITEMS.length || undefined} className="inline-flex items-center gap-3 whitespace-nowrap">
                 <span className="dot" style={{ background: "var(--sage)" }} />
                 {t}
               </span>

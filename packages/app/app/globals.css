@@ -363,6 +363,9 @@ h2.disp { font-weight: 400; letter-spacing: -0.025em; line-height: 1.06; }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1 !important; transform: none !important; }
   html { scroll-behavior: auto; }
+  .marquee { animation: none; }
+  .dot--live { animation: none; }
+  [class*="steps-rail"] i.cur::after { animation: none; transform: none; }
 }
 
 /* Token coins */

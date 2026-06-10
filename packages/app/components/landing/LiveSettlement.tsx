@@ -57,6 +57,7 @@ export function LiveSettlement() {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     // Phase progression: quote(1.4s) → pay(1.4s) → settled(2.2s) → next scenario
     const sched: Array<[Phase, number]> = [
       ["quote",   1400],

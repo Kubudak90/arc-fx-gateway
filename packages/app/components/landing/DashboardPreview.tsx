@@ -53,11 +53,11 @@ export function DashboardPreview() {
                 ▲ +24.1% vs prev period
               </div>
             </div>
-            <div className="seg shrink-0">
+            <div className="seg shrink-0" aria-hidden="true">
               {["1d", "7d", "30d", "All"].map((p, i) => (
-                <button key={p} type="button" className={i === 2 ? "on" : ""} aria-pressed={i === 2}>
+                <span key={p} className={i === 2 ? "on" : ""}>
                   {p}
-                </button>
+                </span>
               ))}
             </div>
           </div>

@@ -29,6 +29,7 @@ export function CrosschainRouteDiagram() {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const id = setInterval(() => {
       setActiveStep(s => (s + 1) % SOURCES.length);
       setTick(t => t + 1);

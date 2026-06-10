@@ -1,7 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useMemo, useState } from "react";
 import { Copy, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -71,71 +69,94 @@ export function ApiKeyCard({ hasMerchant, publishableKey, onBootstrap }: { hasMe
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>API keys</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <section className="card p-[22px]">
+      <h3 className="text-base font-semibold m-0">API keys</h3>
+      <p className="lead text-[13px] mt-1 mb-4">
+        Use your publishable key in the browser SDK and your secret key on the server.
+      </p>
+      <div className="space-y-4">
         {publishableKey && (
-          <div className="space-y-2 pb-4 border-b border-arcora-border">
+          <div className="space-y-2 pb-4 border-b border-[var(--border)]">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Publishable key</span>
-              <span className="text-[11px] uppercase tracking-wide text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5">Browser-safe</span>
+              <span className="eyebrow">Publishable key</span>
+              <span className="tagchip tagchip--ok">Browser-safe</span>
             </div>
-            <code className="block p-3 bg-arcora-gray rounded font-mono text-xs break-all">{publishableKey}</code>
-            <p className="text-xs text-muted-foreground">
-              Safe to embed in client-side code (storefront, SDK <code>&lt;CheckoutButton&gt;</code>, CDN script). Checkouts are accepted from your allowed origins.
+            <div className="field flex items-center gap-2.5 px-3 py-2.5">
+              <code className="mono text-xs flex-1 break-all text-[var(--fg-2)]">{publishableKey}</code>
+              <button
+                type="button"
+                onClick={copyPublishable}
+                className="iconbtn"
+                style={{ width: 32, height: 32 }}
+                aria-label="Copy publishable key"
+                title="Copy publishable key"
+              >
+                <Copy className="size-[15px]" />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--fg-3)]">
+              Safe to embed in client-side code (storefront, SDK <code className="mono">&lt;CheckoutButton&gt;</code>, CDN script). Checkouts are accepted from your allowed origins.
             </p>
-            <Button onClick={copyPublishable} size="sm" variant="outline"><Copy className="size-4 mr-2" />Copy publishable key</Button>
           </div>
         )}
-        <div className="text-sm font-medium">Secret key</div>
-        <p className="rounded border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+        <div className="eyebrow">Secret key</div>
+        <p className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--warning)_35%,transparent)] bg-[var(--warning-bg)] p-2.5 text-xs text-[var(--fg-1)]">
           <strong>Server-side only.</strong> Never put your secret key in browser code — anyone could read it and create invoices or access your data. Use the publishable key above in client code.
         </p>
         {revealedKey ? (
           <>
-            <code className="block p-3 bg-arcora-gray rounded font-mono text-xs break-all">{revealedKey}</code>
-            <p className="text-sm text-muted-foreground">
+            <div className="field flex items-center gap-2.5 px-3 py-2.5">
+              <code className="mono text-xs flex-1 break-all text-[var(--fg-2)]">{revealedKey}</code>
+              <button
+                type="button"
+                onClick={copy}
+                className="iconbtn"
+                style={{ width: 32, height: 32 }}
+                aria-label="Copy API key"
+                title="Copy API key"
+              >
+                <Copy className="size-[15px]" />
+              </button>
+            </div>
+            <p className="text-sm text-[var(--fg-2)]">
               Save this now — you won&apos;t be able to see it again. Use the rotate button to generate a new one.
             </p>
             <div className="flex gap-2">
-              <Button onClick={copy} size="sm" variant="outline"><Copy className="size-4 mr-2" />Copy</Button>
-              <Button onClick={() => setRevealedKey(null)} size="sm" variant="ghost">Done</Button>
+              <button type="button" onClick={() => setRevealedKey(null)} className="pill pill--ghost pill--sm">Done</button>
             </div>
           </>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-[var(--fg-2)]">
               {hasMerchant ? "Rotate your API key. The previous key will stop working immediately." : "Generate your first API key to start creating invoices programmatically."}
             </p>
             {!hasMerchant && (
               <div className="space-y-2">
-                <label htmlFor="allowed-origins" className="text-sm font-medium">Allowed origins (one per line)</label>
+                <label htmlFor="allowed-origins" className="eyebrow">Allowed origins (one per line)</label>
                 <textarea
                   id="allowed-origins"
                   value={originsRaw}
                   onChange={(e) => setOriginsRaw(e.target.value)}
                   placeholder={"https://your-shop.com\nhttps://staging.your-shop.com"}
                   rows={3}
-                  className="w-full rounded border border-input bg-background px-3 py-2 text-sm font-mono"
+                  className="field mono w-full px-3 py-2 text-[12.5px] text-[var(--fg-1)] outline-none focus:border-[var(--focus-ring)]"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-[var(--fg-3)]">
                   URLs in this list can receive your customers after payment success. We accept https everywhere; http is allowed only for localhost during development.
                 </p>
                 {parsed.bad.length > 0 && (
-                  <p className="text-xs text-red-600">
+                  <p className="text-xs text-[var(--danger)]">
                     Skipped {parsed.bad.length} invalid line{parsed.bad.length === 1 ? "" : "s"} (use a full https URL).
                   </p>
                 )}
               </div>
             )}
-            <Button onClick={generate} disabled={busy || !canBootstrap}>
-              {hasMerchant ? <><RefreshCw className="size-4 mr-2" />Rotate key</> : "Generate API key"}
-            </Button>
+            <button type="button" onClick={generate} disabled={busy || !canBootstrap} className="pill pill--acc pill--sm">
+              {hasMerchant ? <><RefreshCw className="size-3.5" />Rotate key</> : "Generate API key"}
+            </button>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

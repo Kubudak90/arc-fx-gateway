@@ -1,7 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { useAccount, useWriteContract, useReadContract, usePublicClient } from "wagmi";
 import { parseAbi, type Address } from "viem";
 import { useState } from "react";
@@ -90,40 +88,52 @@ export function DelegateAuthCard({ serverWalletAddress }: { serverWalletAddress:
   }
 
   return (
-    <Card>
-      <CardHeader><CardTitle>On-chain authorization</CardTitle></CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <div className="flex items-center justify-between">
-          <span>Merchant registered on-chain</span>
-          <span className={isRegistered ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
+    <section className="card p-[22px]">
+      <h3 className="text-base font-semibold m-0">Delegate authorization</h3>
+      <p className="lead text-[13px] mt-1 mb-4">
+        Authorize Arcora&apos;s server wallet to settle invoices on your behalf — required before going live.
+      </p>
+      <div className="space-y-4 text-sm">
+        <div className="field flex items-center justify-between gap-3 px-3.5 py-3">
+          <span className="text-[13px] text-[var(--fg-2)]">Merchant registered on-chain</span>
+          <span className={isRegistered ? "tagchip tagchip--ok" : "tagchip tagchip--mut"}>
+            {isRegistered && <span className="dot dot--live" />}
             {isRegistered ? "Yes" : "Not yet"}
           </span>
         </div>
         {!isRegistered && (
-          <Button onClick={register} disabled={busy === "register"}>
+          <button type="button" onClick={register} disabled={busy === "register"} className="pill pill--acc pill--sm">
             {busy === "register" ? "Confirming…" : "Register on-chain"}
-          </Button>
+          </button>
         )}
         {isRegistered && (
           <>
-            <div className="flex items-center justify-between">
-              <span>Server delegate authorized (CREATE_INVOICE)</span>
-              <span className={isAuthorized ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"}>
-                {isAuthorized ? "Yes" : "Not yet"}
+            <div className="field flex items-center justify-between gap-3 px-3.5 py-3">
+              <div>
+                <div className="text-[13px] text-[var(--fg-2)]">Server delegate authorized</div>
+                {serverWalletAddress && (
+                  <div className="mono text-[10.5px] text-[var(--fg-3)] mt-0.5">
+                    {serverWalletAddress.slice(0, 8)}…{serverWalletAddress.slice(-5)} · CREATE_INVOICE
+                  </div>
+                )}
+              </div>
+              <span className={isAuthorized ? "tagchip tagchip--ok" : "tagchip tagchip--mut"}>
+                {isAuthorized && <span className="dot dot--live" />}
+                {isAuthorized ? "authorized" : "Not yet"}
               </span>
             </div>
-            <p className="text-muted-foreground">
+            <p className="text-[13px] text-[var(--fg-3)]">
               Authorizing the server delegate lets us submit invoices on your behalf.
               You retain full control — revoke any time.
             </p>
             {!isAuthorized && (
-              <Button onClick={authorize} disabled={busy === "authorize" || !serverWalletAddress}>
+              <button type="button" onClick={authorize} disabled={busy === "authorize" || !serverWalletAddress} className="pill pill--acc pill--sm">
                 {busy === "authorize" ? "Confirming…" : "Authorize delegate"}
-              </Button>
+              </button>
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

@@ -1,8 +1,5 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -54,32 +51,37 @@ export function WebhookSettingsCard({ initialUrl }: { initialUrl: string | null 
   }
 
   return (
-    <Card>
-      <CardHeader><CardTitle>Webhooks</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
+    <section className="card p-[22px]">
+      <h3 className="text-base font-semibold m-0">Webhook endpoint</h3>
+      <p className="lead text-[13px] mt-1 mb-4">
+        We POST signed <code className="mono text-xs">invoice.paid</code> / <code className="mono text-xs">invoice.refunded</code> events here.
+      </p>
+      <div className="space-y-4">
         <div>
-          <label className="text-sm font-medium">URL</label>
-          <Input
+          <label htmlFor="webhook-url" className="eyebrow mb-2 block">URL</label>
+          <input
+            id="webhook-url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://your-app.com/webhooks/arcora"
             aria-invalid={urlErr ? true : undefined}
+            className="field mono w-full px-3 py-2.5 text-[12.5px] text-[var(--fg-1)] outline-none focus:border-[var(--focus-ring)]"
           />
-          {urlErr && <p className="mt-1 text-xs text-red-600">{urlErr}</p>}
+          {urlErr && <p className="mt-1 text-xs text-[var(--danger)]">{urlErr}</p>}
         </div>
         <div className="flex gap-2">
-          <Button onClick={save} disabled={busy || !!urlErr}>Save</Button>
-          <Button onClick={rotateSecret} variant="outline" disabled={busy}>Rotate signing secret</Button>
+          <button type="button" onClick={save} disabled={busy || !!urlErr} className="pill pill--acc pill--sm">Save</button>
+          <button type="button" onClick={rotateSecret} disabled={busy} className="pill pill--ghost pill--sm">Rotate signing secret</button>
         </div>
         {revealedSecret && (
           <div className="space-y-2">
-            <code className="block p-3 bg-arcora-gray rounded font-mono text-xs break-all">{revealedSecret}</code>
-            <p className="text-xs text-muted-foreground">
-              Verify webhooks: <code>X-Arcora-Signature</code> = sha256=hex(HMAC-SHA256(body, secret)).
+            <code className="field mono block p-3 text-xs break-all text-[var(--fg-2)]">{revealedSecret}</code>
+            <p className="text-xs text-[var(--fg-3)]">
+              Verify webhooks: <code className="mono">X-Arcora-Signature</code> = sha256=hex(HMAC-SHA256(body, secret)).
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

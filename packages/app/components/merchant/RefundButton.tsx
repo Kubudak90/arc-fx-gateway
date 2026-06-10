@@ -100,7 +100,7 @@ export function RefundButton({ invoiceId, payoutToken: _payoutToken, gatewayAddr
       title={windowElapsed
         ? "7-day window elapsed — anyone can now claim this escrow; a refund only succeeds if it lands before a claim."
         : undefined}
-      className="text-arcora-link hover:bg-arcora-gray"
+      className="text-[var(--action)] text-[12px] hover:bg-[color-mix(in_oklch,var(--fg-1)_6%,transparent)]"
     >
       {label[state]}
     </Button>

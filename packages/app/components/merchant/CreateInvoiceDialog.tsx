@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 interface Created { invoiceId: string; url: string; }
 
-export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | null; onCreated: () => void }) {
+export function CreateInvoiceDialog({ apiKey, onCreated, fullWidth }: { apiKey: string | null; onCreated: () => void; fullWidth?: boolean }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("49.99");
   const [payIn, setPayIn] = useState<"USDC" | "EURC">("EURC");
@@ -126,7 +126,7 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-full bg-arcora-slate text-white px-4 py-2 text-sm font-semibold shadow-sm hover:bg-arcora-blue transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-arcora-blue"
+        className={fullWidth ? "pill pill--acc w-full" : "pill pill--acc pill--sm"}
       >
         <Plus className="size-4" /> Create invoice
       </button>
@@ -141,8 +141,8 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
               Send this link to your customer — anyone with the URL can pay.
             </p>
             <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Checkout link</Label>
-              <code className="block p-3 bg-arcora-gray rounded font-mono text-xs break-all">
+              <Label className="eyebrow">Checkout link</Label>
+              <code className="field mono block p-3 text-xs break-all">
                 {created.url}
               </code>
             </div>
@@ -158,7 +158,7 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
               href={created.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-arcora-link hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs text-[var(--action)] hover:underline"
             >
               <ExternalLink className="size-3.5" /> Open checkout in new tab
             </a>
@@ -182,7 +182,7 @@ export function CreateInvoiceDialog({ apiKey, onCreated }: { apiKey: string | nu
                 aria-invalid={parsedAmount.error ? true : undefined}
               />
               {parsedAmount.error && amount.trim() !== "" && (
-                <p className="text-xs text-red-600">{parsedAmount.error}</p>
+                <p className="text-xs text-[var(--danger)]">{parsedAmount.error}</p>
               )}
             </div>
             <div className="space-y-2">

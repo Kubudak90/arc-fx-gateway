@@ -38,35 +38,45 @@ export default function SettingsPage() {
   useEffect(() => { void refresh(); }, []);
 
   return (
-    <main className="px-6 py-10 max-w-3xl mx-auto space-y-6">
-      <h1 className="font-[family-name:var(--font-display)] text-[36px]">Settings</h1>
+    <main className="px-6 md:px-10 py-8 md:py-10 pb-20 max-w-[760px]">
+      {/* Page header */}
+      <div className="border-b border-[var(--border)] pb-[18px] mb-[26px]">
+        <h1 className="disp text-[30px] font-medium m-0">Settings</h1>
+        <div className="mono text-[11px] text-[var(--fg-3)] mt-2 tracking-[.04em]">
+          API keys · payout · webhooks · delegate auth
+        </div>
+      </div>
       {fetchError && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--warning)_40%,transparent)] bg-[var(--warning-bg)] p-4 text-sm text-[var(--fg-1)] mb-[18px]">
           <div className="font-semibold mb-1">Couldn&apos;t load your merchant profile</div>
           {fetchError === "auth_expired"
-            ? <>Your session has expired. <a href="/m/login" className="underline">Sign in again</a>.</>
+            ? <>Your session has expired. <a href="/m/login" className="text-[var(--action)] underline">Sign in again</a>.</>
             : <>Network blip — retry, or check your connection.</>}
           {fetchError !== "auth_expired" && (
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              className="mt-3 inline-flex px-3 py-1.5 rounded border border-amber-400 bg-amber-100 hover:bg-amber-200 font-semibold text-xs"
-            >
-              Retry
-            </button>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="pill pill--ghost pill--sm"
+              >
+                Retry
+              </button>
+            </div>
           )}
         </div>
       )}
-      <ApiKeyCard hasMerchant={!!merchant} publishableKey={merchant?.publishableKey} onBootstrap={refresh} />
-      {merchant && (
-        <PayoutTokenCard
-          currentPayoutToken={merchant.payoutToken}
-          onUpdated={refresh}
-        />
-      )}
-      {merchant && <AllowedOriginsCard initialOrigins={merchant.allowedOrigins ?? []} />}
-      {merchant && <WebhookSettingsCard initialUrl={merchant.webhookUrl} />}
-      <DelegateAuthCard serverWalletAddress={serverWallet} />
+      <div className="flex flex-col gap-[18px]">
+        <ApiKeyCard hasMerchant={!!merchant} publishableKey={merchant?.publishableKey} onBootstrap={refresh} />
+        {merchant && (
+          <PayoutTokenCard
+            currentPayoutToken={merchant.payoutToken}
+            onUpdated={refresh}
+          />
+        )}
+        {merchant && <AllowedOriginsCard initialOrigins={merchant.allowedOrigins ?? []} />}
+        {merchant && <WebhookSettingsCard initialUrl={merchant.webhookUrl} />}
+        <DelegateAuthCard serverWalletAddress={serverWallet} />
+      </div>
     </main>
   );
 }

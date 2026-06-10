@@ -44,7 +44,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <main className="px-6 md:px-10 py-10 max-w-6xl mx-auto">
-        <div className="h-8 w-40 rounded bg-arcora-gray animate-pulse" />
+        <div className="h-8 w-40 rounded bg-[var(--surface-3)] animate-pulse" />
       </main>
     );
   }
@@ -52,20 +52,22 @@ export default function DashboardPage() {
   if (fetchError) {
     return (
       <main className="px-6 md:px-10 py-10 max-w-6xl mx-auto space-y-6">
-        <h1 className="font-[family-name:var(--font-display)] text-[36px]">Dashboard</h1>
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <h1 className="disp text-[30px] font-medium">Overview</h1>
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--warning)_40%,transparent)] bg-[var(--warning-bg)] p-4 text-sm text-[var(--fg-1)]">
           <div className="font-semibold mb-1">Couldn&apos;t load your dashboard</div>
           {fetchError === "auth_expired"
-            ? <>Your session has expired. <a href="/m/login" className="underline">Sign in again</a>.</>
+            ? <>Your session has expired. <a href="/m/login" className="text-[var(--action)] underline">Sign in again</a>.</>
             : <>This is usually a transient network blip — retry, or check your connection.</>}
           {fetchError !== "auth_expired" && (
-            <button
-              type="button"
-              onClick={() => { setLoading(true); void refresh(); }}
-              className="mt-3 inline-flex px-3 py-1.5 rounded border border-amber-400 bg-amber-100 hover:bg-amber-200 font-semibold text-xs"
-            >
-              Retry
-            </button>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => { setLoading(true); void refresh(); }}
+                className="pill pill--ghost pill--sm"
+              >
+                Retry
+              </button>
+            </div>
           )}
         </div>
       </main>
@@ -75,10 +77,10 @@ export default function DashboardPage() {
   if (!data.merchant) {
     return (
       <main className="px-6 md:px-10 py-10 max-w-6xl mx-auto space-y-6">
-        <h1 className="font-[family-name:var(--font-display)] text-[36px]">Welcome</h1>
-        <p className="text-muted-foreground">
+        <h1 className="disp text-[30px] font-medium">Welcome</h1>
+        <p className="lead text-sm">
           You&apos;re signed in but no merchant profile yet — finish onboarding in{" "}
-          <a href="/m/settings" className="text-arcora-link underline">Settings</a>.
+          <a href="/m/settings" className="text-[var(--action)] underline">Settings</a>.
         </p>
       </main>
     );
@@ -91,7 +93,7 @@ export default function DashboardPage() {
     <main className="px-6 md:px-10 py-8 md:py-10 pb-20 max-w-[1240px]">
       <Header range={range} setRange={setRange} payoutSymbol={payoutSymbol} />
 
-      <div className="mb-6">
+      <div className="mb-[18px]">
         <MerchantActivationCard
           payoutAddress={data.merchant.address}
           payoutToken={data.merchant.payoutToken}
@@ -100,17 +102,17 @@ export default function DashboardPage() {
 
       <KpiGrid invoices={data.invoices} range={range} fiatSign={fiatSign} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 mb-6">
+      <div className="m-2col grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 my-4 mb-[18px]">
         <VolumeChart invoices={data.invoices} range={range} fiatSign={fiatSign} payoutSymbol={payoutSymbol} />
         <NewInvoiceCard onCreated={refresh} />
       </div>
 
-      <section className="glass overflow-hidden">
-        <div className="px-6 py-4 flex items-center justify-between border-b border-arcora-border">
+      <section className="card overflow-hidden">
+        <div className="px-5 py-4 flex items-center justify-between border-b border-[var(--border)]">
           <span className="eyebrow">Recent payments</span>
           <CreateInvoiceDialog apiKey={null} onCreated={refresh} />
         </div>
-        <div className="px-2">
+        <div className="overflow-x-auto">
           <InvoiceTable
             invoices={data.invoices}
             payoutToken={data.merchant.payoutToken}
@@ -136,32 +138,23 @@ function Header({ range, setRange, payoutSymbol }: { range: Range; setRange: (r:
       : `${fmt(new Date(today.getTime() - daysBack * 86400_000))} – ${fmt(today)}, ${today.getFullYear()}`;
 
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-7">
+    <div className="flex flex-wrap items-end justify-between gap-5 border-b border-[var(--border)] pb-[18px] mb-[26px]">
       <div>
-        <h1 className="font-[family-name:var(--font-display)] text-[30px] tracking-tight m-0 leading-none">
-          Overview
-        </h1>
-        <span className="text-arcora-muted-fg text-[13px]">
-          {periodLabel} · settling in {payoutSymbol}
-        </span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex border border-arcora-border rounded-lg p-0.5 bg-white">
-          {RANGES.map(p => (
-            <button
-              key={p}
-              onClick={() => setRange(p)}
-              className={[
-                "mono px-2.5 py-1 text-[11.5px] rounded-md transition-colors",
-                range === p
-                  ? "bg-arcora-slate text-white"
-                  : "text-arcora-deep hover:bg-arcora-gray/60",
-              ].join(" ")}
-            >
-              {p}
-            </button>
-          ))}
+        <h1 className="disp text-[30px] font-medium m-0">Overview</h1>
+        <div className="mono text-[11px] text-[var(--fg-3)] mt-2 tracking-[.04em]">
+          {periodLabel} · settling in {payoutSymbol} · merchant of record
         </div>
+      </div>
+      <div className="seg">
+        {RANGES.map(p => (
+          <button
+            key={p}
+            onClick={() => setRange(p)}
+            className={range === p ? "on" : ""}
+          >
+            {p}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -204,11 +197,11 @@ function KpiGrid({ invoices, range, fiatSign }: { invoices: InvoiceRow[]; range:
   }, [invoices, range, fiatSign]);
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+    <div className="m-kpis">
       {kpis.map(k => (
-        <div key={k.l} className="glass px-5 py-5">
+        <div key={k.l} className="card lift p-[18px]">
           <span className="eyebrow">{k.l}</span>
-          <div className="plate text-[28px] mt-2 font-medium tracking-tight text-arcora-slate leading-none">
+          <div className="mono text-[26px] font-medium tracking-[-0.02em] mt-2 leading-none">
             {k.v}
           </div>
         </div>
@@ -259,35 +252,35 @@ function VolumeChart({
     : "";
 
   return (
-    <div className="glass p-6">
-      <div className="flex justify-between items-baseline mb-4">
+    <div className="card p-6">
+      <div className="flex justify-between items-baseline mb-2">
         <div>
-          <span className="eyebrow">Volume</span>
-          <div className="plate text-[22px] mt-1 font-medium text-arcora-slate">
+          <span className="eyebrow">Volume · {range}</span>
+          <div className="mono text-[22px] mt-1 font-medium">
             {fiatSign}
             {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
-        <div className="flex items-center gap-2 text-[12px] text-arcora-deep">
-          <span className="w-2 h-2 rounded-sm bg-arcora-blue" />
+        <span className="mono inline-flex items-center gap-[7px] text-[12px] text-[var(--fg-3)]">
+          <span className="w-2 h-2 rounded-[2px] bg-[var(--acc)]" />
           {payoutSymbol}
-        </div>
+        </span>
       </div>
       {total === 0 ? (
-        <div className="h-[220px] flex items-center justify-center text-arcora-muted-fg text-sm">
+        <div className="h-[220px] flex items-center justify-center text-[var(--fg-3)] text-sm">
           No paid invoices in this range yet.
         </div>
       ) : (
         <svg
           viewBox={`0 0 ${W} ${H}`}
           preserveAspectRatio="none"
-          className="w-full h-[220px]"
+          className="w-full h-[220px] overflow-visible"
           aria-label={`${payoutSymbol} volume over the last ${days} days`}
         >
           <defs>
             <linearGradient id="arcora-area" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--acc)" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="var(--acc)" stopOpacity="0" />
             </linearGradient>
           </defs>
           {[1, 2, 3].map(i => (
@@ -297,7 +290,7 @@ function VolumeChart({
               y1={(H / 4) * i}
               x2={W}
               y2={(H / 4) * i}
-              stroke="var(--line)"
+              stroke="var(--border)"
               strokeWidth="0.5"
             />
           ))}
@@ -305,7 +298,7 @@ function VolumeChart({
           <path
             d={`M ${linePts}`}
             fill="none"
-            stroke="var(--accent)"
+            stroke="var(--acc)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -313,7 +306,7 @@ function VolumeChart({
           {(() => {
             const last = points[points.length - 1] ?? 0;
             return days > 1 && last > 0 ? (
-              <circle cx={W} cy={yAt(last)} r="4" fill="var(--accent)" />
+              <circle cx={W} cy={yAt(last)} r="4" fill="var(--acc)" />
             ) : null;
           })()}
         </svg>
@@ -334,13 +327,13 @@ function daysSinceFirst(invoices: InvoiceRow[]): number {
 /* ---------- Right-rail card: quick action ---------- */
 function NewInvoiceCard({ onCreated }: { onCreated: () => void }) {
   return (
-    <div className="glass p-6 flex flex-col">
+    <div className="card p-6 flex flex-col">
       <span className="eyebrow">Quick actions</span>
-      <p className="text-[13px] text-arcora-deep mt-2 leading-snug">
+      <p className="lead text-[13px] mt-2">
         Create an invoice and share the checkout link or QR with your customer.
       </p>
       <div className="mt-auto pt-4">
-        <CreateInvoiceDialog apiKey={null} onCreated={onCreated} />
+        <CreateInvoiceDialog apiKey={null} onCreated={onCreated} fullWidth />
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTheme } from "next-themes";
 import Link from "next/link";
 import { formatCurrency, formatRelativeTime, symbolForAddress, abbreviateAddress } from "@/lib/ui/format";
 import { ClaimAllButton } from "@/components/treasury/ClaimAllButton";
@@ -95,29 +94,31 @@ export default function TreasuryPage() {
 
   if (loading) {
     return (
-      <main className="px-5 py-6 max-w-6xl mx-auto">
-        <div className="h-6 w-32 rounded bg-[var(--line)] animate-pulse" />
+      <main className="px-6 md:px-10 py-8 md:py-10 max-w-6xl">
+        <div className="h-6 w-32 rounded bg-[var(--surface-3)] animate-pulse" />
       </main>
     );
   }
 
   if (fetchError) {
     return (
-      <main className="px-5 py-6 max-w-6xl mx-auto space-y-5">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-[var(--ink)]">Treasury</h1>
-        <div className="border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-900 dark:text-amber-300">
+      <main className="px-6 md:px-10 py-8 md:py-10 max-w-6xl space-y-5">
+        <h1 className="disp text-[30px] font-medium">Treasury</h1>
+        <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--warning)_40%,transparent)] bg-[var(--warning-bg)] p-4 text-sm text-[var(--fg-1)]">
           <div className="font-semibold mb-1">Couldn&apos;t load treasury</div>
           {fetchError === "auth_expired"
-            ? <>Your session has expired. <a href="/m/login" className="underline">Sign in again</a>.</>
+            ? <>Your session has expired. <a href="/m/login" className="text-[var(--action)] underline">Sign in again</a>.</>
             : <>Network blip — retry, or check your connection.</>}
           {fetchError !== "auth_expired" && (
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              className="mt-3 inline-flex px-3 py-1.5 border border-amber-400 dark:border-amber-600 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/70 font-semibold text-xs transition-colors"
-            >
-              Retry
-            </button>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="pill pill--ghost pill--sm"
+              >
+                Retry
+              </button>
+            </div>
           )}
         </div>
       </main>
@@ -126,38 +127,36 @@ export default function TreasuryPage() {
 
   if (!data.merchant) {
     return (
-      <main className="px-5 py-6 max-w-6xl mx-auto space-y-5">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl text-[var(--ink)]">Treasury</h1>
-        <p className="text-[var(--ink-3)]">
-          Set up a merchant profile in <Link href="/m/settings" className="text-[var(--accent)] underline">Settings</Link> to start tracking treasury activity.
+      <main className="px-6 md:px-10 py-8 md:py-10 max-w-6xl space-y-5">
+        <h1 className="disp text-[30px] font-medium">Treasury</h1>
+        <p className="lead text-sm">
+          Set up a merchant profile in <Link href="/m/settings" className="text-[var(--action)] underline">Settings</Link> to start tracking treasury activity.
         </p>
       </main>
     );
   }
 
   return (
-    <main className="px-5 py-6 max-w-6xl mx-auto space-y-8">
-      {/* Page header — Direction B dense style */}
-      <div className="flex items-end justify-between border-b border-[var(--line)] pb-4">
+    <main className="px-6 md:px-10 py-8 md:py-10 pb-20 max-w-6xl">
+      {/* Page header */}
+      <div className="flex flex-wrap items-end justify-between gap-5 border-b border-[var(--border)] pb-[18px] mb-[26px]">
         <div>
-          <div className="eyebrow mb-2">Treasury · merchant of record</div>
-          <h1 className="font-[family-name:var(--font-display)] text-[28px] leading-[1.1] tracking-[-0.025em] text-[var(--ink)]">
-            Treasury
-          </h1>
-          <p className="mono text-[10px] tracking-[0.06em] uppercase text-[var(--ink-3)] mt-1.5">
+          <div className="eyebrow eyebrow--acc mb-2.5">Merchant of record</div>
+          <h1 className="disp text-[30px] font-medium m-0">Treasury</h1>
+          <div className="mono text-[11px] text-[var(--fg-3)] mt-2 tracking-[.04em]">
             Reconciled from on-chain · 30-day window
-          </p>
+          </div>
         </div>
       </div>
 
       {data.totals.length === 0 ? (
-        <div className="glass p-10 text-center text-[var(--ink-3)]">
+        <div className="card p-10 text-center text-[var(--fg-3)]">
           No paid invoices yet.{" "}
-          <Link href="/m/dashboard" className="text-[var(--accent)] underline">Create one</Link>{" "}
+          <Link href="/m/dashboard" className="text-[var(--action)] underline">Create one</Link>{" "}
           to populate your treasury.
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-7">
           {data.totals.map(t => (
             <TokenSection
               key={t.token}
@@ -169,32 +168,31 @@ export default function TreasuryPage() {
       )}
 
       {/* Claim section — escrows pending/matured */}
-      <section>
+      <section className="mt-[30px]">
         <h2 className="eyebrow mb-3">Claim escrows</h2>
-        <div className="glass p-4 space-y-4">
-          <div className="flex flex-wrap gap-5 mono text-xs text-[var(--ink-3)]">
-            <span>
-              <span className="text-[var(--ink)] font-semibold">{escrows.counts.pending}</span>&nbsp;pending
-              {escrows.counts.pending > 0 && " (within 7-day refund window)"}
+        <div className="card p-5 flex flex-wrap items-center justify-between gap-[18px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="tagchip">{escrows.counts.pending} pending</span>
+            <span className={`tagchip ${escrows.counts.matured > 0 ? "tagchip--ok" : "tagchip--mut"}`}>
+              {escrows.counts.matured} matured{escrows.counts.matured > 0 && " · ready to claim"}
             </span>
-            <span>
-              <span className="text-[var(--ink)] font-semibold">{escrows.counts.matured}</span>&nbsp;matured
-              {escrows.counts.matured > 0 && " (ready to claim)"}
-            </span>
-            <span>
-              <span className="text-[var(--ink)] font-semibold">{escrows.counts.claimed}</span>&nbsp;claimed
-            </span>
+            <span className="tagchip tagchip--mut">{escrows.counts.claimed} claimed</span>
+            {escrows.counts.pending > 0 && (
+              <span className="mono text-[10.5px] text-[var(--fg-3)] ml-1">
+                pending = within 7-day window
+              </span>
+            )}
           </div>
           <ClaimAllButton globalIds={escrows.matured.map(e => e.id as `0x${string}`)} />
         </div>
       </section>
 
-      {/* Recent activity — Direction B live-feed style */}
-      <section>
+      {/* Recent activity — live-feed style */}
+      <section className="mt-[30px]">
         <h2 className="eyebrow mb-3">Recent activity</h2>
-        <div className="glass overflow-hidden">
+        <div className="card overflow-hidden">
           {data.activity.length === 0 ? (
-            <div className="p-10 text-center text-[var(--ink-3)] mono text-xs">
+            <div className="p-10 text-center text-[var(--fg-3)] mono text-xs">
               No settlement activity yet.
             </div>
           ) : (
@@ -208,23 +206,34 @@ export default function TreasuryPage() {
   );
 }
 
+function Coin({ sym }: { sym: string }) {
+  const cls: Record<string, string> = {
+    USDC: "coin--usdc", EURC: "coin--eurc", USDT: "coin--usdt", DAI: "coin--dai", PYUSD: "coin--pyusd",
+  };
+  const label: Record<string, string> = { USDC: "$", EURC: "€", USDT: "₮", DAI: "◈", PYUSD: "P" };
+  return (
+    <span className={`coin ${cls[sym] ?? "coin--usdc"}`} aria-hidden="true">
+      {label[sym] ?? sym.slice(0, 1)}
+    </span>
+  );
+}
+
 function TokenSection({ t, series }: { t: TokenTotals; series?: TimeSeriesEntry }) {
   const sym = symbolForAddress(t.token);
   const isPositive = BigInt(t.received) >= 0n;
   return (
-    <section className="space-y-3">
+    <section>
       {/* Token header */}
-      <div className="flex items-center gap-3 border-b border-[var(--line)] pb-2">
-        <h2 className="mono text-xs font-semibold tracking-[0.1em] uppercase text-[var(--ink)]">
-          {sym}
-        </h2>
-        <span className="mono text-[10px] text-[var(--ink-3)]">
+      <div className="flex items-center gap-3 border-b border-[var(--border)] pb-2.5 mb-3.5">
+        <Coin sym={sym} />
+        <h2 className="mono text-[13px] font-semibold tracking-[0.08em] m-0">{sym}</h2>
+        <span className="mono text-[10.5px] text-[var(--fg-3)]">
           {t.paidCount} paid · {t.refundedCount} refunded
         </span>
       </div>
 
-      {/* KPI rail — Direction B grid layout */}
-      <div className="grid grid-cols-2 md:grid-cols-4 border border-[var(--line)] divide-x divide-[var(--line)] divide-y md:divide-y-0 bg-[var(--bg-elev-2)]">
+      {/* KPI rail */}
+      <div className="m-kpis mb-3.5">
         <Kpi label="Net received" value={formatCurrency(t.received, t.token)} hint={isPositive ? "" : "negative — refunds exceed payouts"} />
         <Kpi label="Gross volume" value={formatCurrency(t.grossVolume, t.token)} />
         <Kpi label="Refunded" value={formatCurrency(t.refunded, t.token)} />
@@ -232,14 +241,14 @@ function TokenSection({ t, series }: { t: TokenTotals; series?: TimeSeriesEntry 
       </div>
 
       {series && series.days.length > 0 && (
-        <div className="glass overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--line)]">
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between px-[18px] py-3 border-b border-[var(--border)]">
             <span className="eyebrow">Daily net payout · last 30 days</span>
-            <span className="mono text-[10px] text-[var(--ink-3)] tabular-nums">
+            <span className="mono text-[10px] text-[var(--fg-3)] tabular-nums">
               {sym}
             </span>
           </div>
-          <div className="p-4">
+          <div className="p-[18px]">
             <DailyChart series={series} token={t.token} />
           </div>
         </div>
@@ -281,23 +290,10 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // Theme-awareness: read resolvedTheme; default to light until mounted to avoid
-  // hydration mismatches (resolvedTheme is undefined on the server).
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const isDark = mounted && resolvedTheme === "dark";
-
-  // SVG color palette — branches on theme
-  const accentColor    = "#00c2a8";                              // teal: legible on both
-  // Intentional theme-branched value for the zero-baseline dashes
-  const baselineStroke = isDark ? "rgba(255,255,255,0.08)" : "rgba(11,20,38,0.06)";
-  // Mirror of --ink-3 (SVG attributes can't use CSS custom properties)
-  const emptyFill      = isDark ? "#6f6f6f" : "#5b6478";
-  // Mirror of --bg-elev-2
-  const circleStroke   = isDark ? "#0e0e0e" : "#fff";
-  // Intentional theme-branched value for refund-only lines
-  const refundColor    = isDark ? "#38bdf8" : "#0284c7";
+  // SVG palette — semantic CSS vars resolve per theme, no JS theme branching.
+  const accentColor = "var(--acc)";
+  // Refund-only windows draw the line in the danger hue (refund dips).
+  const refundColor = "var(--danger)";
 
   function handleMove(e: React.MouseEvent<SVGSVGElement>) {
     const svg = svgRef.current;
@@ -329,17 +325,17 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
       >
         <defs>
           <linearGradient id={`treasury-area-${series.token}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor={accentColor} stopOpacity="0.32" />
-            <stop offset="100%" stopColor={accentColor} stopOpacity="0" />
+            <stop offset="0%"   stopColor="color-mix(in oklch, var(--acc) 25%, transparent)" />
+            <stop offset="100%" stopColor="transparent" />
           </linearGradient>
         </defs>
         {/* zero baseline */}
         <line x1={P} y1={zeroY} x2={W - P} y2={zeroY}
-              stroke={baselineStroke} strokeWidth="0.5" strokeDasharray="2 4" />
+              stroke="var(--border-strong)" strokeWidth="0.5" strokeDasharray="2 4" />
         {!allZero && (
           <>
             {max > 0 && <path d={area} fill={`url(#treasury-area-${series.token})`} />}
-            <path d={line} fill="none" stroke={hasRefundOnly ? refundColor : accentColor} strokeWidth="1.5"
+            <path d={line} fill="none" stroke={hasRefundOnly ? refundColor : accentColor} strokeWidth="1.6"
                   strokeLinecap="round" strokeLinejoin="round" />
             <circle cx={xFor(lastIdx)} cy={yFor(last)} r="3" fill={hasRefundOnly ? refundColor : accentColor} />
             {hover && (
@@ -347,14 +343,14 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
                 <line x1={xFor(hover.idx)} y1={P} x2={xFor(hover.idx)} y2={H - P}
                       stroke={accentColor} strokeOpacity="0.4" strokeWidth="1" strokeDasharray="2 3" />
                 <circle cx={xFor(hover.idx)} cy={yFor(hover.value)} r="4"
-                        fill={accentColor} stroke={circleStroke} strokeWidth="1.5" />
+                        fill={accentColor} stroke="var(--surface)" strokeWidth="1.5" />
               </>
             )}
           </>
         )}
         {allZero && (
           <text x={W / 2} y={H / 2 + 4} textAnchor="middle"
-                fontFamily="var(--font-mono)" fontSize="10" fill={emptyFill}>
+                fontFamily="var(--font-mono)" fontSize="10" fill="var(--fg-3)">
             no settlement activity in the last 30 days
           </text>
         )}
@@ -371,15 +367,15 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
             marginTop: "-12px",
           }}
         >
-          <div className="bg-[var(--bg-elev-2)] text-[var(--ink)] border border-[var(--line)] rounded px-3 py-2 shadow-lg whitespace-nowrap">
-            <div className="mono text-[10px] tracking-wider text-[var(--ink-3)] uppercase">
+          <div className="card px-3 py-2 whitespace-nowrap shadow-[var(--elev-3)]">
+            <div className="mono text-[9.5px] tracking-wider text-[var(--fg-3)] uppercase">
               {hover.point.day}
             </div>
-            <div className="mono text-sm tabular-nums mt-0.5">
+            <div className="mono text-[13px] font-semibold tabular-nums mt-0.5">
               {hover.value >= 0 ? "+" : ""}
               {formatCurrency(BigInt(Math.round(hover.value * 1_000_000)).toString(), token)}
             </div>
-            <div className="mono text-[10px] text-[var(--ink-3)] mt-0.5">
+            <div className="mono text-[10px] text-[var(--fg-3)] mt-0.5">
               {hover.point.paidCount} paid
               {hover.point.refundedCount > 0 && ` · ${hover.point.refundedCount} refunded`}
             </div>
@@ -387,7 +383,7 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
         </div>
       )}
 
-      <div className="flex items-center justify-between mt-2 mono text-[10px] text-[var(--ink-3)] tabular-nums">
+      <div className="flex items-center justify-between mt-2 mono text-[10px] text-[var(--fg-3)] tabular-nums">
         <span>{days[0]!.day}</span>
         <span>{summary}</span>
         <span>{days[days.length - 1]!.day}</span>
@@ -398,15 +394,13 @@ function DailyChart({ series, token }: { series: TimeSeriesEntry; token: string 
 
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="px-4 py-4 min-h-[88px] relative bg-[var(--bg-elev-2)]">
-      <div className="mono text-[9px] tracking-[0.12em] uppercase text-[var(--ink-3)]">
-        {label}
-      </div>
-      <div className="font-[family-name:var(--font-display)] text-[22px] leading-none mt-2 text-[var(--ink)] tracking-[-0.02em]">
+    <div className="card px-[18px] py-4">
+      <div className="eyebrow text-[9.5px]">{label}</div>
+      <div className="mono text-[21px] font-medium leading-none mt-2 tracking-[-0.02em]">
         {value}
       </div>
       {hint && (
-        <div className="mono text-[9px] text-amber-600 dark:text-amber-400 mt-1.5">
+        <div className="mono text-[9px] text-[var(--warning)] mt-1.5">
           {hint}
         </div>
       )}
@@ -420,11 +414,12 @@ const STATUS_LABEL: Record<ActivityRow["status"], string> = {
   claimed:   "Claimed",
   recovered: "Recovered",
 };
+/** Status hue per the UI v2 STATUS map (m-shell.jsx). */
 const STATUS_COLOR: Record<ActivityRow["status"], string> = {
-  paid:      "text-emerald-700 dark:text-emerald-400",
-  refunded:  "text-sky-700 dark:text-sky-400",
-  claimed:   "text-violet-700 dark:text-violet-400",
-  recovered: "text-orange-700 dark:text-orange-400",
+  paid:      "var(--success)",
+  refunded:  "var(--info)",
+  claimed:   "#b794f6",
+  recovered: "#f0a868",
 };
 const SIGN_FOR: Record<ActivityRow["status"], string> = {
   paid:      "+",
@@ -436,35 +431,35 @@ const SIGN_FOR: Record<ActivityRow["status"], string> = {
 function ActivityItem({ a }: { a: ActivityRow }) {
   const amount = a.merchantPayout ?? a.amountOut;
   const sign = SIGN_FOR[a.status] ?? "+";
-  const color = STATUS_COLOR[a.status] ?? "text-emerald-700 dark:text-emerald-400";
+  const color = STATUS_COLOR[a.status] ?? "var(--success)";
   return (
-    <li className="grid grid-cols-[72px_1fr_auto] items-center gap-3 px-4 py-2.5 border-b border-[var(--line)] last:border-b-0 hover:bg-[var(--bg-elev)] transition-colors mono text-xs">
+    <li className="grid grid-cols-[72px_1fr_auto] items-center gap-3.5 px-[18px] py-[13px] border-b border-[var(--border-faint)] last:border-b-0 hover:bg-[color-mix(in_oklch,var(--fg-1)_4%,transparent)] transition-colors mono text-xs">
       {/* Timestamp / relative time */}
-      <span className="text-[var(--ink-3)] text-[10px] tracking-[0.04em] truncate">
+      <span className="text-[var(--fg-3)] text-[10px] tracking-[0.04em] truncate">
         {a.eventAt ? formatRelativeTime(a.eventAt) : "—"}
       </span>
 
       {/* Description */}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className={`font-semibold tracking-[0.06em] uppercase text-[9px] ${color}`}>
+          <span className="font-bold tracking-[0.06em] uppercase text-[9.5px]" style={{ color }}>
             {STATUS_LABEL[a.status] ?? a.status}
           </span>
-          <span className="text-[var(--ink-3)]">·</span>
-          <span className="text-[var(--ink-2)] text-[10px]">
+          <span className="text-[var(--fg-3)]">·</span>
+          <span className="text-[var(--fg-2)] text-[10.5px]">
             {symbolForAddress(a.payInToken)} → {symbolForAddress(a.payoutToken)}
           </span>
         </div>
-        <div className="text-[var(--ink-3)] text-[10px] mt-0.5 tracking-[0.04em]">
+        <div className="text-[var(--fg-3)] text-[10.5px] mt-0.5 tracking-[0.04em]">
           {abbreviateAddress(a.id)}
           {a.txHash && (
-            <> · <a href={`https://testnet.arcscan.app/tx/${a.txHash}`} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">tx</a></>
+            <> · <a href={`https://testnet.arcscan.app/tx/${a.txHash}`} target="_blank" rel="noopener noreferrer" className="text-[var(--action)] hover:underline">tx</a></>
           )}
         </div>
       </div>
 
       {/* Amount */}
-      <div className={`text-right tabular-nums font-semibold text-[11px] tracking-[-0.01em] ${color}`}>
+      <div className="text-right tabular-nums font-semibold text-[12.5px] tracking-[-0.01em]" style={{ color }}>
         {sign}{formatCurrency(amount, a.payoutToken)}
       </div>
     </li>

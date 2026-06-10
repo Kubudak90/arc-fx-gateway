@@ -474,6 +474,7 @@ h2.disp { font-weight: 400; letter-spacing: -0.025em; line-height: 1.06; }
 }
 .m-navitem:hover { background: color-mix(in oklch, var(--fg-1) 5%, transparent); color: var(--fg-1); }
 .m-navitem.on { background: var(--acc-soft); color: color-mix(in oklch, var(--acc) 80%, var(--fg-1)); border-left-color: var(--acc); font-weight: 600; }
+[data-theme="light"] .m-navitem.on { color: color-mix(in oklch, var(--accent-press) 75%, var(--fg-1)); }
 .m-link { background: none; border: none; cursor: pointer; color: color-mix(in oklch, var(--acc) 70%, var(--fg-1)); font-size: 13px; padding: 0; font-family: inherit; }
 .m-link:hover { text-decoration: underline; }
 .m-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }

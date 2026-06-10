@@ -89,7 +89,8 @@ export function ArcoraLogo({
 }: ArcoraLogoProps) {
   return (
     <span className={`inline-flex items-center gap-2 ${className ?? ""}`}>
-      <ArcoraSymbol size={size} />
+      {/* When the wordmark is visible it carries the accessible name; hide the symbol from AT to avoid a double announcement */}
+      <ArcoraSymbol size={size} aria-hidden={showWordmark || undefined} />
       {showWordmark && (
         <span className="inline-flex flex-col leading-none">
           <span

@@ -19,21 +19,21 @@ export default async function MerchantLayout({ children }: { children: React.Rea
   }
 
   return (
-    <div className="theme-scope md:grid md:grid-cols-[232px_1fr] min-h-screen bg-[var(--bg-elev)]">
+    <div className="md:grid md:grid-cols-[244px_1fr] min-h-screen bg-[var(--bg)]">
       <MerchantSidebar merchantAddress={session.merchantAddress} />
 
       <div className="min-w-0">
         {/* Mobile top bar — sidebar is hidden below md */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[var(--line)] bg-[var(--bg-elev-2)]">
-          <Link href={"/m/dashboard" as Route} aria-label="Arcora home">
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--bg)_80%,transparent)] backdrop-blur-md sticky top-0 z-40">
+          <Link href={"/m/dashboard" as Route} aria-label="Arcorapay home">
             <ArcoraLogo size={22} />
           </Link>
           <div className="flex items-center gap-3 text-sm">
-            <span className="mono text-[12px] text-[var(--ink-2)]">
+            <span className="mono text-[12px] text-[var(--fg-2)]">
               {session.merchantAddress.slice(0, 6)}…{session.merchantAddress.slice(-4)}
             </span>
             <form action="/api/auth/logout" method="POST">
-              <button type="submit" className="text-[var(--ink-3)] hover:text-[var(--accent)] hover:underline text-[12px]">Sign out</button>
+              <button type="submit" className="text-[var(--fg-3)] hover:text-[var(--action)] hover:underline text-[12px]">Sign out</button>
             </form>
             <ThemeToggle />
           </div>

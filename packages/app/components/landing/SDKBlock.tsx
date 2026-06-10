@@ -96,7 +96,7 @@ export function SDKBlock() {
             npm install @arcora/sdk
           </a>
           <a
-            href="https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/packages/sdk#readme"
+            href="https://github.com/arcoralabs/arcorapay/tree/HEAD/packages/sdk#readme"
             target="_blank"
             rel="noopener noreferrer"
             className="pill pill--ghost pill--sm"

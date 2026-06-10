@@ -55,8 +55,8 @@ Major feature release: a V10 custody gateway, multi-stable StableFX swap pools, 
 - Large audit-remediation sweeps on **2026-05-19** (High + Medium plan) and **2026-05-24** (contracts/ops/app findings): checkout authorize/submit rate limiting, constant-time `CRON_SECRET` comparison, SSRF hardening (IPv6 6to4 / hex / NAT64 / Teredo), invoice amount + metadata bounds, webhook replay protection (V2 sig + timestamp) and body-buffer caps, relayer refund-tx persistence + resume, graceful SIGTERM drain, and many app-side input/CSRF/env-validation fixes.
 - SDK `createInvoice` pre-flight validates `amountUsdc` (audit #38); SDK refuses to fall back to `Math.random` for the Permit2 nonce (audit-m13); `sdk-react` `useCheckout` includes `opts.environment` in its memo deps.
 
-[1.1.0]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.1.0
-[1.2.0]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.2.0
+[1.1.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.1.0
+[1.2.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.2.0
 
 ## [1.0.3] — 2026-04-30
 
@@ -86,7 +86,7 @@ Marketing surface + docs alignment release. No contract changes; SDK npm artifac
 - `pnpm deploy:app` / `pnpm deploy:demo` / `pnpm pitch:pdf` / `pnpm pitch:html` scripts at repo root so deploys + pitch renders run from the right cwd. Multiple "wrong directory" Vercel errors had cluttered the dashboard before this.
 - `.gitignore` adds `.vercel`.
 
-[1.0.3]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.3
+[1.0.3]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.0.3
 
 ## [1.0.2] — 2026-04-29
 
@@ -105,7 +105,7 @@ Refunds, treasury dashboard, and one nasty deploy lesson. SDK npm artifacts unch
 - v0.5 deprecated; v0.6 canonical at `0x7c113740E8FcFE03C05F2e9426e9F25F208Fb7a3`. Vercel envs and the VPS `arcora-indexer.service` `.env` repointed; daemon restarted.
 - DB migrations `0001_stale_newton_destine.sql` (refund columns + enum value) and `0002_legal_flatman.sql` (treasury columns) applied to Neon prod.
 
-[1.0.2]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.2
+[1.0.2]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.0.2
 
 ## [1.0.1] — 2026-04-29
 
@@ -121,7 +121,7 @@ Hotfix release. Live EURC↔USDC swap payments reverted on-chain with `Insuffici
 - v0.4 deprecated and recorded as such in `packages/contracts/deployments/arc-testnet.json`. Existing v0.4 invoices in the DB stay as-is; the indexer/webhook daemons now point exclusively at v0.5 (Vercel envs + VPS `arcora-indexer.service` `.env` updated and the daemon restarted).
 - npm packages (`@arcora/sdk`, `@arcora/sdk-react`) untouched — their source surface didn't change.
 
-[1.0.1]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.1
+[1.0.1]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.0.1
 
 ## [1.0.0] — 2026-04-28
 
@@ -131,7 +131,7 @@ First shippable Arcora release. Arc-only stablecoin checkout and FX settlement: 
 - **Arcora Gateway v0.4** at `0xA80A5741a09bff1f43dcBF15Df7c598A23163302` on Arc testnet.
 - **`@arcora/sdk`** — three-function checkout client (`init` / `createInvoice` / `openCheckout`), zero EVM deps, ~1.5 KB gzipped.
 - **`@arcora/sdk-react`** — `<CheckoutButton />` and `useCheckout()` for drop-in React integration.
-- **Hosted checkout app** at `arc-fx-gateway.vercel.app`: SIWE merchant auth, invoice creation via server hot wallet, customer-side wallet connect (MetaMask + WalletConnect), live FX quote display.
+- **Hosted checkout app** (now live at [`arcorapay.xyz`](https://arcorapay.xyz)): SIWE merchant auth, invoice creation via server hot wallet, customer-side wallet connect (MetaMask + WalletConnect), live FX quote display.
 - **Merchant dashboard** under `/m/`: invoice list, create new, share QR, API key + webhook URL settings.
 - **VPS-resident ops daemons** (`arcora-indexer.service`, `arcora-webhooks.service`) with systemd `Restart=always`, replacing Vercel cron for chain → DB sync and webhook delivery.
 - **OracleAMM** Chainlink-priced two-token swap pool for USDC ⇄ EURC, ± 4 bps fee, ± 0.5% deviation guard.
@@ -157,4 +157,4 @@ First shippable Arcora release. Arc-only stablecoin checkout and FX settlement: 
 - Single chain (Arc testnet). Crosschain payment from any CCTP-supported chain is the v2.0 milestone.
 - Mock Chainlink feed on testnet — a VPS systemd timer keeps it fresh; mainnet replaces this with the real Chainlink EUR/USD feed.
 
-[1.0.0]: https://github.com/Kubudak90/arc-fx-gateway/releases/tag/v1.0.0
+[1.0.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.0.0

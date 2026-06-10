@@ -1,17 +1,19 @@
 # Security policy
 
-Arcora is a stablecoin checkout protocol. We take security findings seriously and try to be a fair counterparty for researchers.
+Arcorapay is a stablecoin checkout protocol. We take security findings seriously and try to be a fair counterparty for researchers.
 
 ## Reporting a vulnerability
 
-Email **`compliance@arcorapay.xyz`** with:
+Report privately through **[GitHub Security Advisories](https://github.com/arcoralabs/arcorapay/security/advisories/new)** on the [arcoralabs/arcorapay](https://github.com/arcoralabs/arcorapay) repo — it keeps the report private and threaded until we've coordinated a fix. Include:
 
 - Affected contract / endpoint / commit
 - Reproduction steps (PoC code or transaction trace welcome)
 - Severity assessment in your own words
 - Whether you've shared this with anyone else
 
-Use plaintext or PGP — public key on request.
+For sensitive material you'd rather not put in a GitHub advisory, request our PGP key via an issue and we'll arrange an encrypted channel.
+
+Internal audit reports are available to partners on request.
 
 We aim to:
 

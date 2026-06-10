@@ -13,11 +13,14 @@
   ],
   "unpkg": "./dist/arcora.global.js",
   "jsdelivr": "./dist/arcora.global.js",
-  "homepage": "https://github.com/Kubudak90/arc-fx-gateway/tree/plan-1-protocol/packages/sdk#readme",
+  "homepage": "https://github.com/arcoralabs/arcorapay/tree/HEAD/packages/sdk#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Kubudak90/arc-fx-gateway.git",
+    "url": "git+https://github.com/arcoralabs/arcorapay.git",
     "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/arcoralabs/arcorapay/issues"
   },
   "license": "MIT",
   "main": "./dist/index.js",

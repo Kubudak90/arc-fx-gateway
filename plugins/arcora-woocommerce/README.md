@@ -16,8 +16,8 @@ Adds a payment gateway to WooCommerce that routes orders through Arcora's hosted
 There's no `wp install plugin` entry yet — clone the repo and zip the plugin directory by hand, or copy it into your WordPress install:
 
 ```bash
-git clone https://github.com/Kubudak90/arc-fx-gateway.git
-cd arc-fx-gateway/plugins/arcora-woocommerce
+git clone https://github.com/arcoralabs/arcorapay.git
+cd arcorapay/plugins/arcora-woocommerce
 zip -r arcora-woocommerce.zip . -x ".*"
 # Then in WP admin → Plugins → Add new → Upload plugin → arcora-woocommerce.zip
 ```
@@ -48,7 +48,7 @@ There's no PHP test harness in this repo. To iterate:
 
 ## Source
 
-[github.com/Kubudak90/arc-fx-gateway](https://github.com/Kubudak90/arc-fx-gateway) — `plugins/arcora-woocommerce/`
+[github.com/arcoralabs/arcorapay](https://github.com/arcoralabs/arcorapay) — `plugins/arcora-woocommerce/`
 
 ## License
 

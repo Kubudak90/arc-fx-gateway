@@ -13,7 +13,7 @@ export default function DeploymentDocs() {
       description="Stand up your own Arcora — env vars, infra, and the runbook."
     >
       <p>
-        The Arcora codebase is open source — <a href="https://github.com/Kubudak90/arc-fx-gateway">github.com/Kubudak90/arc-fx-gateway</a>.
+        The Arcora codebase is open source — <a href="https://github.com/arcoralabs/arcorapay">github.com/arcoralabs/arcorapay</a>.
         Most merchants will use the hosted version at <code>arcorapay.xyz</code>; if you need to self-host (compliance, branding, sovereignty), here&apos;s the shape.
       </p>
 

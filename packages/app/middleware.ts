@@ -6,7 +6,7 @@ export function middleware(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
   const url = req.nextUrl;
 
-  // docs.arcorapay.xyz/* → arc-fx-gateway /docs/*
+  // docs.arcorapay.xyz/* → the app's /docs/*
   // Subdomain rewrite so the hosted docs serve from a clean URL.
   if (host === DOCS_HOST && !url.pathname.startsWith("/docs")) {
     const target = url.clone();

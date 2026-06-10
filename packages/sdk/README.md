@@ -1,6 +1,6 @@
 # @arcora/sdk
 
-Stripe-style checkout SDK for [Arcora](https://github.com/Kubudak90/arc-fx-gateway) — stablecoin payments on Arc Network. Three functions, zero EVM dependencies, ~1.5 KB gzipped.
+Stripe-style checkout SDK for [Arcorapay](https://github.com/arcoralabs/arcorapay) — stablecoin payments on Arc Network. Three functions, zero EVM dependencies, ~1.5 KB gzipped.
 
 ## Install
 
@@ -170,7 +170,7 @@ Zero runtime dependencies. Tree-shake-safe (`sideEffects: false`).
 
 ## Source
 
-[github.com/Kubudak90/arc-fx-gateway](https://github.com/Kubudak90/arc-fx-gateway) — `packages/sdk/`
+[github.com/arcoralabs/arcorapay](https://github.com/arcoralabs/arcorapay) — `packages/sdk/`
 
 ## License
 

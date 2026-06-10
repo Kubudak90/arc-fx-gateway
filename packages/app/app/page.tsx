@@ -144,7 +144,7 @@ export default function Home() {
             <a href="#developers" className="navlink">Developers</a>
             <a href="#roadmap" className="navlink">Roadmap</a>
             <Link href={"/docs" as Route} className="navlink">Docs</Link>
-            <a href="https://github.com/Kubudak90/arc-fx-gateway" className="navlink">GitHub</a>
+            <a href="https://github.com/arcoralabs/arcorapay" className="navlink">GitHub</a>
           </nav>
           <div className="flex items-center gap-2.5">
             <ThemeToggle />
@@ -178,18 +178,18 @@ export default function Home() {
               <div className="mb-8 flex flex-wrap gap-3">
                 <Link href={"/quickstart" as Route} className="pill pill--lg pill--acc">Test in 10 min</Link>
                 <Link href="/checkout-demo" className="pill pill--lg pill--ghost">Try the checkout</Link>
-                <a href="https://github.com/Kubudak90/arc-fx-gateway" className="pill pill--lg pill--ghost hide-sm">View on GitHub</a>
+                <a href="https://github.com/arcoralabs/arcorapay" className="pill pill--lg pill--ghost hide-sm">View on GitHub</a>
               </div>
               {/* Honest trust line — test count (suite currently runs 438; intentionally rounded down), no fabricated logos */}
               <div className="mono flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] tracking-[0.04em]" style={{ color: "var(--fg-3)" }}>
                 <span className="inline-flex items-center gap-2">
                   <span className="dot dot--live" />
-                  <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">400+ tests passing</a>
+                  <a href="https://github.com/arcoralabs/arcorapay" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">400+ tests passing</a>
                 </span>
                 <span>
-                  · <a href="https://github.com/Kubudak90/arc-fx-gateway/blob/HEAD/SECURITY.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">internally audited</a>
+                  · <a href="https://github.com/arcoralabs/arcorapay/blob/HEAD/SECURITY.md" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">internally audited</a>
                   {" · "}
-                  <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">open-source</a>
+                  <a href="https://github.com/arcoralabs/arcorapay" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">open-source</a>
                   {" · sub-30s settlement"}
                 </span>
                 <a href="https://arc-fx-demo.vercel.app" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-[var(--fg-1)]">live merchant demo →</a>
@@ -494,7 +494,7 @@ export default function Home() {
             </div>
             <div className="flex flex-wrap gap-3">
               <Link href="/checkout-demo" className="pill pill--lg pill--acc">Try the checkout</Link>
-              <a href="https://github.com/Kubudak90/arc-fx-gateway" target="_blank" rel="noopener noreferrer" className="pill pill--lg pill--ghost">GitHub</a>
+              <a href="https://github.com/arcoralabs/arcorapay" target="_blank" rel="noopener noreferrer" className="pill pill--lg pill--ghost">GitHub</a>
             </div>
           </div>
         </div>

@@ -1,48 +1,40 @@
-# @arc-fx/contracts — ArcFXGateway V8
+# @arcora/contracts — ArcFXGateway
 
-Solidity contracts powering **Arcora**, a Stripe-shaped stablecoin checkout settling on [Arc Network](https://arc.network). The customer signs **one** EIP-712 (Permit2) message; an off-chain Arcora relayer pulls the pay-in, runs Circle App Kit Swap to convert it, and calls the gateway to deliver the merchant's preferred stablecoin payout.
+Solidity contracts powering **Arcorapay**, a Stripe-shaped stablecoin checkout settling on [Arc Network](https://arc.network). The customer signs **one** EIP-712 (Permit2) message; an off-chain Arcorapay relayer pulls the pay-in, runs Circle App Kit Swap to convert it, and calls the gateway to deliver the merchant's preferred stablecoin payout into a per-invoice custody escrow.
 
 ## Audit scope
 
-The canonical, in-scope contract is **`src/ArcFXGatewayV8.sol`** plus the OpenZeppelin libraries it imports. Everything else under `src/` is helper or testnet glue (`testnet/MintableERC20.sol`, etc.).
-
-Deprecated v0.6 / v0.7 contracts (StablePool, StablecoinRegistry, OracleAMM, PriceGuard, MockChainlinkFeed) live in [`legacy/`](./legacy/) — out of audit scope, kept for traceability of design history.
-
-Read first if you're reviewing this code:
-- [`docs/audit/threat-model.md`](../../docs/audit/threat-model.md) — actors, assets, trust boundaries, A–H attack-surface matrix, accepted risks
-- [`docs/audit/deploy-checklist.md`](../../docs/audit/deploy-checklist.md) — how every deploy ends with a verified bytecode badge on Arcscan
-- [`docs/superpowers/specs/2026-05-03-plan-7-audit-prep.md`](../../docs/superpowers/specs/2026-05-03-plan-7-audit-prep.md) — full audit prep plan, including the zero-budget path that is canonical until revenue exists
+The canonical, in-scope contract is **`src/ArcFXGateway.sol`** plus the OpenZeppelin libraries it imports. The source is **version-neutral** — there is no `V8`/`V11` suffix on the file. Deployment lineage is tracked by on-chain *address*, not by filename: a new deployment with different bytecode lands at a new address recorded in [`deployments/arc-testnet.json`](./deployments/arc-testnet.json). The only other source file is `src/testnet/MintableERC20.sol` (a faucet token used on testnet only).
 
 ## Architecture in one diagram
 
 ```
                               ┌──────────────────────────────┐
-   ┌────────────────┐         │ Arcora relayer (off-chain)   │
+   ┌────────────────┐         │ Arcorapay relayer (off-chain)│
    │ Customer EOA   │         │ ops/relayer/run.ts (VPS)     │
    │ signs Permit2  │────────▶│  ─ Permit2.permitTransferFrom│
    └────────────────┘         │  ─ kit.swap (App Kit Swap)   │
-                              │  ─ approve gateway           │
                               │  ─ settleInvoice             │
                               └─────┬────────────────────────┘
                                     │ (msg.sender = relayer)
                                     ▼
                               ┌─────────────────────────────────┐
-                              │  ArcFXGatewayV8                 │
+                              │  ArcFXGateway                   │
                               │   ─ supportedTokens (whitelist) │
                               │   ─ merchants                   │
                               │   ─ invoices  (Created → ...)   │
-                              │   ─ payments  (refund accounting)│
+                              │   ─ escrows   (per-invoice hold)│
                               │   ─ AccessControl: ADMIN/RELAYER│
                               │   ─ Pausable / ReentrancyGuard  │
                               └─────────────┬───────────────────┘
-                                            │ safeTransfer
+                                            │ claim() after 7d → safeTransfer
                                             ▼
                               ┌────────────────┐
                               │ Merchant payout│
                               └────────────────┘
 ```
 
-The gateway never holds the pay-in token. App Kit Swap is the only swap surface, and it runs entirely off-chain via the relayer's signed RFQ flow against Circle's maker network.
+The gateway never holds the pay-in token. App Kit Swap is the only swap surface, and it runs entirely off-chain via the relayer's signed RFQ flow against Circle's maker network. Settled funds sit in per-invoice escrow inside the contract for a 7-day refund window before they can be claimed to the merchant.
 
 ## Build & test
 
@@ -52,64 +44,65 @@ pnpm install
 
 # from packages/contracts
 forge build --sizes
-forge test                        # 19 V8 tests today
+forge test                        # 77 tests (unit + reentrancy + fuzz/invariant)
 forge coverage --report summary   # see "Coverage" below
-bin/coverage-gate.sh              # threshold gate (Plan 7 Layer 2 #4)
+bin/coverage-gate.sh lcov.info    # threshold gate (CI Layer 2)
 ```
+
+The suite lives under `test/gateway/` (Constructor, Settle, Claim, Refund, PayerRefund, Fees, Merchant, Delegate, Pause, AdminRecovery, Reentrancy, AuditCoverage).
 
 ### Coverage
 
-Audit-scope file (`src/ArcFXGatewayV8.sol`) coverage as of 2026-05-03 (after the test backfill — 49 tests):
+Coverage gates run in CI against `src/ArcFXGateway.sol`:
 
-| Metric | Today | Floor (CI gate) | Target (audit-ready) |
-|---|---|---|---|
-| Lines     | **100.00%** | 95% | 95% |
-| Branches  | **100.00%** | 90% | 90% |
-| Statements | **100.00%** | — | — |
-| Functions  | **100.00%** | — | — |
+| Metric | Floor (CI gate) |
+|---|---|
+| Lines     | 95% |
+| Branches  | 90% |
 
-Floor sits at the audit-ready bar so regressions below the bar fail CI immediately.
+The floor sits at the audit-ready bar so regressions below the bar fail CI immediately. See [`bin/coverage-gate.sh`](./bin/coverage-gate.sh) for the exact thresholds enforced.
 
 ### Static analysis
 
-- **Slither** runs on every push and PR (`fail-on: medium`). Triage exceptions live in [`.slither-triage.md`](./.slither-triage.md).
-- **Mythril** runs on push (skipped on PR for speed), 30-min timeout, V8 only.
-- **Forge fuzz/invariant suites** for V8 are a follow-up — the v0.7 fuzz/invariant files were targeted at the deprecated pool path and moved to `legacy/`.
+- **Slither** runs on every push and PR (`fail-on: medium`, paths `lib/` and `test/` filtered). Triage exceptions live in [`.slither-triage.md`](./.slither-triage.md).
+- **Mythril** runs on push (skipped on PR for speed), 30-min timeout, gateway only.
+
+CI definition: [`.github/workflows/contracts-ci.yml`](../../.github/workflows/contracts-ci.yml).
 
 ## Deploy
 
-Use [`script/DeployV8.s.sol`](./script/DeployV8.s.sol) and follow [`docs/audit/deploy-checklist.md`](../../docs/audit/deploy-checklist.md). The checklist embeds a foundry-broadcast-lying gotcha (verified `cast receipt` + `cast code` are the ground-truth checks).
+Use [`script/Deploy.s.sol`](./script/Deploy.s.sol). On Arc testnet, `forge script --broadcast` has been observed reporting success for a tx that never confirmed — always verify with `cast receipt` (status=1) **and** `cast code <addr>` (non-empty) before trusting the broadcast file.
 
 Required env vars:
 
 | Var | Purpose |
 |-----|---------|
-| `ARC_TESTNET_RPC` (or mainnet RPC) | RPC endpoint |
-| `DEPLOYER_PRIVATE_KEY` | EOA used for broadcast |
-| `PROTOCOL_FEE_BPS` | Fee in basis points (locked at deploy; default 30 = 0.30%) |
-| `INITIAL_OWNER` | Address granted `DEFAULT_ADMIN_ROLE` |
-| `INITIAL_RELAYER` | Address granted `RELAYER_ROLE` |
-| `ARC_EXPLORER_KEY` / `ARC_EXPLORER_URL` | For `--verify` to land Arcscan source verification in the same broadcast |
+| `DEPLOYER_PRIVATE_KEY` | EOA used for broadcast (uint256 hex) |
+| `GATEWAY_OWNER` | Address granted `DEFAULT_ADMIN_ROLE` |
+| `GATEWAY_RELAYER` | Address granted `RELAYER_ROLE` (Vault-derived) |
+| `PROTOCOL_FEE_BPS` | Fee in basis points (≤ 1000, locked in constructor; production = 30 = 0.30%) |
+| `REFUND_WINDOW_SECONDS` | Refund window (typ. 604800 = 7 days) |
+| `ADMIN_RECOVERY_DELAY` | Delay before deactivated-merchant escrow is admin-recoverable (typ. 604800) |
+| `SUPPORTED_TOKENS` | *(optional)* comma-separated token addresses to whitelist at deploy. Whitelisting only runs when `deployer == GATEWAY_OWNER`; otherwise the script logs a loud WARN and you call `setTokenSupport` from the owner address separately (audit #26). |
 
-After deploy, update `GATEWAY_ADDRESS_V8` in Vercel + the VPS relayer/indexer envs. Memory has the canonical addresses (see `~/.claude/projects/.../memory/`).
+After deploy, update the gateway address in Vercel + the VPS relayer/indexer env files, then record the new address in `deployments/arc-testnet.json`.
 
-## Live testnet deployments
+## Live testnet deployment
 
 | Contract | Address | Status |
 |---|---|---|
-| ArcFXGatewayV8 | `0x6fAaD9…507a8` | live, canonical |
-| ArcFXGateway v0.6 | `0x7c1137…b7a3` | deprecated; events still indexed for legacy invoices |
-| FxEscrow (App Kit Swap settlement) | `0x867650…a9f8` | Circle-managed |
-| Permit2 | `0x000000…78BA3` | universal Permit2 |
-| USDC / EURC | Circle-managed canonical addresses | live |
+| ArcFXGateway | [`0x07BAC123A682D24d3eC439ce454cA8AC64eAe3A3`](https://testnet.arcscan.app/address/0x07BAC123A682D24d3eC439ce454cA8AC64eAe3A3) | live, canonical — custody-escrow gateway, deployed 2026-05-13 (audit-fixed bytecode) |
+| Permit2 | [`0x000000000022D473030F116dDEE9F6B43aC78BA3`](https://testnet.arcscan.app/address/0x000000000022D473030F116dDEE9F6B43aC78BA3) | Uniswap universal Permit2 |
+| FxEscrow (App Kit Swap settlement) | [`0x867650F5eAe8df91445971f14d89fd84F0C9a9f8`](https://testnet.arcscan.app/address/0x867650F5eAe8df91445971f14d89fd84F0C9a9f8) | Circle-managed |
+| USDC | `0x3600000000000000000000000000000000000000` | Circle-managed canonical |
+| EURC | `0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a` | Circle-managed canonical |
 
-(Full address list: `packages/contracts/deployments/arc-testnet.json` is the canonical record, or run the dashboard at `arcorapay.xyz`.)
+[`deployments/arc-testnet.json`](./deployments/arc-testnet.json) is the canonical machine-readable record. Pre-retirement deployments (≤ v1.1) were retired on 2026-05-20 (testnet wiped) and remain only in git history.
 
 ## Reporting a finding
 
-See repo-root [`SECURITY.md`](../../SECURITY.md) — short version: email `compliance@arcora.dev`, 24h response. A live Immunefi bug bounty replaces this channel at mainnet T-0.
+See the repo-root [`SECURITY.md`](../../SECURITY.md). Short version: open a [GitHub security advisory or issue](https://github.com/arcoralabs/arcorapay/issues); we aim to acknowledge within 24 hours. A live Immunefi bug bounty replaces this channel at mainnet T-0.
 
 ## License
 
-- `src/ArcFXGatewayV8.sol`, scripts, tests: **MIT**
-- `legacy/*` (deprecated): **MIT** — Saddle Finance's StableSwap port preserved upstream-MIT for the historical record only
+MIT — `src/ArcFXGateway.sol`, scripts, and tests.

@@ -1,6 +1,6 @@
-# @arc-fx/app
+# @arcora/app
 
-Next.js 15 app hosting customer checkout (`/i/[invoiceId]`) and merchant dashboard (`/m/*`) for Arcora.
+Next.js 15 app hosting customer checkout (`/i/[invoiceId]`) and merchant dashboard (`/m/*`) for Arcorapay.
 
 ## Local development
 
@@ -19,8 +19,8 @@ Visit http://localhost:3000.
 ## Tests
 
 ```bash
-pnpm test           # vitest (42 unit + UI tests)
-pnpm e2e            # playwright (6 critical flows)
+pnpm test           # vitest — unit + UI + the no-fabricated-content copy guard
+pnpm e2e            # playwright (critical flows)
 ```
 
 ## Pages
@@ -46,14 +46,14 @@ pnpm e2e            # playwright (6 critical flows)
 - **wagmi 2 + viem 2** for chain reads/writes
 - **thirdweb v5** for customer-side wallet connect (WalletConnect QR included)
 - **iron-session** for SIWE-backed merchant auth
-- **drizzle-orm + Vercel Postgres** for state
-- **Vercel Cron** for indexer + webhook dispatcher
+- **drizzle-orm + Supabase Postgres** (node-postgres `pg` driver, with the Supabase pooler CA pinned for verify-full TLS) for state
+- **VPS systemd daemons** (`ops/indexer/`, `ops/webhooks/`, `ops/relayer/`) own chain → DB sync, HMAC webhook delivery, and the settle pipeline. The only Vercel cron is a daily SIWE-nonce cleanup (`vercel.json`).
 
 ## Env vars
 
 | Var | Purpose |
 |-----|---------|
-| `POSTGRES_URL` | Vercel Postgres connection string |
+| `POSTGRES_URL` | Postgres connection string (Supabase in production; plain Postgres for local dev) |
 | `MASTER_KEY` | AES-256-GCM key for server wallet keystore + webhook secrets |
 | `IRON_SESSION_PASSWORD` | Cookie session password (≥32 chars) |
 | `CRON_SECRET` | Bearer token guarding `/api/cron/*` |
@@ -69,7 +69,7 @@ pnpm e2e            # playwright (6 critical flows)
 
 ## Deploy
 
-See [Plan 2b spec §8](../../docs/superpowers/specs/2026-04-25-plan-2b-frontend-design.md#8-deploy) for the full Vercel deploy walkthrough.
+The hosted app deploys to Vercel (Root Directory = `packages/app`). See the repo-root [`RELEASING.md`](../../RELEASING.md) for the full deploy + alias walkthrough.
 
 ## License
 

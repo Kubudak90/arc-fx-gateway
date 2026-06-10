@@ -58,7 +58,7 @@ const arcora = new Arcora({
       <pre><code>{`const invoice = await arcora.createInvoice({
   amountUsdc: number,                      // gross amount in USD-equivalent (1 = $1.00)
   payInToken: 'USDC' | 'EURC',             // what the customer will pay with
-  successUrl?: string,                     // http(s) — where to send the customer after payment; optional for standalone invoices
+  successUrl:  string,                     // required — http(s) where to send the customer after payment
   cancelUrl?:  string,                     // http(s) — same allowlist + SSRF guard
   metadata?:   Record<string, string>,     // attached to invoice + webhook payloads
 });
@@ -69,7 +69,13 @@ const arcora = new Arcora({
 //   claimableAt?: '2026-05-20T…' }       // custody escrow — populated once the invoice is paid`}</code></pre>
       <p>
         Throws <code>ArcoraError</code> with a typed <code>code</code> on validation, network, server, or auth failures.
-        Invalid <code>amountUsdc</code> (non-finite, ≤0) is rejected client-side before the request fires.
+        Invalid <code>amountUsdc</code> (non-finite, ≤0) is rejected client-side before the request fires. A missing or
+        non-http(s) <code>successUrl</code> is likewise rejected client-side with <code>INVALID_URL</code>.
+      </p>
+      <p>
+        <strong>Note:</strong> the SDK requires <code>successUrl</code>. Standalone invoices (no redirect — the invoice
+        page just shows the paid status) are possible only by calling the raw REST endpoint{" "}
+        <code>POST /api/invoices</code> directly, where <code>successUrl</code> is optional.
       </p>
 
       <h3><code>arcora.openCheckout(invoice)</code></h3>

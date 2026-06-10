@@ -110,17 +110,29 @@ function verifyWebhook(headers: Headers, rawBody: string, secret: string) {
 }`}</code></pre>
 
       <h2>Retry policy</h2>
-      <p>Failed deliveries (non-2xx, network error, timeout) are retried with exponential backoff:</p>
+      <p>
+        Failed deliveries (non-2xx, network error, timeout) are retried with exponential backoff. After each failed
+        attempt the next retry is scheduled <code>2^attempts × 30</code> seconds out — so roughly 1 min, then 2, 4, 8,
+        16 min and so on, doubling each time. The interval is capped at <strong>24 hours</strong>, after which deliveries
+        keep retrying at that 24h cadence.
+      </p>
+      <p>The two failure classes are treated differently:</p>
       <ul>
-        <li>Attempt 1: immediate</li>
-        <li>Attempt 2: +1 min</li>
-        <li>Attempt 3: +5 min</li>
-        <li>Attempt 4: +15 min</li>
-        <li>Attempt 5: +30 min total</li>
-        <li>After 5 failed attempts the row stops being retried.</li>
+        <li>
+          <strong>5xx responses, network errors, and timeouts</strong> are retried indefinitely with the growing backoff
+          above. Only a successful (2xx) delivery stops them.
+        </li>
+        <li>
+          <strong>4xx responses</strong> are treated as terminal after 3 such failed attempts — the delivery is marked
+          terminal and never re-queued. (A 3xx redirect is also a delivery failure: redirects are never followed.)
+        </li>
       </ul>
       <p>
-        If your endpoint is down longer than 30 minutes, fetch missed events via the API by querying invoice status directly.
+        If your endpoint is down (returning 5xx, refusing connections, or timing out), deliveries are <strong>not</strong>
+        dropped — they keep retrying with the growing backoff, up to 24h intervals, until your endpoint recovers and
+        returns a 2xx. If instead your endpoint is rejecting deliveries with a 4xx (bad signature handling, wrong route,
+        auth failure), fix your endpoint: after 3 such 4xx failures the delivery becomes terminal and will not be retried.
+        You can always reconcile state by querying invoice status via the API directly.
       </p>
 
       <h2>Idempotency</h2>

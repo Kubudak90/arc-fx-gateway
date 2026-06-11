@@ -13,7 +13,7 @@ contract SettleTest is GatewayTestBase {
         assertEq(eurc.balanceOf(address(gw)), 100e6, "gateway holds full gross");
 
         (uint256 amt, address tok, uint64 claimableAt) = gw.escrows(g);
-        assertEq(amt, 100e6, "escrow amount = amountOut");
+        assertEq(amt, 100e6, "escrow amount = grossPayout (== amountOut here)");
         assertEq(tok, address(eurc));
         assertEq(claimableAt, uint64(block.timestamp + REFUND_WINDOW));
 
@@ -26,13 +26,19 @@ contract SettleTest is GatewayTestBase {
         assertEq(gw.protocolFeesAccrued(address(eurc)), 0, "fee NOT accrued at settle");
     }
 
-    function test_Settle_ExcessAccruesAtSettle() public {
-        bytes32 g = _settle(bytes32("inv-2"), 100e6, 105e6);
+    function test_Settle_ExcessGoesToEscrow_NotFees() public {
+        bytes32 g = _settle(bytes32("inv-x1"), 100e6, 105e6);
 
         (uint256 amt, , ) = gw.escrows(g);
-        assertEq(amt, 100e6, "escrow holds amountOut, not gross");
-        assertEq(gw.protocolFeesAccrued(address(eurc)), 5e6, "excess accrues immediately");
-        assertEq(eurc.balanceOf(address(gw)), 105e6, "gateway holds gross");
+        assertEq(amt, 105e6, "escrow holds the FULL grossPayout (V13 fee model)");
+        assertEq(gw.protocolFeesAccrued(address(eurc)), 0, "no fee accrual at settle");
+    }
+
+    function test_Settle_ZeroExcess_EscrowEqualsAmountOut() public {
+        bytes32 g = _settle(bytes32("inv-x2"), 100e6, 100e6);
+        (uint256 amt, , ) = gw.escrows(g);
+        assertEq(amt, 100e6);
+        assertEq(gw.protocolFeesAccrued(address(eurc)), 0);
     }
 
     function test_Settle_GrossBelowAmountOut_Reverts() public {

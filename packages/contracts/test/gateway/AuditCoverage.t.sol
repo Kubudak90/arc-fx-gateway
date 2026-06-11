@@ -34,10 +34,11 @@ contract AuditCoverageTest is GatewayTestBase {
     // Fee math invariant fuzz
     // -------------------------------------------------------------------------
 
-    /// @notice For any sequence of settles, `protocolFeesAccrued[token]` equals
-    /// the sum of `(grossPayout - amountOut)` over each settled invoice on that
-    /// token. Withdrawals are excluded — separate accounting.
-    function testFuzz_FeeMath_AccruedEqualsExcessSum(
+    /// @notice V13 fee model: settle NEVER touches `protocolFeesAccrued` — the
+    /// full grossPayout (amountOut + excess) sits in escrow. The single protocol
+    /// fee is taken at claim: `(escrow.amount * FEE_BPS) / 10_000`, with the
+    /// remainder (including excess) flowing to the merchant.
+    function testFuzz_FeeMath_SingleClaimTimeFee(
         uint256 amountOut1,
         uint256 amountOut2,
         uint256 excess1,
@@ -61,10 +62,30 @@ contract AuditCoverageTest is GatewayTestBase {
         vm.prank(relayer);
         gw.settleInvoice(g2, customer, address(usdc), gross2, gross2, bytes32(0));
 
+        // (a) settle never accrues; (b) escrow holds the full gross.
+        assertEq(gw.protocolFeesAccrued(address(eurc)), 0, "settle must not accrue fees");
+        (uint256 amt1, , ) = gw.escrows(g1);
+        (uint256 amt2, , ) = gw.escrows(g2);
+        assertEq(amt1, gross1, "escrow 1 holds grossPayout");
+        assertEq(amt2, gross2, "escrow 2 holds grossPayout");
+
+        // (c) claim takes exactly one bps fee on the escrowed gross.
+        vm.warp(block.timestamp + REFUND_WINDOW + 1);
+        bytes32[] memory ids = new bytes32[](2);
+        ids[0] = g1; ids[1] = g2;
+        gw.claim(ids);
+
+        uint256 fee1 = (gross1 * FEE_BPS) / 10_000;
+        uint256 fee2 = (gross2 * FEE_BPS) / 10_000;
         assertEq(
             gw.protocolFeesAccrued(address(eurc)),
-            excess1 + excess2,
-            "accrued != sum of (grossPayout - amountOut)"
+            fee1 + fee2,
+            "accrued != sum of single claim-time bps fees"
+        );
+        assertEq(
+            eurc.balanceOf(payee),
+            (gross1 - fee1) + (gross2 - fee2),
+            "merchant gets full gross (incl. excess) minus one fee per invoice"
         );
     }
 

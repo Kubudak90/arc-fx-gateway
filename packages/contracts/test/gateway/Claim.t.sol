@@ -40,6 +40,32 @@ contract ClaimTest is GatewayTestBase {
         assertEq(amt, 0, "escrow deleted");
     }
 
+    function test_Claim_AtWindowBoundary_Succeeds() public {
+        bytes32 g = _settle(bytes32("inv-cb"), 100e6, 100e6);
+        (, , uint64 claimableAt) = gw.escrows(g);
+        vm.warp(claimableAt);   // same second: refund AND claim are both valid; first-mined wins
+
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = g;
+        gw.claim(ids);
+
+        uint256 fee = (100e6 * FEE_BPS) / 10_000;
+        assertEq(eurc.balanceOf(payee), 100e6 - fee);
+    }
+
+    function test_Claim_WithExcess_FeeOnGross_NoDoubleDip() public {
+        bytes32 g = _settle(bytes32("inv-2b"), 100e6, 105e6);
+        vm.warp(block.timestamp + REFUND_WINDOW + 1);
+
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = g;
+        gw.claim(ids);
+
+        uint256 fee = (105e6 * FEE_BPS) / 10_000;
+        assertEq(eurc.balanceOf(payee), 105e6 - fee, "merchant gets full gross minus one fee");
+        assertEq(gw.protocolFeesAccrued(address(eurc)), fee, "total protocol take == one bps fee, nothing from settle");
+    }
+
     function test_Claim_RoutesToCurrentPayoutAddress_AfterRotation() public {
         bytes32 g = _settle(bytes32("inv-3"), 100e6, 100e6);
 
@@ -59,11 +85,12 @@ contract ClaimTest is GatewayTestBase {
     function test_Claim_BatchAtomic_OneBadIdRevertsAll() public {
         bytes32 g1 = _settle(bytes32("inv-4a"), 100e6, 100e6);
         bytes32 g2 = _settle(bytes32("inv-4b"), 50e6,  50e6);
-        vm.warp(block.timestamp + REFUND_WINDOW + 1);
 
-        // Refund g2 first → it's no longer claimable
+        // Refund g2 first (inside the refund window) → it's no longer claimable
         vm.prank(merchant);
         gw.refundInvoice(g2);
+
+        vm.warp(block.timestamp + REFUND_WINDOW + 1);
 
         bytes32[] memory ids = new bytes32[](2);
         ids[0] = g1; ids[1] = g2;

@@ -29,15 +29,33 @@ contract RefundTest is GatewayTestBase {
         assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Refunded));
     }
 
-    function test_Refund_DoesNotTouchExcess() public {
+    function test_Refund_ReturnsFullGross_IncludingExcess() public {
         bytes32 g = _settle(bytes32("inv-2"), 100e6, 105e6);
-        // 5e6 excess accrued at settle
 
         vm.prank(merchant);
         gw.refundInvoice(g);
 
-        assertEq(eurc.balanceOf(customer), 100e6, "customer still gets amountOut");
-        assertEq(gw.protocolFeesAccrued(address(eurc)), 5e6, "excess preserved");
+        assertEq(eurc.balanceOf(customer), 105e6, "payer gets the full escrowed gross");
+        assertEq(gw.protocolFeesAccrued(address(eurc)), 0, "protocol takes nothing on refund");
+    }
+
+    function test_Refund_AfterWindow_Reverts() public {
+        bytes32 g = _settle(bytes32("inv-w1"), 100e6, 100e6);
+        vm.warp(block.timestamp + REFUND_WINDOW + 1);
+
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("RefundWindowExpired(bytes32)", g));
+        gw.refundInvoice(g);
+    }
+
+    function test_Refund_AtWindowBoundary_Succeeds() public {
+        bytes32 g = _settle(bytes32("inv-w2"), 100e6, 100e6);
+        (, , uint64 claimableAt) = gw.escrows(g);
+        vm.warp(claimableAt);   // last second of the window
+
+        vm.prank(merchant);
+        gw.refundInvoice(g);
+        assertEq(eurc.balanceOf(customer), 100e6);
     }
 
     function test_Refund_AdminCanRefund() public {

@@ -251,8 +251,8 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         address indexed payer,
         uint256 amountIn,
         uint256 grossReceived,
-        uint256 merchantPayout,
-        uint256 fee
+        uint256 invoiceAmountOut,
+        uint256 excessToEscrow
     );
     event SettlementContext(bytes32 indexed globalId, address indexed payInToken, bytes32 swapTxHash);
     event EscrowCreated(bytes32 indexed globalId, address indexed payoutToken, uint256 amount, uint64 claimableAt);
@@ -275,44 +275,51 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         address payoutToken = inv.payoutToken;
         IERC20(payoutToken).safeTransferFrom(msg.sender, address(this), grossPayout);
 
-        uint256 excess = grossPayout - inv.amountOut;
-        protocolFeesAccrued[payoutToken] += excess;
+        // V13 fee model: the protocol fee is taken ONLY at claim (PROTOCOL_FEE_BPS
+        // on the escrowed amount). Any settlement excess (grossPayout - amountOut)
+        // stays in escrow and flows to the merchant at claim / to the payer on
+        // refund. Audit 2026-06-11 H1 (double fee accrual).
+        // informational only — escrow holds grossPayout; this value just feeds the event
+        uint256 excessToEscrow = grossPayout - inv.amountOut;
+        uint64  claimableAt    = uint64(block.timestamp) + REFUND_WINDOW;
 
         escrows[globalId] = Escrow({
-            amount:      inv.amountOut,
+            amount:      grossPayout,
             payoutToken: payoutToken,
-            claimableAt: uint64(block.timestamp) + REFUND_WINDOW
+            claimableAt: claimableAt
         });
 
         inv.status = InvoiceStatus.Paid;
         inv.paidBy = payer;
 
-        // Excess (grossPayout - amountOut) accrued to protocolFeesAccrued
-        // above; surface it as the `fee` field so indexers don't see a
-        // protocol-fee event with fee=0 while the gateway's accrued bucket
-        // grows. Audit #25.
-        emit InvoicePaid(globalId, payer, amountIn, grossPayout, inv.amountOut, excess);
+        // Last event arg historically carried the settle-time protocol fee; in
+        // V13 it reports the excess routed to escrow (param renamed — same ABI).
+        emit InvoicePaid(globalId, payer, amountIn, grossPayout, inv.amountOut, excessToEscrow);
         emit SettlementContext(globalId, payInToken, swapTxHash);
-        emit EscrowCreated(globalId, payoutToken, inv.amountOut, escrows[globalId].claimableAt);
+        emit EscrowCreated(globalId, payoutToken, grossPayout, claimableAt);
     }
 
     // =========================================================================
-    // Task 8: Refund — full amountOut to payer, no fee accrual
+    // Task 8: Refund — full escrowed gross to payer, no fee accrual,
+    // only within REFUND_WINDOW (V13)
     // =========================================================================
 
     error NotAuthorized();
     error InvoiceNotRefundable(bytes32 globalId);
+    error RefundWindowExpired(bytes32 globalId);
 
     event InvoiceRefunded(
         bytes32 indexed globalId,
         address indexed refundedTo,
         address indexed payoutToken,
-        uint256 merchantPayout,
+        uint256 refundAmount,
         uint256 protocolFeeReturned
     );
 
     /// @dev Intentionally omits whenNotPaused — refunds must remain callable
     /// during pause (matches V9 design).
+    /// @dev At block.timestamp == claimableAt both refundInvoice and claim are
+    /// valid; whichever lands first wins. Strictly after, only claim.
     function refundInvoice(bytes32 globalId) external nonReentrant {
         Invoice storage inv = invoices[globalId];
         if (inv.status != InvoiceStatus.Paid) revert InvoiceNotRefundable(globalId);
@@ -325,6 +332,10 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         if (!isMerchant && !isAdmin && !isRefundDelegate) revert NotAuthorized();
 
         Escrow memory e = escrows[globalId];
+        // V13: the 7-day refund guarantee is enforced on-chain. After the
+        // window the escrow belongs to the claim path; late refunds happen
+        // off-chain from the merchant's own wallet. Audit 2026-06-11 H2.
+        if (block.timestamp > e.claimableAt) revert RefundWindowExpired(globalId);
         address refundTo = inv.paidBy;
 
         inv.status = InvoiceStatus.Refunded;

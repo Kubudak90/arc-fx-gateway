@@ -34,4 +34,11 @@ contract PayerRefundTest is GatewayTestBase {
         vm.expectRevert(abi.encodeWithSignature("InvoiceNotFound(bytes32)", ghost));
         gw.recordPayerRefund(ghost, customer, address(usdc), 100e6, bytes32(0));
     }
+
+    function test_RecordPayerRefund_WrongPayInToken_Reverts() public {
+        bytes32 g = _createInvoice(bytes32("pr-1"), 100e6, 1 hours);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSignature("InvalidPayInToken()"));
+        gw.recordPayerRefund(g, customer, address(eurc), 100e6, bytes32("r"));
+    }
 }

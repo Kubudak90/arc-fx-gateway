@@ -162,6 +162,8 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
     error InvoiceAlreadyExists(bytes32 globalId);
     error DelegateNotAuthorized();
     error InvalidDelegateRights(uint8 rights);
+    error InvalidDelegateExpiry();
+    error InvalidAmount();
 
     event InvoiceCreated(
         bytes32 indexed globalId,
@@ -192,7 +194,7 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         uint64  expiresAt
     ) external returns (bytes32) {
         DelegateAuth memory d = delegates[merchant_][msg.sender];
-        if (d.expiresAt < block.timestamp)               revert DelegateNotAuthorized();
+        if (block.timestamp > d.expiresAt)               revert DelegateNotAuthorized();
         if ((d.rights & RIGHT_CREATE_INVOICE) == 0)      revert DelegateNotAuthorized();
         return _createInvoice(merchant_, merchantInvoiceId, payIn, amountOut, expiresAt);
     }
@@ -204,6 +206,7 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         uint256 amountOut,
         uint64  expiresAt
     ) internal whenNotPaused returns (bytes32 globalId) {
+        if (amountOut == 0) revert InvalidAmount();
         Merchant memory m = merchants[merchant_];
         if (!m.active)                revert MerchantInactive();
         if (!supportedTokens[payIn])  revert InvalidPayInToken();
@@ -227,6 +230,7 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         if (!merchants[msg.sender].active) revert NotMerchant();
         uint8 validMask = RIGHT_CREATE_INVOICE | RIGHT_REFUND;
         if ((rights & ~validMask) != 0)    revert InvalidDelegateRights(rights);
+        if (expiresAt <= block.timestamp)  revert InvalidDelegateExpiry();
         delegates[msg.sender][delegate] = DelegateAuth({ expiresAt: expiresAt, rights: rights });
         emit DelegateAuthorized(msg.sender, delegate, expiresAt, rights);
     }
@@ -454,6 +458,7 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         Invoice storage inv = invoices[globalId];
         if (inv.status == InvoiceStatus.None)        revert InvoiceNotFound(globalId);
         if (inv.status != InvoiceStatus.Created)     revert InvoiceNotInCreatedState(globalId);
+        if (payInToken != inv.payIn)                 revert InvalidPayInToken();
 
         inv.status = InvoiceStatus.Failed;
         emit PayerRefunded(globalId, payer, payInToken, amount, reasonHash);

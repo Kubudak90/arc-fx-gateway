@@ -79,4 +79,10 @@ contract SettleTest is GatewayTestBase {
         vm.expectRevert(abi.encodeWithSignature("InvoiceNotFound(bytes32)", ghost));
         gw.settleInvoice(ghost, customer, address(usdc), 100e6, 100e6, bytes32(0));
     }
+
+    function test_CreateInvoice_ZeroAmount_Reverts() public {
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
+        gw.createInvoice(bytes32("z"), address(usdc), 0, uint64(block.timestamp + 1 hours));
+    }
 }

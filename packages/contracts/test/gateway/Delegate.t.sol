@@ -102,4 +102,21 @@ contract DelegateTest is GatewayTestBase {
         vm.expectRevert(abi.encodeWithSignature("NotMerchant()"));
         gw.authorizeDelegate(delegate, uint64(block.timestamp + 1 days), RIGHT_CI);
     }
+
+    function test_AuthorizeDelegate_PastExpiry_Reverts() public {
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("InvalidDelegateExpiry()"));
+        gw.authorizeDelegate(delegate, uint64(block.timestamp - 1), RIGHT_R);
+    }
+
+    function test_CreateInvoiceFor_ExpiredDelegate_OneSecondPast_Reverts() public {
+        vm.prank(merchant);
+        gw.authorizeDelegate(delegate, uint64(block.timestamp + 10), RIGHT_CI);
+
+        vm.warp(block.timestamp + 11); // strictly past expiresAt
+
+        vm.prank(delegate);
+        vm.expectRevert(abi.encodeWithSignature("DelegateNotAuthorized()"));
+        gw.createInvoiceFor(merchant, bytes32("inv-5"), address(usdc), 50e6, uint64(block.timestamp + 1 hours));
+    }
 }

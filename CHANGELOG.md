@@ -4,7 +4,7 @@ All notable changes to Arcora are documented here. Format follows [Keep a Change
 
 ## [Unreleased]
 
-Public-beta launch work on `feat/public-beta-launch`. Not yet tagged. The `@arcora/sdk` source carries the AFG-019 security rework below; `@arcora/sdk` and `@arcora/sdk-react` are both prepped at **1.2.0** for the npm publish that ships these client-facing changes.
+Public-beta launch work on `feat/public-beta-launch`. Not yet tagged. The `@arcora/sdk` source carries the AFG-019 security rework below; `@arcora/sdk` and `@arcora/sdk-react` are both prepped at **1.3.0** for the npm publish that ships these client-facing changes.
 
 ### Security
 - **AFG-019 — browser keys can no longer act as server keys.** The docs previously told merchants to embed the privileged `ak_live_` secret key (which creates invoices, spends server-wallet gas, lists escrows, and reads private invoice data) directly in browser / CDN / React code. Introduced a browser-safe **publishable key (`pk_live_…`)**: `POST /api/invoices` now routes by key class — `pk_` may only open a checkout from an allowlisted Origin, `ak_` keeps full capability, unknown prefix is rejected. `lookupMerchantByApiKey` matches `ak_` only, so a browser key can never authorize escrows or private invoice fields. SDK `escrows()` throws `PUBLISHABLE_KEY_FORBIDDEN` for a `pk_` key, and constructing the SDK with a secret key in a browser warns. Migration `0020` adds the publishable-key column (plaintext + prefix index), generated at bootstrap and lazily backfilled for existing merchants. Docs/READMEs/SDK page now show `pk_` in client code with an explicit "secret = server-side only" callout.
@@ -17,6 +17,20 @@ Public-beta launch work on `feat/public-beta-launch`. Not yet tagged. The `@arco
 - **`/api/health` endpoint** for uptime monitoring (reports deploy SHA as version).
 - **Ops health-check cron** covering the VPS daemons, webhook/settlement queue age, and the app endpoint, with hardened scripting (ERR trap, timeouts, `flock`, CA cleanup), an on-alert runbook, and optional `ntfy.sh` push alerts.
 - **Cross-chain (v2) checkout** groundwork — shared v2 route core, prepare/burn-submit/status endpoints, cross-chain payment schema (migration `0021`), a CCTP attestation adapter, and a relayer payment state machine. (Testnet/preview; not part of the SDK publish.)
+
+## [1.3.0] — 2026-06-12
+
+Security point release for the published packages, cut from the 2026-06-11 audit follow-ups on `audit-fixes-2026-06-11`.
+
+### Changed
+- **BREAKING (`@arcora/sdk`): secret keys now throw in browser contexts.** Constructing the SDK with an `ak_…` secret key in a browser previously only `console.warn`ed (AFG-019 era); it now throws at construction time. Client code must use the publishable key (`pk_live_…`) — secret keys are server-side only.
+
+### Added
+- **`@arcora/sdk`: official webhook verifier** — `verifyWebhook` ships at the `@arcora/sdk/webhook` subpath (server-side only; uses `node:crypto`). Verifies the V2 signature (HMAC-SHA256 over `<timestamp>.<body>`) with a timing-safe compare and a replay window (default ±300 s).
+- **`@arcora/sdk-react`**: `engines` field (`node >= 20`) and `typecheck` script; SECURITY JSDoc on `CheckoutButtonProps` documenting that `apiKey` must be the publishable key. Demo merchant flipped to a publishable-key-only guard.
+
+### Deprecated
+- **Webhook V1 signature (`X-Arcora-Signature`)** — it carries no timestamp, so a captured delivery is replayable. Deliveries now include `Deprecation: version=1` and a `Link: <…/docs/webhooks#v2>; rel="deprecation"` header; `/docs/webhooks` documents V2 + the SDK verifier as the verification method. V1 will be removed at mainnet launch.
 
 ## [1.2.0] — 2026-05-13
 
@@ -57,6 +71,7 @@ Major feature release: a V10 custody gateway, multi-stable StableFX swap pools, 
 
 [1.1.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.1.0
 [1.2.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.2.0
+[1.3.0]: https://github.com/arcoralabs/arcorapay/releases/tag/v1.3.0
 
 ## [1.0.3] — 2026-04-30
 

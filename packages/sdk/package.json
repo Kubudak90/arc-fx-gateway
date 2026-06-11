@@ -1,6 +1,6 @@
 {
   "name": "@arcora/sdk",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Stripe-style checkout SDK for Arcora — stablecoin payments on Arc Network",
   "keywords": [
     "arcora",

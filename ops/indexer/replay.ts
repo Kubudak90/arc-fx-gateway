@@ -61,9 +61,23 @@ if (!GATEWAY_PRIMARY) {
   throw new Error("either GATEWAY_ADDRESS (post-retirement) or GATEWAY_ADDRESS_V10 (legacy) must be set");
 }
 const GATEWAY_V11_RAW = (process.env.GATEWAY_ADDRESS_V11 ?? "").toLowerCase();
-const WATCHED_GATEWAYS: Address[] = (GATEWAY_V11_RAW && GATEWAY_V11_RAW !== GATEWAY_PRIMARY)
-  ? [GATEWAY_PRIMARY as Address, GATEWAY_V11_RAW as Address]
-  : [GATEWAY_PRIMARY as Address];
+// V13 fee-model gateway — same optional dual-watch wiring as V11, matching
+// run.ts. Events from this address carry different InvoicePaid semantics
+// (see the V13 note on the paid handler below); this var doubles as the
+// semantics switch, exactly like run.ts.
+const GATEWAY_V13_RAW = (process.env.GATEWAY_ADDRESS_V13 ?? "").toLowerCase();
+const WATCHED_GATEWAYS: Address[] = [GATEWAY_PRIMARY as Address];
+if (GATEWAY_V11_RAW && GATEWAY_V11_RAW !== GATEWAY_PRIMARY) {
+  WATCHED_GATEWAYS.push(GATEWAY_V11_RAW as Address);
+}
+if (GATEWAY_V13_RAW && GATEWAY_V13_RAW !== GATEWAY_PRIMARY && GATEWAY_V13_RAW !== GATEWAY_V11_RAW) {
+  WATCHED_GATEWAYS.push(GATEWAY_V13_RAW as Address);
+}
+/** Mirrors run.ts: V13 changed InvoicePaid's trailing-arg semantics;
+ *  anything not from the V13 address keeps the V10–V12 mapping exactly. */
+function isV13Gateway(logAddress: string): boolean {
+  return GATEWAY_V13_RAW !== "" && logAddress.toLowerCase() === GATEWAY_V13_RAW;
+}
 const PG_URL      = need("POSTGRES_URL_NON_POOLING");
 const MAX_RANGE   = 9_000n;
 
@@ -75,6 +89,9 @@ function need(k: string): string {
 
 const ABI = parseAbi([
   "event InvoiceCreated(bytes32 indexed globalId, address indexed merchant, bytes32 indexed merchantInvoiceId, address payIn, address payoutToken, uint256 amountOut, uint64 expiresAt)",
+  // V13 NOTE (see run.ts for the full table): same InvoicePaid signature, but
+  // V13 renamed/repurposed the trailing args — grossPayout, invoiceAmountOut,
+  // excessToEscrow. The paid handler branches on isV13Gateway(log.address).
   "event InvoicePaid(bytes32 indexed globalId, address indexed payer, uint256 amountIn, uint256 grossReceived, uint256 merchantPayout, uint256 fee)",
   "event SettlementContext(bytes32 indexed globalId, address indexed payInToken, bytes32 swapTxHash)",
   "event EscrowCreated(bytes32 indexed globalId, address indexed payoutToken, uint256 amount, uint64 claimableAt)",
@@ -193,8 +210,16 @@ async function replay(from: bigint, to: bigint, dryRun: boolean): Promise<Replay
         const id              = d.args.globalId as Hex;
         const payer           = d.args.payer as string;
         const amountIn        = (d.args.amountIn        as bigint).toString();
-        const merchantPayout  = (d.args.merchantPayout  as bigint).toString();
-        const protocolFee     = (d.args.fee             as bigint).toString();
+        // V13 fee model (parity with run.ts): InvoicePaid's 5th/6th args are
+        // invoiceAmountOut / excessToEscrow on V13 — NOT merchantPayout /
+        // protocol fee. Settle-time protocol fee is always 0 on V13; the only
+        // protocol fee is InvoiceClaimed.fee and merchant_payout is
+        // InvoiceClaimed.toMerchant, both written by the claimed handler
+        // below. V10–V12 addresses keep the original mapping exactly.
+        const v13 = isV13Gateway(log.address);
+        const merchantPayout: string | null =
+          v13 ? null : (d.args.merchantPayout as bigint).toString();
+        const protocolFee     = v13 ? "0" : (d.args.fee as bigint).toString();
         const paidAt          = new Date(await blockTsMs(log.blockNumber)).toISOString();
 
         const upd = await client.query<{ id: string; merchant_id: string }>(

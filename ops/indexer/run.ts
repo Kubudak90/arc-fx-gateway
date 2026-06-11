@@ -19,12 +19,28 @@ if (!GATEWAY_PRIMARY) {
   throw new Error("either GATEWAY_ADDRESS (post-retirement) or GATEWAY_ADDRESS_V10 (legacy) must be set");
 }
 const GATEWAY_V11_RAW = (process.env.GATEWAY_ADDRESS_V11 ?? "").toLowerCase();
-// De-dup: if the legacy V11 var is set to the same value as the primary
-// (some envs do this defensively during the cutover), don't list the
+// V13 fee-model gateway (2026-06-11 redeploy). Same optional dual-watch
+// wiring as V11, but events from this address carry DIFFERENT InvoicePaid
+// semantics — see the V13 note on the InvoicePaid handler below. This var
+// is also the semantics switch: if a future env consolidates V13 into the
+// bare GATEWAY_ADDRESS, keep GATEWAY_ADDRESS_V13 set (to the same value)
+// so the handler still recognizes the address as V13.
+const GATEWAY_V13_RAW = (process.env.GATEWAY_ADDRESS_V13 ?? "").toLowerCase();
+// De-dup: if a versioned var is set to the same value as the primary
+// (some envs do this defensively during a cutover), don't list the
 // address twice in WATCHED_GATEWAYS — getLogs would double-emit.
-const WATCHED_GATEWAYS: Address[] = (GATEWAY_V11_RAW && GATEWAY_V11_RAW !== GATEWAY_PRIMARY)
-  ? [GATEWAY_PRIMARY as Address, GATEWAY_V11_RAW as Address]
-  : [GATEWAY_PRIMARY as Address];
+const WATCHED_GATEWAYS: Address[] = [GATEWAY_PRIMARY as Address];
+if (GATEWAY_V11_RAW && GATEWAY_V11_RAW !== GATEWAY_PRIMARY) {
+  WATCHED_GATEWAYS.push(GATEWAY_V11_RAW as Address);
+}
+if (GATEWAY_V13_RAW && GATEWAY_V13_RAW !== GATEWAY_PRIMARY && GATEWAY_V13_RAW !== GATEWAY_V11_RAW) {
+  WATCHED_GATEWAYS.push(GATEWAY_V13_RAW as Address);
+}
+/** V13 changed InvoicePaid's trailing args (see handler note); everything
+ *  not from the V13 address keeps the V10–V12 mapping exactly. */
+function isV13Gateway(logAddress: string): boolean {
+  return GATEWAY_V13_RAW !== "" && logAddress.toLowerCase() === GATEWAY_V13_RAW;
+}
 // Kept as a stable alias for the start-line log so dashboards/alerts that
 // grep for `gateway:0x…` keep matching. Points at the same primary
 // address the rest of the daemon reads.
@@ -42,6 +58,13 @@ function need(k: string): string {
 
 const ABI = parseAbi([
   "event InvoiceCreated(bytes32 indexed globalId, address indexed merchant, bytes32 indexed merchantInvoiceId, address payIn, address payoutToken, uint256 amountOut, uint64 expiresAt)",
+  // V13 NOTE: the InvoicePaid ABI signature (types/topic0) is unchanged, but
+  // V13 renamed the trailing params and changed their semantics:
+  //   grossReceived  → grossPayout      (full gross routed to escrow)
+  //   merchantPayout → invoiceAmountOut (the invoice's amountOut, NOT a payout)
+  //   fee            → excessToEscrow   (merchant money, NOT protocol revenue)
+  // We keep the V10–V12 names here; the InvoicePaid handler branches on the
+  // emitting address (isV13Gateway) to map the args correctly per version.
   "event InvoicePaid(bytes32 indexed globalId, address indexed payer, uint256 amountIn, uint256 grossReceived, uint256 merchantPayout, uint256 fee)",
   "event SettlementContext(bytes32 indexed globalId, address indexed payInToken, bytes32 swapTxHash)",
   "event EscrowCreated(bytes32 indexed globalId, address indexed payoutToken, uint256 amount, uint64 claimableAt)",
@@ -244,10 +267,29 @@ async function tick(): Promise<{
         const id              = d.args.globalId as Hex;
         const payer           = d.args.payer as string;
         const amountIn        = (d.args.amountIn        as bigint).toString();
-        const merchantPayout  = (d.args.merchantPayout  as bigint).toString();
-        const protocolFee     = (d.args.fee             as bigint).toString();
+        // V13 fee model: InvoicePaid's 5th/6th args are invoiceAmountOut /
+        // excessToEscrow — NOT merchantPayout / protocol fee. The settle-time
+        // protocol fee is always 0 on V13; the ONLY protocol fee is taken at
+        // claim time (InvoiceClaimed.fee), and merchant_payout equals
+        // InvoiceClaimed.toMerchant — both written by the claimed handler
+        // below. At paid-time we record protocol_fee = 0 and leave
+        // merchant_payout null; the V13-only grossPayout / excessToEscrow
+        // values are preserved in metadata (excess is merchant money routed
+        // into escrow, paid back in full to the payer on refund).
+        // V10–V12 addresses keep the original mapping exactly.
+        const v13 = isV13Gateway(log.address);
+        const merchantPayout: string | null =
+          v13 ? null : (d.args.merchantPayout as bigint).toString();
+        const protocolFee = v13 ? "0" : (d.args.fee as bigint).toString();
 
         const ctx = settleCtxByInvoice.get(id.toLowerCase());
+        const meta: Record<string, unknown> = ctx
+          ? { pay_in_actual: ctx.payInToken, swap_tx: ctx.swapTxHash, source_address: log.address }
+          : { source_address: log.address };
+        if (v13) {
+          meta.gross_payout     = (d.args.grossReceived as bigint).toString(); // V13: grossPayout
+          meta.excess_to_escrow = (d.args.fee           as bigint).toString(); // V13: excessToEscrow
+        }
         // Block timestamp for catch-up replay accuracy (same pattern as
         // failed_at — paid_at and refunded_at both used DB now() before).
         const paidAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
@@ -260,9 +302,7 @@ async function tick(): Promise<{
            returning id, merchant_id`,
           [
             id, payer, log.transactionHash, amountIn, merchantPayout, protocolFee,
-            ctx
-              ? JSON.stringify({ pay_in_actual: ctx.payInToken, swap_tx: ctx.swapTxHash, source_address: log.address })
-              : JSON.stringify({ source_address: log.address }),
+            JSON.stringify(meta),
             paidAt,
           ],
         );

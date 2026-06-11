@@ -64,7 +64,13 @@ function keysEqual(a: string, b: string): boolean {
  * can never be authorized by a browser publishable key. (AFG-019)
  */
 export async function lookupMerchantByApiKey(key: string) {
-  if (!key.startsWith(SECRET_PREFIX)) return null;
+  // Audit 2026-06-11 MED-4: reject garbage before bcrypt. Real keys are
+  // `ak_live_` + a [A-Za-z0-9_] body — generateApiKey emits exactly 56 chars
+  // of [A-Za-z0-9]; the e2e fixture key has a 57-char body containing `_` —
+  // so anything outside 20..64 of that charset costs O(1), not a db
+  // round-trip plus a hash. (No `ak_test_` class exists; secret keys are
+  // ak_live_ only.)
+  if (!/^ak_live_[A-Za-z0-9_]{20,64}$/.test(key)) return null;
   const prefix = key.slice(0, PREFIX_LEN);
   const candidates = await db.select().from(merchants).where(eq(merchants.apiKeyPrefix, prefix));
   for (const m of candidates) {

@@ -1,9 +1,18 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { invoices, merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { lookupMerchantByApiKey } from "@/lib/auth/apikey";
 import { privateJson } from "@/lib/security/respond";
+import { takeToken } from "@/lib/rate/limiter";
+import { clientIp } from "@/lib/rate/clientIp";
+
+// Audit 2026-06-11 MED-4: per-IP rate limit on invoice reads. Each GET costs
+// a DB join and, when an API key is presented, a bcrypt compare; 30/60s is
+// generous for a real checkout widget while capping scraping/grind abuse.
+// Fail-open on limiter outage, same as checkout/submit.
+const INVOICE_GET_LIMIT = 30;
+const INVOICE_GET_WINDOW_SECONDS = 60;
 
 /**
  * Public GET — returns the minimal fields the checkout widget needs.
@@ -16,6 +25,20 @@ import { privateJson } from "@/lib/security/respond";
  * receive the full record including `metadata`, `paidBy`, and `paidTx`.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const ip = clientIp(req);
+  let allowed = true;
+  try {
+    allowed = await takeToken(`invoice-get:${ip}`, INVOICE_GET_LIMIT, INVOICE_GET_WINDOW_SECONDS);
+  } catch {
+    allowed = true; // fail-open: limiter outage must not block checkout
+  }
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "rate_limited", retryAfterSeconds: INVOICE_GET_WINDOW_SECONDS },
+      { status: 429, headers: { "retry-after": String(INVOICE_GET_WINDOW_SECONDS) } },
+    );
+  }
+
   const { id } = await ctx.params;
   // Audit H1 (2026-05-05): expose merchant's allowed_origins so the checkout
   // client can do a defense-in-depth check before redirecting after pay

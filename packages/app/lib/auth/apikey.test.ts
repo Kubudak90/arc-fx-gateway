@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import bcrypt from "bcryptjs";
 import {
   generateApiKey,
   generatePublishableKey,
@@ -68,6 +69,60 @@ describe("api key", () => {
     // Wrong-prefix random key: should still return null fast.
     const bogus = "ak_live_ZZZZZZZZZZZZZZZZ" + "A".repeat(40);
     expect(await lookupMerchantByApiKey(bogus)).toBeNull();
+  });
+});
+
+// Audit 2026-06-11 MED-4: malformed keys must be rejected O(1) — no db
+// round-trip, no bcrypt compare. Real secret keys are `ak_live_` + a
+// [A-Za-z0-9_] body (generateApiKey emits 56 chars of [A-Za-z0-9]; the e2e
+// fixture key uses a 57-char body containing `_`), so the cheap-reject
+// bounds the body to 20..64 of that charset.
+describe("cheap-reject before bcrypt (audit 2026-06-11 MED-4)", () => {
+  const malformed: Array<[string, string]> = [
+    ["empty string", ""],
+    ["wrong prefix (publishable)", "pk_live_" + "A".repeat(56)],
+    ["wrong prefix (unknown)", "sk_live_" + "A".repeat(56)],
+    ["uppercase prefix", "AK_LIVE_" + "A".repeat(56)],
+    ["prefix only", "ak_live_"],
+    ["body too short", "ak_live_" + "A".repeat(19)],
+    ["body too long", "ak_live_" + "A".repeat(65)],
+    ["illegal chars in body", "ak_live_" + "A".repeat(30) + "!$%" + "A".repeat(23)],
+    ["trailing newline", "ak_live_" + "A".repeat(56) + "\n"],
+  ];
+
+  it.each(malformed)("returns null for %s without any db or bcrypt work", async (_label, bad) => {
+    const dbSpy = vi.spyOn(db, "select");
+    const bcryptSpy = vi.spyOn(bcrypt, "compare");
+    try {
+      expect(await lookupMerchantByApiKey(bad)).toBeNull();
+      expect(dbSpy).not.toHaveBeenCalled();
+      expect(bcryptSpy).not.toHaveBeenCalled();
+    } finally {
+      dbSpy.mockRestore();
+      bcryptSpy.mockRestore();
+    }
+  });
+
+  it("a well-formed generated key still reaches the db lookup path", async () => {
+    const dbSpy = vi.spyOn(db, "select");
+    try {
+      // No merchant row exists, so the result is null — but the db IS consulted.
+      expect(await lookupMerchantByApiKey(generateApiKey())).toBeNull();
+      expect(dbSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      dbSpy.mockRestore();
+    }
+  });
+
+  it("accepts the e2e fixture key shape (underscores in body)", async () => {
+    const dbSpy = vi.spyOn(db, "select");
+    try {
+      const fixture = "ak_live_test_" + "x".repeat(52); // mirrors e2e/fixtures/seed.ts
+      expect(await lookupMerchantByApiKey(fixture)).toBeNull();
+      expect(dbSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      dbSpy.mockRestore();
+    }
   });
 });
 

@@ -19,8 +19,17 @@ import { timingSafeEqual } from "node:crypto";
  * time, 30-min TTL), this endpoint returns ONLY the bare status. With a
  * matching token, it returns the full detail (lastError, tx hashes, etc.).
  * The token comes back in the submit response and is forwarded by the
- * hosted checkout poller as `?token=` or `x-status-token`.
+ * hosted checkout poller via the `x-status-token` header.
+ *
+ * Audit 2026-06-11 HIGH-4: the `?token=` query channel was removed —
+ * query strings end up in access logs (CWE-598); the header is the only
+ * accepted channel. A token present in the query string is ignored.
  */
+
+// Audit 2026-06-11: polled anonymously by the hosted checkout / SDK — every
+// branch must be uncacheable. Deliberately NOT privateJson: this is a public
+// endpoint, so `private` would be misleading; plain no-store is the contract.
+const PUBLIC_NO_STORE = { "Cache-Control": "no-store" } as const;
 
 function tokensEqual(a: string | null, b: string | null): boolean {
   if (!a || !b) return false;
@@ -55,15 +64,18 @@ export async function GET(
     .limit(1);
 
   const row = rows[0];
-  if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!row) {
+    return NextResponse.json(
+      { error: "not_found" },
+      { status: 404, headers: PUBLIC_NO_STORE },
+    );
+  }
 
   // Status token gate (audit M12). Without a valid token, return only the
   // bare status. The hosted checkout poller forwards the token from the
   // submit response on each poll; SDK consumers do the same.
-  const presented =
-    req.nextUrl.searchParams.get("token") ??
-    req.headers.get("x-status-token") ??
-    null;
+  // Audit 2026-06-11 HIGH-4: header-only — query strings end up in access logs.
+  const presented = req.headers.get("x-status-token");
 
   let tokenOk = false;
   if (presented) {
@@ -88,7 +100,7 @@ export async function GET(
     // a leak, but a polling client already knows the submissionId (it was
     // returned from submit), and the invoiceId is in the on-chain hosted
     // checkout URL. Hide everything else.
-    return NextResponse.json({ status: row.status });
+    return NextResponse.json({ status: row.status }, { headers: PUBLIC_NO_STORE });
   }
 
   return NextResponse.json({
@@ -104,5 +116,5 @@ export async function GET(
     error:        row.status === "failed" ? row.lastError : null,
     createdAt:    row.createdAt.toISOString(),
     updatedAt:    row.updatedAt.toISOString(),
-  });
+  }, { headers: PUBLIC_NO_STORE });
 }

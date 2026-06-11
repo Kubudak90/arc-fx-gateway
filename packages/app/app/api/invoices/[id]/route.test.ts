@@ -106,3 +106,15 @@ describe("GET /api/invoices/:id", () => {
     expect(body.metadata).toEqual({ orderId: "ORDER-42" });
   });
 });
+
+describe("GET /api/invoices/:id — cache hygiene (audit 2026-06-11 HIGH-3)", () => {
+  it("marks the authenticated (API-key) response Cache-Control: no-store, private", async () => {
+    await mockSelect([BASE_ROW]);
+    await import("@/lib/auth/apikey").then((m) => {
+      (m.lookupMerchantByApiKey as any).mockResolvedValue({ id: MERCHANT_ID });
+    });
+    const res = await GET(makeReq({ apiKey: "ak_live_TEST" }), ctx("0x01"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store, private");
+  });
+});

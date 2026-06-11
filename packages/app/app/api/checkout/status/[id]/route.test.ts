@@ -88,7 +88,7 @@ describe("GET /api/checkout/status/[id]", () => {
   it("WITH valid token: returns full detail (settled state, both tx hashes)", async () => {
     queueRows = [baseRow];
     invoiceRows = [VALID_INVOICE];
-    const res = await call(`?token=${encodeURIComponent(VALID_TOKEN)}`);
+    const res = await call("", { "x-status-token": VALID_TOKEN });
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.status).toBe("settled");
@@ -107,7 +107,7 @@ describe("GET /api/checkout/status/[id]", () => {
   it("WITH valid token: hides lastError on transient processing rows", async () => {
     queueRows = [{ ...baseRow, status: "processing", lastError: "transient rpc blip" }];
     invoiceRows = [VALID_INVOICE];
-    const res = await call(`?token=${encodeURIComponent(VALID_TOKEN)}`);
+    const res = await call("", { "x-status-token": VALID_TOKEN });
     expect((await res.json()).error).toBeNull();
   });
 
@@ -117,7 +117,7 @@ describe("GET /api/checkout/status/[id]", () => {
       statusToken: VALID_TOKEN,
       statusTokenExpiresAt: new Date(Date.now() - 1000), // already expired
     }];
-    const res = await call(`?token=${encodeURIComponent(VALID_TOKEN)}`);
+    const res = await call("", { "x-status-token": VALID_TOKEN });
     const body = await res.json();
     expect(body.status).toBe("settled");
     expect(body.swapTxHash).toBeUndefined();
@@ -126,9 +126,33 @@ describe("GET /api/checkout/status/[id]", () => {
   it("wrong token rejected — falls back to bare status", async () => {
     queueRows = [baseRow];
     invoiceRows = [VALID_INVOICE];
-    const res = await call(`?token=${encodeURIComponent("not-the-real-token")}`);
+    const res = await call("", { "x-status-token": "not-the-real-token" });
     const body = await res.json();
     expect(body.status).toBe("settled");
     expect(body.swapTxHash).toBeUndefined();
+  });
+
+  it("HIGH-4: a VALID token in the query string is IGNORED — bare status only", async () => {
+    queueRows = [baseRow];
+    invoiceRows = [VALID_INVOICE];
+    const res = await call(`?token=${encodeURIComponent(VALID_TOKEN)}`);
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.status).toBe("settled");
+    // Detail must NOT unlock via the query channel (CWE-598: tokens in
+    // query strings leak into access logs).
+    expect(body.swapTxHash).toBeUndefined();
+    expect(body.settleTxHash).toBeUndefined();
+    expect(body.invoiceId).toBeUndefined();
+    expect(body.error).toBeUndefined();
+  });
+
+  it("bare-status response is Cache-Control: no-store exactly (public endpoint, not private)", async () => {
+    queueRows = [baseRow];
+    const res = await call();
+    expect(res.status).toBe(200);
+    // Exactly `no-store` — NOT `no-store, private`. This endpoint is polled
+    // anonymously; `private` would wrongly imply authenticated data.
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
 });

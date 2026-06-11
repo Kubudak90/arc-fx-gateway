@@ -68,7 +68,9 @@ const SubmitBody = z.object({
   permit2Signature: z.string().regex(HEX, "must be hex"),
 });
 
-const RELAYER_ADDRESS = (process.env.NEXT_PUBLIC_RELAYER_ADDRESS ?? "") as Address;
+// Server-side security binding — prefer the server-only env var. The
+// NEXT_PUBLIC_ fallback keeps current deploys working and dies at mainnet.
+const RELAYER_ADDRESS = (process.env.RELAYER_ADDRESS ?? process.env.NEXT_PUBLIC_RELAYER_ADDRESS ?? "") as Address;
 const MAX_AMOUNT_IN_BASE_UNITS = 10n ** 30n; // ~10^30, generous upper bound covers any sane stable transfer
 
 export async function POST(req: NextRequest) {

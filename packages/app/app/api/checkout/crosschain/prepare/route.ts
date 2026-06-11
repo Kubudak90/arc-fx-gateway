@@ -76,7 +76,9 @@ export async function POST(req: NextRequest) {
     }, { status: screen.decision === "review" ? 202 : 403 });
   }
 
-  const relayer = process.env.NEXT_PUBLIC_RELAYER_ADDRESS as Address | undefined;
+  // Server-side security binding — prefer the server-only env var. The
+  // NEXT_PUBLIC_ fallback keeps current deploys working and dies at mainnet.
+  const relayer = (process.env.RELAYER_ADDRESS ?? process.env.NEXT_PUBLIC_RELAYER_ADDRESS) as Address | undefined;
   if (!relayer) return NextResponse.json({ error: "relayer_unconfigured" }, { status: 503 });
 
   let intent;

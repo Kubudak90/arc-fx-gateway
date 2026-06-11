@@ -66,11 +66,11 @@ function keysEqual(a: string, b: string): boolean {
 export async function lookupMerchantByApiKey(key: string) {
   // Audit 2026-06-11 MED-4: reject garbage before bcrypt. Real keys are
   // `ak_live_` + a [A-Za-z0-9_] body — generateApiKey emits exactly 56 chars
-  // of [A-Za-z0-9]; the e2e fixture key has a 57-char body containing `_` —
-  // so anything outside 20..64 of that charset costs O(1), not a db
+  // of [A-Za-z0-9]; the e2e fixture key has a 57-char body containing `_`.
+  // Bounds are exact (56–57) so anything else costs O(1), not a db
   // round-trip plus a hash. (No `ak_test_` class exists; secret keys are
   // ak_live_ only.)
-  if (!/^ak_live_[A-Za-z0-9_]{20,64}$/.test(key)) return null;
+  if (!/^ak_live_[A-Za-z0-9_]{56,57}$/.test(key)) return null;
   const prefix = key.slice(0, PREFIX_LEN);
   const candidates = await db.select().from(merchants).where(eq(merchants.apiKeyPrefix, prefix));
   for (const m of candidates) {

@@ -9,6 +9,7 @@ import { screenWithAudit } from "@/lib/compliance/screen";
 import { estimateSwapForTarget } from "@/lib/checkout/quote-server";
 import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
+import { envFlag } from "@/lib/env";
 
 // Audit H1 (2026-05-19): per-IP rate limit. Each authorize call hits the
 // DB and, on a compliance cache miss, an external provider + App Kit
@@ -109,10 +110,6 @@ const Body = z.object({ invoiceId: HEX32, address: ADDR });
 
 const AUTH_TTL_MINUTES = 5;
 
-function envFlag(name: string): boolean {
-  const v = process.env[name];
-  return v === "true" || v === "1";
-}
 
 function tokenSymbol(addr: string): "USDC" | "EURC" | null {
   const a = addr.toLowerCase();

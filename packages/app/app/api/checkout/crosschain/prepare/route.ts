@@ -12,6 +12,7 @@ import { recordCheckoutEvent } from "@/lib/crosschain/telemetry";
 import { estimateSwapForTarget } from "@/lib/checkout/quote-server";
 import { takeToken } from "@/lib/rate/limiter";
 import { clientIp } from "@/lib/rate/clientIp";
+import { envFlag } from "@/lib/env";
 
 // Per-IP rate limit, mirroring /api/checkout/authorize. Each prepare call
 // hits the DB, the compliance provider on a cache miss, and (for EURC
@@ -29,11 +30,6 @@ const Body = z.object({
   sourceChainId: z.number().int().positive(),
 });
 
-// Same flag semantics as /api/checkout/authorize (envFlag there).
-function envFlag(name: string): boolean {
-  const v = process.env[name];
-  return v === "true" || v === "1";
-}
 
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);

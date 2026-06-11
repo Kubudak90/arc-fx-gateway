@@ -20,6 +20,8 @@ const NONCE_WINDOW_SECONDS = 60;
 export async function POST(req: NextRequest) {
   // AFG-006 (2026-06-07): pair the verify-route login-CSRF guard so the whole
   // SIWE handshake is same-origin only (dashboard-driven). Lenient outside prod.
+  // CRIT-1 (2026-06-11): no isJsonContentType gate here — the dashboard's
+  // bodyless nonce fetch (ConnectMerchantButton) omits content-type entirely.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
   const ip = clientIp(req);
   let allowed = true;

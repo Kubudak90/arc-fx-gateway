@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import { isSameOrigin } from "@/lib/security/csrf";
 
 export async function POST(req: NextRequest) {
   const publicBaseUrl = process.env.PUBLIC_BASE_URL;
@@ -8,22 +9,13 @@ export async function POST(req: NextRequest) {
     // and (worse) trains the wrong default for any future use of this env.
     return NextResponse.json({ error: "public_base_url_unset" }, { status: 500 });
   }
-  const expectedOrigin = new URL(publicBaseUrl).origin;
 
   // CSRF guard: a session-bound logout is still vulnerable to a cross-site
-  // form POST that forcibly signs the merchant out mid-flow. Origin header
-  // is set on all cross-site POSTs in modern browsers; Referer is the
-  // older fallback.
-  const origin  = req.headers.get("origin");
-  const referer = req.headers.get("referer");
-  let refererOrigin: string | null = null;
-  if (referer) {
-    try { refererOrigin = new URL(referer).origin; } catch { /* ignore */ }
-  }
-  const sameOrigin =
-    origin === expectedOrigin ||
-    refererOrigin === expectedOrigin;
-  if (!sameOrigin) {
+  // form POST that forcibly signs the merchant out mid-flow. CRIT-1
+  // (2026-06-11): de-duplicated into the shared, fail-closed helper. No JSON
+  // content-type gate — logout is a plain HTML <form method="POST"> submit
+  // (x-www-form-urlencoded) from the dashboard layout/sidebar.
+  if (!isSameOrigin(req)) {
     return NextResponse.json({ error: "csrf" }, { status: 403 });
   }
 

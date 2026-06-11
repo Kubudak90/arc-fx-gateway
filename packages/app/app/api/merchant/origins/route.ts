@@ -5,7 +5,7 @@ import { db } from "@/lib/db/client";
 import { merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
-import { isSameOrigin } from "@/lib/security/csrf";
+import { isSameOrigin, isJsonContentType } from "@/lib/security/csrf";
 
 // Audit H1 (2026-05-05): post-bootstrap merchants update their redirect
 // allowlist via this endpoint. Bootstrap collects the initial set; this
@@ -20,6 +20,9 @@ const Body = z.object({
 export async function PATCH(req: NextRequest) {
   // AFG-006 (2026-06-06): same Origin/Referer CSRF guard the webhook route uses.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
+  if (!isJsonContentType(req)) {
+    return NextResponse.json({ error: "unsupported_content_type" }, { status: 415 });
+  }
   const session = await getSession();
   if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

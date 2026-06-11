@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { encrypt } from "@/lib/crypto/secret";
 import { randomBytes } from "node:crypto";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
-import { isSameOrigin } from "@/lib/security/csrf";
+import { isSameOrigin, isJsonContentType } from "@/lib/security/csrf";
 
 const PatchBody = z.object({ webhookUrl: z.string().url().nullable() });
 
@@ -15,6 +15,9 @@ export async function PATCH(req: NextRequest) {
   // Audit L-5 (2026-05-31): state-changing merchant routes now carry the same
   // Origin/Referer CSRF guard as auth/logout, not just SameSite=Lax.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
+  if (!isJsonContentType(req)) {
+    return NextResponse.json({ error: "unsupported_content_type" }, { status: 415 });
+  }
   const session = await getSession();
   if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const parsed = PatchBody.safeParse(await req.json());
@@ -41,6 +44,8 @@ export async function PATCH(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   // Audit L-5 (2026-05-31): same CSRF guard on the signing-secret rotation.
+  // CRIT-1 (2026-06-11): no isJsonContentType gate here — the dashboard's
+  // bodyless rotate fetch (WebhookSettingsCard) omits content-type entirely.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
   const session = await getSession();
   if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });

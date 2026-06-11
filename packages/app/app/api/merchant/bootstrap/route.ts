@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { generateApiKey, generatePublishableKey, hashApiKey, PREFIX_LEN } from "@/lib/auth/apikey";
 import { encrypt } from "@/lib/crypto/secret";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
-import { isSameOrigin } from "@/lib/security/csrf";
+import { isSameOrigin, isJsonContentType } from "@/lib/security/csrf";
 import { randomBytes } from "node:crypto";
 
 // Audit H1 (2026-05-05): merchant must declare which origins may receive
@@ -24,6 +24,9 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   // AFG-006 (2026-06-06): same Origin/Referer CSRF guard the webhook route uses.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
+  if (!isJsonContentType(req)) {
+    return NextResponse.json({ error: "unsupported_content_type" }, { status: 415 });
+  }
   const session = await getSession();
   if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

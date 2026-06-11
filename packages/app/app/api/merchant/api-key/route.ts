@@ -4,11 +4,16 @@ import { db } from "@/lib/db/client";
 import { merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateApiKey, hashApiKey, PREFIX_LEN } from "@/lib/auth/apikey";
-import { isSameOrigin } from "@/lib/security/csrf";
+import { isSameOrigin, isJsonContentType } from "@/lib/security/csrf";
 
 export async function POST(req: NextRequest) {
   // AFG-006 (2026-06-06): same Origin/Referer CSRF guard the webhook route uses.
   if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
+  // CRIT-1 (2026-06-11): JSON gate — bodyless rotate, but the dashboard fetch
+  // (ApiKeyCard) always sends content-type: application/json, so enforce it.
+  if (!isJsonContentType(req)) {
+    return NextResponse.json({ error: "unsupported_content_type" }, { status: 415 });
+  }
   const session = await getSession();
   if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

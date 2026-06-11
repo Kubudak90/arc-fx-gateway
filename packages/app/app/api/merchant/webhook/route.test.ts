@@ -22,9 +22,14 @@ const SESSION_WITH_MERCHANT = {
   merchantAddress: "0xabc0000000000000000000000000000000000000",
 };
 
+// CRIT-1 (2026-06-11): isSameOrigin is now fail-closed, so every legitimate
+// request must carry a same-origin Origin header (matches .env PUBLIC_BASE_URL).
+// PATCH additionally carries the JSON content-type gate; the bodyless POST
+// rotate does NOT (the dashboard's rotate fetch omits content-type entirely).
 function makePatchReq(body: unknown) {
   return new NextRequest("http://localhost/api/merchant/webhook", {
     method: "PATCH",
+    headers: { "content-type": "application/json", origin: "http://localhost:3000" },
     body: JSON.stringify(body),
   });
 }
@@ -32,6 +37,7 @@ function makePatchReq(body: unknown) {
 function makePostReq() {
   return new NextRequest("http://localhost/api/merchant/webhook", {
     method: "POST",
+    headers: { origin: "http://localhost:3000" },
   });
 }
 
@@ -99,7 +105,7 @@ describe("PATCH /api/merchant/webhook", () => {
     try {
       const req = new NextRequest("http://localhost/api/merchant/webhook", {
         method: "PATCH",
-        headers: { origin: "https://app.arcorapay.xyz" },
+        headers: { origin: "https://app.arcorapay.xyz", "content-type": "application/json" },
         body: JSON.stringify({ webhookUrl: "https://shop.example.com/hook" }),
       });
       const res = await PATCH(req);
@@ -111,8 +117,32 @@ describe("PATCH /api/merchant/webhook", () => {
   });
 });
 
+describe("PATCH /api/merchant/webhook — CRIT-1 gates", () => {
+  it("rejects a request with neither Origin nor Referer with 403 (fail-closed)", async () => {
+    const req = new NextRequest("http://localhost/api/merchant/webhook", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ webhookUrl: "https://shop.example.com/hook" }),
+    });
+    const res = await PATCH(req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("csrf");
+  });
+
+  it("rejects a non-JSON content type with 415", async () => {
+    const req = new NextRequest("http://localhost/api/merchant/webhook", {
+      method: "PATCH",
+      headers: { "content-type": "text/plain", origin: "http://localhost:3000" },
+      body: JSON.stringify({ webhookUrl: "https://shop.example.com/hook" }),
+    });
+    const res = await PATCH(req);
+    expect(res.status).toBe(415);
+    expect((await res.json()).error).toBe("unsupported_content_type");
+  });
+});
+
 describe("POST /api/merchant/webhook", () => {
-  it("merchant exists → 200 with webhookSecret in body", async () => {
+  it("merchant exists → 200 with webhookSecret in body (no content-type, like the dashboard rotate fetch)", async () => {
     const res = await POST(makePostReq());
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -126,5 +156,26 @@ describe("POST /api/merchant/webhook", () => {
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body).toEqual({ error: "no_merchant" });
+  });
+
+  it("rejects a request with neither Origin nor Referer with 403 (CRIT-1 fail-closed)", async () => {
+    const req = new NextRequest("http://localhost/api/merchant/webhook", { method: "POST" });
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("csrf");
+    const dbm = await import("@/lib/db/client");
+    expect(dbm.db.update).not.toHaveBeenCalled();
+  });
+
+  it("still rotates on a non-JSON content type (bodyless rotate deliberately skips the JSON gate)", async () => {
+    const req = new NextRequest("http://localhost/api/merchant/webhook", {
+      method: "POST",
+      headers: { "content-type": "text/plain", origin: "http://localhost:3000" },
+    });
+    const res = await POST(req);
+    expect(res.status).not.toBe(415);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty("webhookSecret");
   });
 });

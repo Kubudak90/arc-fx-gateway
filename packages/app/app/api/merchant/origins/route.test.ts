@@ -14,9 +14,12 @@ vi.mock("@/lib/security/safeUrl", () => ({
 
 import { PATCH } from "./route";
 
+// CRIT-1 (2026-06-11): isSameOrigin is now fail-closed and the route carries a
+// JSON content-type gate, mirroring the dashboard's AllowedOriginsCard fetch.
 function makeReq(body: unknown) {
   return new NextRequest("http://localhost/api/merchant/origins", {
     method: "PATCH",
+    headers: { "content-type": "application/json", origin: "http://localhost:3000" },
     body: JSON.stringify(body),
   });
 }

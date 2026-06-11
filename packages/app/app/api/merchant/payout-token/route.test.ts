@@ -27,16 +27,18 @@ beforeEach(async () => {
   (dbm.db.update as any).mockReturnValue({ set });
 });
 
+// CRIT-1 (2026-06-11): isSameOrigin is now fail-closed, so every legitimate
+// request must carry a same-origin Origin header (matches .env PUBLIC_BASE_URL).
 function makeReq(headers: Record<string, string> = {}) {
   return new NextRequest("http://localhost/api/merchant/payout-token", {
     method: "POST",
-    headers: { "content-type": "application/json", ...headers },
+    headers: { "content-type": "application/json", origin: "http://localhost:3000", ...headers },
     body: JSON.stringify({ payoutToken: TOKEN }),
   });
 }
 
 describe("POST /api/merchant/payout-token", () => {
-  it("syncs the DB when on-chain payoutToken matches (no Origin → allowed)", async () => {
+  it("syncs the DB when on-chain payoutToken matches (same-origin)", async () => {
     const res = await POST(makeReq());
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);

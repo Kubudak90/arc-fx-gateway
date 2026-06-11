@@ -1,28 +1,18 @@
 import type { NextRequest } from "next/server";
 
 /**
- * CSRF defence for state-changing, cookie-authenticated routes (audit L-5,
- * 2026-05-31). `SameSite=Lax` already blocks cross-site *sends* of the session
- * cookie in modern browsers; this is the defence-in-depth Origin/Referer
- * allowlist — the same guard `auth/logout` carries, generalised so every
- * state-changing merchant POST/PATCH can reuse it.
+ * CSRF defence for state-changing, cookie-authenticated routes.
  *
- * A browser-driven CSRF attack is a cross-site fetch/form submission, which the
- * browser ALWAYS stamps with an `Origin` header (and usually `Referer`) and
- * which page script cannot strip. So:
- *   - `Origin` present            → must equal our own origin, else reject.
- *   - `Origin` absent, `Referer`  → its origin must match.
- *   - neither present             → not a browser cross-site request (curl /
- *     server-to-server); there is no ambient cookie to forge, so allow.
- *
- * Our own origin is `PUBLIC_BASE_URL` (or `NEXT_PUBLIC_BASE_URL`). If that is
- * unset/malformed we fail closed in production and stay lenient elsewhere so
- * local dev / tests aren't blocked.
+ * V2 (audit 2026-06-11 CRIT-1): fail CLOSED when neither Origin nor Referer is
+ * present. Browsers stamp Origin on every fetch/XHR/form POST, so a legitimate
+ * dashboard request always carries it. Header-less mutations are curl /
+ * server-to-server — those callers must use an API key (no ambient cookie),
+ * not the session cookie, so rejecting them here costs nothing.
  */
 export function isSameOrigin(req: NextRequest): boolean {
   const origin = req.headers.get("origin");
   const referer = req.headers.get("referer");
-  if (!origin && !referer) return true;
+  if (!origin && !referer) return false;
 
   const base = process.env.PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_BASE_URL;
   let expected: string | null = null;
@@ -33,4 +23,14 @@ export function isSameOrigin(req: NextRequest): boolean {
 
   if (origin) return origin === expected;
   try { return new URL(referer!).origin === expected; } catch { return false; }
+}
+
+/**
+ * Defence-in-depth: browsers cannot send Content-Type: application/json
+ * cross-origin without a CORS preflight. Form posts are x-www-form-urlencoded.
+ * Call at the top of every cookie-authed mutation handler.
+ */
+export function isJsonContentType(req: NextRequest): boolean {
+  const ct = req.headers.get("content-type") ?? "";
+  return (ct.split(";")[0] ?? "").trim().toLowerCase() === "application/json";
 }

@@ -30,10 +30,12 @@ import { POST } from "./route";
 const VALID_PAYOUT_TOKEN = "0x3600000000000000000000000000000000000000"; // USDC
 const UNSUPPORTED_TOKEN  = "0x1111111111111111111111111111111111111111";
 
+// CRIT-1 (2026-06-11): isSameOrigin is now fail-closed, so every legitimate
+// request must carry a same-origin Origin header (matches .env PUBLIC_BASE_URL).
 function makeReq(body: unknown) {
   return new Request("http://localhost/api/merchant/bootstrap", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: "http://localhost:3000" },
     body: JSON.stringify(body),
   }) as any;
 }

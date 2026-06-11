@@ -4,3 +4,5 @@
 tsconfig.tsbuildinfo
 test-results/
 playwright-report/
+.env
+scripts/track-refund.ts

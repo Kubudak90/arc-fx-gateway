@@ -52,6 +52,14 @@ VERBOSE=${ARCORA_HEALTH_VERBOSE:-0}
 # so cron MAILTO is discarded. The topic name is a SECRET (kept only in
 # /etc/cron.d on the box, never committed); see ops/health/README.md.
 NTFY_TOPIC=${ARCORA_NTFY_TOPIC:-}
+# The topic is interpolated into the ntfy.sh URL below — reject anything
+# outside the safe charset before it can reshape the request (audit
+# 2026-06-11). Hard exit 2: a malformed secret is an install error, not a
+# health finding, so it must not flow into the normal fail/ntfy path.
+if [[ -n "${ARCORA_NTFY_TOPIC:-}" && ! "$ARCORA_NTFY_TOPIC" =~ ^[A-Za-z0-9_-]+$ ]]; then
+  echo "[health] FAIL: ARCORA_NTFY_TOPIC contains unexpected characters" >&2
+  exit 2
+fi
 
 # Best-effort push to ntfy.sh. Never fails the script (|| true), capped at
 # 10s, no-op when the knob is empty. $1 is the alert body (already DSN-redacted
@@ -124,12 +132,19 @@ queue_check() {
     fail "queue: POSTGRES_URL_NON_POOLING not set in $RELAYER_ENV_FILE"
     return
   fi
+  # Sanity-gate the value before handing it to psql: anything that isn't a
+  # postgres URL (a mangled env line, a stray flag) must not become a psql
+  # argument (audit 2026-06-11). Never echo the value itself — it's a secret.
+  if [[ "$dsn" != postgresql://* && "$dsn" != postgres://* ]]; then
+    fail "queue: POSTGRES_URL_NON_POOLING in $RELAYER_ENV_FILE is not a postgresql:// or postgres:// DSN — refusing to pass it to psql"
+    return
+  fi
 
   # AFG-011 posture: verify-full against the pinned Supabase CA. The PEM is
   # extracted from the relayer's own supabase-ca.ts (single source of truth
-  # on the box) into a private temp file. If extraction fails we degrade to
-  # sslmode=require (encrypted, unverified) with a WARN rather than going
-  # blind on the queue.
+  # on the box) into a private temp file. If extraction fails the check
+  # FAILs and refuses to run the queue query — no sslmode=require downgrade
+  # (encrypted-but-unverified TLS; audit 2026-06-11).
   local sslmode="verify-full" ca_file=""
   local ca_ts="$RELAYER_DIR/supabase-ca.ts"
   if [[ -f "$ca_ts" ]]; then
@@ -144,17 +159,19 @@ queue_check() {
       | { IFS= read -r escaped && printf '%b' "$escaped"; } > "$ca_file" || true
   fi
   if [[ ! -s "${ca_file:-/nonexistent}" ]]; then
-    warn "queue: could not extract Supabase CA from $ca_ts — falling back to sslmode=require"
-    sslmode="require"
-    ca_file=""
-    # Surface degraded TLS without mailing every 10 min: drop a marker file
-    # (see README — its presence means the queue check ran without verify-full).
+    # Audit 2026-06-11: this used to WARN and downgrade to sslmode=require
+    # (encrypted but UNVERIFIED — a MITM with any cert passes). The queue
+    # query carries the DSN's credentials, so refuse to run it over
+    # unverified TLS and fail loudly instead.
+    fail "queue: could not extract Supabase CA from $ca_ts — refusing to run the queue query over unverified TLS (sslmode=require downgrade removed)"
+    # Marker file kept for the README's tooling: its presence means the most
+    # recent run could not establish verify-full.
     touch /run/arcora-health-tls-degraded 2>/dev/null || true
-  else
-    # verify-full is in effect — clear any stale degraded marker so the file's
-    # presence always reflects the most recent run.
-    rm -f /run/arcora-health-tls-degraded 2>/dev/null || true
+    return
   fi
+  # verify-full is in effect — clear any stale degraded marker so the file's
+  # presence always reflects the most recent run.
+  rm -f /run/arcora-health-tls-degraded 2>/dev/null || true
 
   local sql="select coalesce(extract(epoch from (now() - min(created_at)))::int, 0)
              from relayer_queue where status in ('pending','processing')"

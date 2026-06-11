@@ -42,8 +42,27 @@ export async function vaultSigner(opts: VaultSignerOpts): Promise<LocalAccount> 
  * never log, never persist to disk.
  */
 export async function fetchPrivateKeyFromVault(opts: VaultSignerOpts): Promise<Hex> {
+  assertVaultUrlSafe(opts.vaultUrl);
   const token = await login(opts);
   return fetchPrivateKey(opts.vaultUrl, token, opts.kvPath, opts.kvField);
+}
+
+// Audit 2026-06-11: refuse plaintext HTTP to any non-loopback Vault — the
+// AppRole secret_id (request body) and the returned private key would
+// transit the network unencrypted. Loopback (127.0.0.1 / localhost) stays
+// allowed for the current same-box deployment and dev-mode Vault.
+//
+// TLS trust note: this module uses the global `fetch` (Node/undici), which
+// has no per-request CA-bundle option — wiring a `caCertPath`/VAULT_CACERT
+// opt would require swapping to a custom undici Agent. When Vault moves to
+// https with a self-signed/private CA (including https on loopback), trust
+// the CA process-wide via NODE_EXTRA_CA_CERTS=/path/to/vault-ca.pem in the
+// systemd unit's Environment= — https URLs then work with no code change.
+function assertVaultUrlSafe(vaultUrl: string): void {
+  const u = new URL(vaultUrl);
+  if (u.protocol === "http:" && u.hostname !== "127.0.0.1" && u.hostname !== "localhost") {
+    throw new Error(`vault-signer: refusing plaintext HTTP to non-loopback Vault (${u.hostname}); use https`);
+  }
 }
 
 // Audit 2026-05-24 H-1: Vault error response bodies can reference the

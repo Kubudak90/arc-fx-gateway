@@ -62,6 +62,70 @@ describe("vaultSigner (unit, mocked fetch)", () => {
       .toBe("s.fakeToken");
   });
 
+  // Audit 2026-06-11: plaintext-HTTP guard — the AppRole secret_id and the
+  // fetched private key must never transit a network unencrypted.
+  it("refuses plaintext HTTP to a non-loopback Vault before any request is sent", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(vaultSigner({
+      vaultUrl: "http://vault.internal:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    })).rejects.toThrow(/refusing plaintext HTTP to non-loopback Vault \(vault\.internal\)/);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows plaintext HTTP to localhost (loopback same-box Vault)", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ auth: { client_token: "s.fakeToken" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { data: { privateKey: TEST_PRIV_KEY } } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const account = await vaultSigner({
+      vaultUrl: "http://localhost:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    });
+    expect(account.address.toLowerCase()).toBe(expectedAddr.toLowerCase());
+  });
+
+  // http://127.0.0.1 staying allowed is exercised by every other unit test in
+  // this file (they all use vaultUrl http://127.0.0.1:8200).
+  it("allows https to a non-loopback Vault", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ auth: { client_token: "s.fakeToken" } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { data: { privateKey: TEST_PRIV_KEY } } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const account = await vaultSigner({
+      vaultUrl: "https://vault.internal:8200",
+      roleId:   "role-id",
+      secretId: "secret-id",
+      kvPath:   "secret/data/relayer-v10",
+      kvField:  "privateKey",
+    });
+    expect(account.address.toLowerCase()).toBe(expectedAddr.toLowerCase());
+    expect(fetchMock.mock.calls[0][0]).toMatch(/^https:\/\/vault\.internal:8200/);
+  });
+
   it("throws when login returns non-200", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: false,

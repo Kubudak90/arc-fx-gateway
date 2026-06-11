@@ -6,8 +6,15 @@ set -euo pipefail
 : "${VAULT_ADDR:=http://127.0.0.1:8200}"
 : "${VAULT_TOKEN:?VAULT_TOKEN must be set (long-lived rotation operator token)}"
 
+# jq does the JSON field extraction below (the old sed -n parsing broke on
+# key reordering / escaped quotes); refuse to run without it.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "[rotation] ERROR: jq is required but not installed" >&2
+  exit 7
+fi
+
 # Must match `EnvironmentFile=` in ops/relayer/arcora-relayer.service.
-ENV_FILE="/root/arcora-ops/relayer/.env"
+ENV_FILE="/opt/arcora-ops/relayer/.env"
 ENV_DIR="$(dirname "$ENV_FILE")"
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -29,7 +36,7 @@ fi
 # uses within TTL (secret_id_num_uses=0) — a capped role is itself the
 # AppRole-lockout class this fix exists to prevent.
 ROLE_USES=$(vault read -format=json auth/approle/role/relayer 2>/dev/null \
-  | sed -n 's/.*"secret_id_num_uses"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')
+  | jq -r '.data.secret_id_num_uses')
 if [[ "${ROLE_USES:-}" != "0" ]]; then
   echo "[rotation] ERROR: role secret_id_num_uses='${ROLE_USES:-unknown}'; verify-before-commit needs 0 (unlimited within TTL). Fix the role before rotating." >&2
   exit 6
@@ -42,8 +49,8 @@ fi
 # correlate the live secret_id with Vault's own audit trail without
 # guessing at timestamps during an incident.
 NEW_SECRET_BUNDLE=$(vault write -format=json -f auth/approle/role/relayer/secret-id)
-NEW_SECRET_ID=$(echo "$NEW_SECRET_BUNDLE" | sed -n 's/.*"secret_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-NEW_ACCESSOR=$(echo "$NEW_SECRET_BUNDLE" | sed -n 's/.*"secret_id_accessor"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+NEW_SECRET_ID=$(echo "$NEW_SECRET_BUNDLE" | jq -r '.data.secret_id // empty')
+NEW_ACCESSOR=$(echo "$NEW_SECRET_BUNDLE" | jq -r '.data.secret_id_accessor // "unknown"')
 
 if [[ -z "$NEW_SECRET_ID" ]]; then
   echo "[rotation] ERROR: vault returned an empty secret_id — refusing to rewrite env" >&2

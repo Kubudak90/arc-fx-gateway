@@ -5,9 +5,10 @@ const API_BASE = (import.meta.env.VITE_ARC_BASE_URL ?? "https://arcorapay.xyz").
 const API_KEY  = import.meta.env.VITE_ARC_API_KEY ?? "";
 
 // Vite inlines VITE_* vars into the built JS bundle, so any key here is
-// public. Refuse to run with a live key — testnet keys only.
-const KEY_IS_LIVE = API_KEY.startsWith("ak_live_");
-const KEY_IS_TEST = API_KEY.startsWith("ak_test_");
+// public. Only publishable keys (pk_…) are safe to embed: they can only
+// create checkouts, and only from origins the merchant allowlisted. Secret
+// keys (ak_…, test OR live) are privileged — never ship one in client code.
+const KEY_IS_PUBLISHABLE = API_KEY.startsWith("pk_");
 
 export default function App() {
   const [busy, setBusy] = useState(false);
@@ -18,7 +19,7 @@ export default function App() {
   // — singletons leak state across tenants in any host app that mounts more
   // than one merchant. (Audit #24.)
   const arcora = useMemo(
-    () => (KEY_IS_TEST ? new Arcora({ apiKey: API_KEY, baseUrl: API_BASE }) : null),
+    () => (KEY_IS_PUBLISHABLE ? new Arcora({ apiKey: API_KEY, baseUrl: API_BASE }) : null),
     [],
   );
 
@@ -44,16 +45,16 @@ export default function App() {
     }
   }
 
-  if (KEY_IS_LIVE || !KEY_IS_TEST) {
+  if (!KEY_IS_PUBLISHABLE) {
     return (
       <main>
         <div className="card">
           <div className="brand">☕ Acme Coffee</div>
           <div className="banner danger">
             <strong>Demo blocked</strong>
-            {KEY_IS_LIVE
-              ? "VITE_ARC_API_KEY starts with ak_live_. Live keys are baked into the public JS bundle — never put one here. Use an ak_test_ key on testnet."
-              : "VITE_ARC_API_KEY missing or invalid. Set an ak_test_ key (testnet only) in .env.local."}
+            {API_KEY
+              ? "Use your publishable key (pk_live_…) in VITE_ARC_API_KEY. Secret keys (ak_…) must never ship in client code — see packages/shop for the server-routed pattern. Note: publishable-key invoice creation also requires this demo's origin to be in your merchant's allowed origins (set at /m/settings)."
+              : "VITE_ARC_API_KEY missing. Set your publishable key (pk_live_…) in .env.local — never a secret key (ak_…); see packages/shop for the server-routed pattern."}
           </div>
         </div>
       </main>
@@ -65,9 +66,9 @@ export default function App() {
       <div className="card">
         <div className="brand">☕ Acme Coffee</div>
         <div className="banner warn">
-          <strong>Testnet demo</strong>
-          The API key is inlined into this public JS bundle. Use only on
-          testnet; route through a server for production.
+          <strong>Publishable-key demo</strong>
+          The pk_ key inlined into this bundle is browser-safe: it can only
+          create checkouts, and only from origins allowlisted at /m/settings.
         </div>
         <h1>One americano, please.</h1>
         <p>€4.50 · payable in EURC on Arc Network</p>

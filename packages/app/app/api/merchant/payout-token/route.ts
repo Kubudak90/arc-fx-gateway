@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import type { Address } from "viem";
@@ -8,6 +8,7 @@ import { merchants } from "@/lib/db/schema";
 import { publicClient, GATEWAY_ADDRESS } from "@/lib/chain/client";
 import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { isSameOrigin, isJsonContentType } from "@/lib/security/csrf";
+import { privateJson } from "@/lib/security/respond";
 
 const Body = z.object({
   payoutToken: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
@@ -30,18 +31,18 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   // AFG-006 (2026-06-07): same Origin/Referer CSRF guard the sibling
   // state-changing merchant routes (api-key, origins, bootstrap, webhook) carry.
-  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
+  if (!isSameOrigin(req)) return privateJson({ error: "csrf" }, { status: 403 });
   if (!isJsonContentType(req)) {
-    return NextResponse.json({ error: "unsupported_content_type" }, { status: 415 });
+    return privateJson({ error: "unsupported_content_type" }, { status: 415 });
   }
   const session = await getSession();
   if (!session.merchantAddress) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return privateJson({ error: "unauthorized" }, { status: 401 });
   }
 
   const parsed = Body.safeParse(await req.json());
   if (!parsed.success) {
-    return NextResponse.json({ error: "bad_body" }, { status: 400 });
+    return privateJson({ error: "bad_body" }, { status: 400 });
   }
   const requested = parsed.data.payoutToken.toLowerCase();
 
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
         (process.env.EURC_ADDRESS ?? "").toLowerCase(),
       ].filter(Boolean);
   if (supportedTokens.length > 0 && !supportedTokens.includes(requested)) {
-    return NextResponse.json({ error: "unsupported_payout_token" }, { status: 400 });
+    return privateJson({ error: "unsupported_payout_token" }, { status: 400 });
   }
 
   // Verify on-chain that the merchant has actually switched to this token.
@@ -68,11 +69,11 @@ export async function POST(req: NextRequest) {
     }) as readonly [string, string, boolean];
     onChainPayoutToken = info[1].toLowerCase();
   } catch {
-    return NextResponse.json({ error: "chain_read_failed" }, { status: 502 });
+    return privateJson({ error: "chain_read_failed" }, { status: 502 });
   }
 
   if (onChainPayoutToken !== requested) {
-    return NextResponse.json(
+    return privateJson(
       { error: "onchain_mismatch", onChain: onChainPayoutToken },
       { status: 409 },
     );
@@ -83,5 +84,5 @@ export async function POST(req: NextRequest) {
     .set({ payoutToken: parsed.data.payoutToken })
     .where(eq(merchants.address, session.merchantAddress));
 
-  return NextResponse.json({ ok: true, payoutToken: parsed.data.payoutToken });
+  return privateJson({ ok: true, payoutToken: parsed.data.payoutToken });
 }

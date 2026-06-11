@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import { privateJson } from "@/lib/security/respond";
 import { db } from "@/lib/db/client";
 import { merchants, invoices } from "@/lib/db/schema";
 import { and, eq, desc, inArray } from "drizzle-orm";
@@ -11,14 +11,14 @@ const EURC = (process.env.EURC_ADDRESS ?? "").toLowerCase();
 export async function GET() {
   const session = await getSession();
   if (!session.merchantAddress) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return privateJson({ error: "unauthorized" }, { status: 401 });
   }
 
   const merchantRow = (
     await db.select().from(merchants).where(eq(merchants.address, session.merchantAddress)).limit(1)
   )[0];
   if (!merchantRow) {
-    return NextResponse.json({ merchant: null, totals: [], activity: [] });
+    return privateJson({ merchant: null, totals: [], activity: [] });
   }
 
   // Per-stable aggregate: sum payouts + fees, partitioned by status (paid vs refunded).
@@ -167,7 +167,7 @@ export async function GET() {
     .orderBy(desc(invoices.paidAt))
     .limit(20);
 
-  return NextResponse.json({
+  return privateJson({
     timeSeries,
     merchant: {
       address: merchantRow.address,

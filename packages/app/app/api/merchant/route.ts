@@ -1,17 +1,17 @@
-import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { merchants, invoices } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { generatePublishableKey, PREFIX_LEN } from "@/lib/auth/apikey";
+import { privateJson } from "@/lib/security/respond";
 
 export async function GET() {
   const session = await getSession();
-  if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!session.merchantAddress) return privateJson({ error: "unauthorized" }, { status: 401 });
 
   const rows = await db.select().from(merchants).where(eq(merchants.address, session.merchantAddress)).limit(1);
   if (rows.length === 0) {
-    return NextResponse.json({ merchant: null, invoices: [] });
+    return privateJson({ merchant: null, invoices: [] });
   }
   const m = rows[0]!;
 
@@ -30,7 +30,7 @@ export async function GET() {
     .where(eq(invoices.merchantId, m.id))
     .orderBy(desc(invoices.createdAt))
     .limit(50);
-  return NextResponse.json({
+  return privateJson({
     merchant: {
       address: m.address,
       payoutToken: m.payoutToken,

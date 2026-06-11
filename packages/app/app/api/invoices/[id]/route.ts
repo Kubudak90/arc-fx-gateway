@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { invoices, merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { lookupMerchantByApiKey } from "@/lib/auth/apikey";
+import { privateJson } from "@/lib/security/respond";
 
 /**
  * Public GET — returns the minimal fields the checkout widget needs.
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     .innerJoin(merchants, eq(merchants.id, invoices.merchantId))
     .where(eq(invoices.id, id))
     .limit(1);
-  if (rows.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (rows.length === 0) return privateJson({ error: "not_found" }, { status: 404 });
   const inv = rows[0]!;
 
   // Determine if the caller is the owning merchant (authenticated). The SDK
@@ -73,11 +74,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   };
 
   if (!isAuthed) {
-    return NextResponse.json(publicResponse);
+    return privateJson(publicResponse);
   }
 
   // Authenticated merchant: return full record.
-  return NextResponse.json({
+  return privateJson({
     ...publicResponse,
     metadata: inv.metadata,
     paidBy: inv.paidBy,

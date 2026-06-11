@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
@@ -8,6 +8,7 @@ import { generateApiKey, generatePublishableKey, hashApiKey, PREFIX_LEN } from "
 import { encrypt } from "@/lib/crypto/secret";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { isSameOrigin, isJsonContentType } from "@/lib/security/csrf";
+import { privateJson } from "@/lib/security/respond";
 import { randomBytes } from "node:crypto";
 
 // Audit H1 (2026-05-05): merchant must declare which origins may receive
@@ -23,18 +24,18 @@ const Body = z.object({
 
 export async function POST(req: NextRequest) {
   // AFG-006 (2026-06-06): same Origin/Referer CSRF guard the webhook route uses.
-  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
+  if (!isSameOrigin(req)) return privateJson({ error: "csrf" }, { status: 403 });
   if (!isJsonContentType(req)) {
-    return NextResponse.json({ error: "unsupported_content_type" }, { status: 415 });
+    return privateJson({ error: "unsupported_content_type" }, { status: 415 });
   }
   const session = await getSession();
-  if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!session.merchantAddress) return privateJson({ error: "unauthorized" }, { status: 401 });
 
   const existing = await db.select().from(merchants).where(eq(merchants.address, session.merchantAddress)).limit(1);
-  if (existing.length > 0) return NextResponse.json({ error: "already_bootstrapped" }, { status: 409 });
+  if (existing.length > 0) return privateJson({ error: "already_bootstrapped" }, { status: 409 });
 
   const parsed = Body.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: "bad_body" }, { status: 400 });
+  if (!parsed.success) return privateJson({ error: "bad_body" }, { status: 400 });
 
   // Audit L5 (2026-05-06): validate payoutToken against the server-side
   // allowlist. If SUPPORTED_PAYOUT_TOKENS env is set (comma-separated ERC-20
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
         (process.env.EURC_ADDRESS ?? "").toLowerCase(),
       ].filter(Boolean);
   if (supportedTokens.length > 0 && !supportedTokens.includes(parsed.data.payoutToken.toLowerCase())) {
-    return NextResponse.json({ error: "unsupported_payout_token" }, { status: 400 });
+    return privateJson({ error: "unsupported_payout_token" }, { status: 400 });
   }
 
   // Audit pass 3 (2026-05-04): bootstrap previously stored any URL that
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     try {
       await assertSafePublicUrl(parsed.data.webhookUrl);
     } catch (e) {
-      return NextResponse.json({
+      return privateJson({
         error: "unsafe_webhook_url",
         detail: e instanceof Error ? e.message : String(e),
       }, { status: 400 });
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
       new Set(parsed.data.allowedOrigins.map((u) => new URL(u).origin)),
     );
   } catch {
-    return NextResponse.json({ error: "bad_body" }, { status: 400 });
+    return privateJson({ error: "bad_body" }, { status: 400 });
   }
 
   const apiKey = generateApiKey();
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
 
   await session.save();
 
-  return NextResponse.json(
+  return privateJson(
     { apiKey, publishableKey, webhookSecret },
     { status: 201 },
   );

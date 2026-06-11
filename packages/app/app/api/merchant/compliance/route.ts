@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
+import { privateJson } from "@/lib/security/respond";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
 import { merchants, invoices, complianceScreenings } from "@/lib/db/schema";
@@ -15,7 +15,7 @@ import { merchants, invoices, complianceScreenings } from "@/lib/db/schema";
 export async function GET() {
   const session = await getSession();
   if (!session.merchantAddress) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return privateJson({ error: "unauthorized" }, { status: 401 });
   }
 
   const merchantRow = (await db
@@ -25,7 +25,7 @@ export async function GET() {
     .limit(1))[0];
 
   if (!merchantRow) {
-    return NextResponse.json({ merchant: null, ownScreen: null, reviewQueue: [] });
+    return privateJson({ merchant: null, ownScreen: null, reviewQueue: [] });
   }
 
   const ownScreen = (await db
@@ -70,7 +70,7 @@ export async function GET() {
   const truncate = (a: string): string =>
     a.length > 10 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
 
-  return NextResponse.json({
+  return privateJson({
     merchant: { address: merchantRow.address, payoutToken: merchantRow.payoutToken },
     ownScreen: ownScreen
       ? {

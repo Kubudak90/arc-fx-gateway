@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { lookupMerchantByApiKey } from "@/lib/auth/apikey";
 import { db } from "@/lib/db/client";
 import { merchants, invoices } from "@/lib/db/schema";
 import { and, eq, gt, lte } from "drizzle-orm";
+import { privateJson } from "@/lib/security/respond";
 
 /**
  * GET /api/merchant/escrows
@@ -54,9 +55,9 @@ export async function GET(req: NextRequest) {
       await db.select().from(merchants).where(eq(merchants.address, session.merchantAddress)).limit(1)
     )[0];
     if (!merchantRow) {
-      return NextResponse.json(EMPTY_RESPONSE);
+      return privateJson(EMPTY_RESPONSE);
     }
-    return NextResponse.json(await buildBuckets(merchantRow.id));
+    return privateJson(await buildBuckets(merchantRow.id));
   }
 
   // Path 2 — API key. Same header pair as /api/invoices/[id].
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
     req.headers.get("x-api-key") ??
     "";
   if (!apiKey) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return privateJson({ error: "unauthorized" }, { status: 401 });
   }
   let merchant: { id: string } | null = null;
   try {
@@ -74,9 +75,9 @@ export async function GET(req: NextRequest) {
     merchant = null;
   }
   if (!merchant) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return privateJson({ error: "unauthorized" }, { status: 401 });
   }
-  return NextResponse.json(await buildBuckets(merchant.id));
+  return privateJson(await buildBuckets(merchant.id));
 }
 
 async function buildBuckets(merchantId: string) {

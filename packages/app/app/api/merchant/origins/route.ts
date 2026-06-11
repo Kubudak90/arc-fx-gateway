@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db/client";
@@ -6,6 +6,7 @@ import { merchants } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { isSameOrigin, isJsonContentType } from "@/lib/security/csrf";
+import { privateJson } from "@/lib/security/respond";
 
 // Audit H1 (2026-05-05): post-bootstrap merchants update their redirect
 // allowlist via this endpoint. Bootstrap collects the initial set; this
@@ -19,15 +20,15 @@ const Body = z.object({
 
 export async function PATCH(req: NextRequest) {
   // AFG-006 (2026-06-06): same Origin/Referer CSRF guard the webhook route uses.
-  if (!isSameOrigin(req)) return NextResponse.json({ error: "csrf" }, { status: 403 });
+  if (!isSameOrigin(req)) return privateJson({ error: "csrf" }, { status: 403 });
   if (!isJsonContentType(req)) {
-    return NextResponse.json({ error: "unsupported_content_type" }, { status: 415 });
+    return privateJson({ error: "unsupported_content_type" }, { status: 415 });
   }
   const session = await getSession();
-  if (!session.merchantAddress) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!session.merchantAddress) return privateJson({ error: "unauthorized" }, { status: 401 });
 
   const parsed = Body.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: "bad_body" }, { status: 400 });
+  if (!parsed.success) return privateJson({ error: "bad_body" }, { status: 400 });
 
   // Normalize each entry to scheme+host[:port] only — anything beyond
   // URL.origin (path/query/fragment) is meaningless for the allowlist
@@ -38,7 +39,7 @@ export async function PATCH(req: NextRequest) {
       new Set(parsed.data.allowedOrigins.map((u) => new URL(u).origin)),
     );
   } catch {
-    return NextResponse.json({ error: "bad_body" }, { status: 400 });
+    return privateJson({ error: "bad_body" }, { status: 400 });
   }
 
   // Audit M3 (2026-05-19): origins are redirect targets — apply the same
@@ -47,7 +48,7 @@ export async function PATCH(req: NextRequest) {
   // metadata origin that a future redirect-path regression could exploit.
   for (const origin of normalized) {
     if (!origin.startsWith("https://")) {
-      return NextResponse.json(
+      return privateJson(
         { error: "unsafe_origin", detail: `origin must be https: ${origin}` },
         { status: 400 },
       );
@@ -55,7 +56,7 @@ export async function PATCH(req: NextRequest) {
     try {
       await assertSafePublicUrl(origin);
     } catch (e) {
-      return NextResponse.json(
+      return privateJson(
         { error: "unsafe_origin", detail: e instanceof Error ? e.message : String(e) },
         { status: 400 },
       );
@@ -66,7 +67,7 @@ export async function PATCH(req: NextRequest) {
     .set({ allowedOrigins: normalized })
     .where(eq(merchants.address, session.merchantAddress))
     .returning({ address: merchants.address });
-  if (updated.length === 0) return NextResponse.json({ error: "no_merchant" }, { status: 404 });
+  if (updated.length === 0) return privateJson({ error: "no_merchant" }, { status: 404 });
 
-  return NextResponse.json({ ok: true, allowedOrigins: normalized });
+  return privateJson({ ok: true, allowedOrigins: normalized });
 }

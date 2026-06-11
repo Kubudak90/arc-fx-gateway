@@ -72,3 +72,27 @@ describe("GET /api/merchant — publishable key (AFG-019)", () => {
     expect(updateSpy.mock.calls[0]![0].publishableKey).toMatch(/^pk_live_/);
   });
 });
+
+describe("GET /api/merchant — cache hygiene (audit 2026-06-11 HIGH-3)", () => {
+  it("marks authenticated responses Cache-Control: no-store, private", async () => {
+    const { getSession } = await import("@/lib/auth/session");
+    (getSession as any).mockResolvedValue({ merchantAddress: "0xMerchant" });
+    state.merchantRow = {
+      id: "m1", address: "0xMerchant", payoutToken: "0xUSDC", webhookUrl: null,
+      allowedOrigins: [],
+      publishableKey: "pk_live_" + "E".repeat(56),
+    };
+
+    const res = await GET();
+    expect(res.headers.get("Cache-Control")).toBe("no-store, private");
+  });
+
+  it("marks the unauthorized error response no-store too", async () => {
+    const { getSession } = await import("@/lib/auth/session");
+    (getSession as any).mockResolvedValue({ merchantAddress: undefined });
+
+    const res = await GET();
+    expect(res.status).toBe(401);
+    expect(res.headers.get("Cache-Control")).toBe("no-store, private");
+  });
+});

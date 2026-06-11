@@ -32,6 +32,11 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
+    "./webhook": {
+      "types": "./dist/webhook.d.ts",
+      "import": "./dist/webhook.mjs",
+      "require": "./dist/webhook.js"
+    },
     "./global": "./dist/arcora.global.js"
   },
   "files": [

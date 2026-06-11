@@ -124,6 +124,41 @@ describe("processCrosschainPayment", () => {
     expect(d.receiveMessage).not.toHaveBeenCalled();
   });
 
+  it("expires a stuck row even when burn_submitted_at is null", async () => {
+    const d = deps();
+    vi.mocked(d.fetchAttestation).mockResolvedValue(null);
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+
+    await processCrosschainPayment({
+      ...baseRow,
+      burn_submitted_at: null,
+      created_at: threeHoursAgo,
+    }, d);
+
+    expect(d.fail).toHaveBeenCalledWith(baseRow.id, "bridge_failed", "attestation_deadline_exceeded");
+    expect(d.mark).not.toHaveBeenCalled();
+    expect(d.receiveMessage).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mint far below source_amount", async () => {
+    const d = deps();
+    vi.mocked(d.receiveMessage).mockResolvedValue({
+      txHash: ("0x" + "3".repeat(64)) as `0x${string}`,
+      amountReceived: 1n,
+    });
+
+    await processCrosschainPayment({ ...baseRow, source_amount: "100000000" }, d);
+
+    expect(d.fail).toHaveBeenCalledWith(
+      baseRow.id,
+      "bridge_failed",
+      expect.stringContaining("mint_amount_mismatch"),
+    );
+    expect(d.refundOnArc).not.toHaveBeenCalled();
+    expect(d.settleOnArc).not.toHaveBeenCalled();
+    expect(d.mark).not.toHaveBeenCalledWith(baseRow.id, expect.objectContaining({ status: "paid" }));
+  });
+
   it("processes normally past the deadline when the attestation IS available (deadline only applies while waiting)", async () => {
     const d = deps();
     const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);

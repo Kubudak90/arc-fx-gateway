@@ -38,6 +38,12 @@ export interface CrosschainPaymentRow {
   refund_tx_hash?: string | null;
   attempts: number;
   last_error: string | null;
+  /** Optional: present on rows claimed from the DB (`returning *`; both
+   *  columns are NOT NULL DEFAULT now() in migration 0021). Fallback anchors
+   *  for the attestation deadline when burn_submitted_at was never persisted
+   *  (crash before the burn checkpoint) — audit MED-3. */
+  created_at?: Date | string | null;
+  updated_at?: Date | string | null;
 }
 
 export interface CrosschainWorkerDeps {

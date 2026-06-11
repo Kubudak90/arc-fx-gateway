@@ -61,10 +61,14 @@ export async function processCrosschainPayment(
         // polling forever. Only applies while waiting (an attestation that
         // does arrive after the deadline still processes normally).
         const deadlineMs = deps.attestationDeadlineMs ?? DEFAULT_ATTESTATION_DEADLINE_MS;
-        if (
-          row.burn_submitted_at != null
-          && Date.now() - new Date(row.burn_submitted_at).getTime() > deadlineMs
-        ) {
+        // Audit MED-3 (2026-06-11): anchor falls back to created_at /
+        // updated_at so a row whose burn checkpoint never persisted
+        // (burn_submitted_at null — e.g. crash between the burn broadcast
+        // and the checkpoint write) still goes terminal instead of polling
+        // IRIS forever.
+        const anchor = row.burn_submitted_at ?? row.created_at ?? row.updated_at;
+        const anchorMs = anchor != null ? new Date(anchor).getTime() : undefined;
+        if (anchorMs !== undefined && Date.now() - anchorMs > deadlineMs) {
           await deps.fail(row.id, "bridge_failed", "attestation_deadline_exceeded");
           return "failed";
         }
@@ -115,6 +119,21 @@ export async function processCrosschainPayment(
 
     if (bridgeAmountReceived === null) {
       throw new Error("bridge_amount_missing");
+    }
+
+    // Audit LOW-5 (2026-06-11): floor the accepted mint at 98% of the
+    // source burn (2% CCTP fast-transfer fee tolerance). A mint far below
+    // source_amount means the receipt accounting latched onto the wrong
+    // Transfer (or the bridge delivered a mismatched message) — operator
+    // path (bridge_failed), never settle or auto-refund on it.
+    const minMint = (BigInt(row.source_amount) * 98n) / 100n;
+    if (bridgeAmountReceived < minMint) {
+      await deps.fail(
+        row.id,
+        "bridge_failed",
+        `mint_amount_mismatch: received ${bridgeAmountReceived} < floor ${minMint} (98% of source_amount ${row.source_amount})`,
+      );
+      return "failed";
     }
 
     let grossPayout = bridgeAmountReceived;

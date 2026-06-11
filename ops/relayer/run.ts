@@ -998,13 +998,24 @@ async function receiveCrosschainMessage(
   // the recipient embedded in the stored intent (bytes32 mint_recipient) —
   // self-heals app/relayer env skew so funds already minted on Arc aren't stranded.
   const intentRecipient = "0x" + row.mint_recipient.slice(-40);
+  // Audit LOW-5 (2026-06-11): the accepted mint must clear 98% of the
+  // source burn (2% CCTP fast-transfer fee tolerance) instead of the old
+  // `> 0n` bound, so a dust Transfer in the receipt can never be picked up
+  // as the bridge mint. The worker re-checks the same floor on the
+  // persisted amount and routes below-floor rows to bridge_failed.
+  const minMint = (BigInt(row.source_amount) * 98n) / 100n;
   const mint = transfers.find((event) => {
     const to = event.args.to?.toLowerCase();
     return event.address.toLowerCase() === row.destination_token.toLowerCase()
       && event.args.from?.toLowerCase() === "0x0000000000000000000000000000000000000000"
-      && (to === RELAYER_ADDR.toLowerCase() || to === intentRecipient);
+      && (to === RELAYER_ADDR.toLowerCase() || to === intentRecipient)
+      && (event.args.value ?? 0n) >= minMint;
   });
-  if (!mint?.args.value || mint.args.value <= 0n) throw new Error("cctp_receive_mint_event_missing");
+  if (!mint?.args.value) {
+    throw new Error(
+      `cctp_receive_mint_amount_mismatch: no mint >= ${minMint} (98% of source_amount ${row.source_amount}) to the relayer in receipt`,
+    );
+  }
   return { txHash, amountReceived: mint.args.value };
 }
 

@@ -74,8 +74,11 @@ vi.mock("@/lib/compliance/factory", () => ({
   resolveComplianceProvider: () => ({ name: "noop" }),
 }));
 
+const screenWithAuditMock = vi.fn(async () => ({
+  decision: "allow", risk: "low", reasons: [], ticketId: null,
+}));
 vi.mock("@/lib/compliance/screen", () => ({
-  screenWithAudit: async () => ({ decision: "allow", risk: "low", reasons: [], ticketId: null }),
+  screenWithAudit: (...args: any[]) => screenWithAuditMock(...args),
 }));
 
 function req(body: unknown) {
@@ -104,6 +107,7 @@ describe("POST /api/checkout/crosschain/prepare", () => {
     dbState.telemetryRows = [];
     dbState.failTelemetry = false;
     dbState.updateCalls = [];
+    delete process.env.COMPLIANCE_FAIL_OPEN_FOR_PAY;
   });
 
   it("creates an authorized cross-chain intent for enabled Base Sepolia", async () => {
@@ -193,6 +197,42 @@ describe("POST /api/checkout/crosschain/prepare", () => {
     expect(body.error).toBe("invoice_already_in_progress");
     expect(dbState.updateCalls).toHaveLength(0);
     expect(dbState.crosschainRows[0].status).toBe("bridge_pending");
+  });
+
+  // Audit 2026-06-11 MED-2: a compliance-provider outage must behave exactly
+  // like /api/checkout/authorize — fail-closed 503 PROVIDER_UNAVAILABLE by
+  // default, fail-open only when COMPLIANCE_FAIL_OPEN_FOR_PAY is set.
+  it("fails closed by default when screenWithAudit throws (audit 2026-06-11 MED-2)", async () => {
+    screenWithAuditMock.mockRejectedValueOnce(new Error("provider_error: elliptic 503"));
+
+    const res = await POST(req({
+      invoiceId: "0x" + "1".repeat(64),
+      payer: "0x" + "a".repeat(40),
+      sourceChainId: 84532,
+    }));
+    const body = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(body.decision).toBe("reject");
+    expect(body.code).toBe("PROVIDER_UNAVAILABLE");
+    // No intent may be persisted on an unscreened payer.
+    expect(dbState.crosschainRows).toHaveLength(0);
+  });
+
+  it("fails open when COMPLIANCE_FAIL_OPEN_FOR_PAY=true and screenWithAudit throws", async () => {
+    process.env.COMPLIANCE_FAIL_OPEN_FOR_PAY = "true";
+    screenWithAuditMock.mockRejectedValueOnce(new Error("provider_error"));
+
+    const res = await POST(req({
+      invoiceId: "0x" + "1".repeat(64),
+      payer: "0x" + "a".repeat(40),
+      sourceChainId: 84532,
+    }));
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.intentId).toBe(FRESH_ID);
+    expect(dbState.crosschainRows[0].status).toBe("authorized");
   });
 
   it("does not fail the request when the telemetry write fails", async () => {

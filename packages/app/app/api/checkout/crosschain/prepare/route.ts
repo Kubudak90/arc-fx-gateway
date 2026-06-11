@@ -29,6 +29,12 @@ const Body = z.object({
   sourceChainId: z.number().int().positive(),
 });
 
+// Same flag semantics as /api/checkout/authorize (envFlag there).
+function envFlag(name: string): boolean {
+  const v = process.env[name];
+  return v === "true" || v === "1";
+}
+
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);
   let allowed = true;
@@ -57,12 +63,31 @@ export async function POST(req: NextRequest) {
   if (inv.expiresAt.getTime() < Date.now()) return NextResponse.json({ error: "invoice_expired" }, { status: 410 });
 
   const provider = resolveComplianceProvider();
-  const screen = await screenWithAudit({
-    db,
-    provider,
-    address: payer,
-    context: { flow: "customer_pay", invoiceId },
-  });
+  // Audit 2026-06-11 MED-2: mirror /api/checkout/authorize's outage semantics.
+  // Default is fail-closed (503 PROVIDER_UNAVAILABLE, same shape as
+  // authorize); operators may opt into fail-open for the pay flow via
+  // COMPLIANCE_FAIL_OPEN_FOR_PAY — the same flag authorize honors — so a
+  // compliance-provider outage treats crosschain and same-chain payments
+  // identically instead of 500ing crosschain.
+  let screen: Pick<Awaited<ReturnType<typeof screenWithAudit>>, "decision" | "ticketId">;
+  try {
+    screen = await screenWithAudit({
+      db,
+      provider,
+      address: payer,
+      context: { flow: "customer_pay", invoiceId },
+    });
+  } catch {
+    if (!envFlag("COMPLIANCE_FAIL_OPEN_FOR_PAY")) {
+      return NextResponse.json({
+        decision: "reject",
+        code: "PROVIDER_UNAVAILABLE",
+        reason: "Compliance provider is currently unavailable. Please try again shortly.",
+      }, { status: 503 });
+    }
+    // Fail-open: proceed as a degraded allow, mirroring authorize's path.
+    screen = { decision: "allow", ticketId: null };
+  }
   if (screen.decision !== "allow") {
     recordCheckoutEvent({
       invoiceId,

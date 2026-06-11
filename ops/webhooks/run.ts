@@ -195,6 +195,10 @@ async function deliver(row: Row): Promise<{ ok: boolean; status: number; error?:
         [SIG_HEADER]:    signature,    // legacy — kept for back-compat
         [TS_HEADER]:     timestamp,    // audit Ops-M2
         [SIG_HEADER_V2]: signatureV2,  // audit Ops-M2
+        // Audit 2026-06-11: V1 sig (no timestamp) is replayable; migrate to
+        // X-Arcora-Signature-V2. RFC 8594-style deprecation signal.
+        "Deprecation": "version=1",
+        "Link": '<https://arcorapay.xyz/docs/webhooks#v2>; rel="deprecation"',
       },
       body,
       DELIVERY_TIMEOUT_MS,

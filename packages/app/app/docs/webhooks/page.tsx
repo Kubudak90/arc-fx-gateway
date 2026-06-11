@@ -18,60 +18,69 @@ export default function WebhooksDocs() {
         log or display it after creation.
       </p>
 
-      <h2>Signing</h2>
+      <h2 id="v2">Verifying deliveries (V2)</h2>
       <p>
-        Every delivery is dual-signed. Both signature headers carry a <code>sha256=</code> prefix followed by the
-        lowercase hex HMAC — the prefix is part of the header value, so compare against it, do not strip it before
-        you have a constant-time match.
+        Every delivery is signed with <code>X-Arcora-Signature-V2</code> paired with{" "}
+        <code>X-Arcora-Timestamp</code> (unix seconds):{" "}
+        <code>sha256=HMAC-SHA256(&quot;&lt;timestamp&gt;.&quot; + rawBody, secret)</code>. Binding the timestamp
+        into the signed payload gives you replay protection: reject any delivery whose timestamp is outside a
+        tolerance window (we use <strong>±300 seconds</strong>). This is <strong>the</strong> verification method —
+        use it for all integrations.
       </p>
-      <ul>
-        <li>
-          <code>X-Arcora-Signature</code> (legacy) — <code>sha256=HMAC-SHA256(rawBody, secret)</code>.
-        </li>
-        <li>
-          <code>X-Arcora-Signature-V2</code> — <code>sha256=HMAC-SHA256(&quot;&lt;timestamp&gt;.&quot; + rawBody, secret)</code>,
-          paired with <code>X-Arcora-Timestamp</code> (unix seconds). Binding the timestamp into the signed payload
-          gives you replay protection: reject any delivery whose timestamp is outside a tolerance window
-          (we use <strong>±300 seconds</strong>).
-        </li>
-      </ul>
       <p>
-        <strong>Prefer V2 when both are present.</strong> The legacy header has no timestamp, so a captured legacy
-        delivery can be replayed indefinitely — only V2 closes that. Verify before trusting:
+        The SDK (≥ 1.3.0) ships an official verifier at the <code>@arcora/sdk/webhook</code> subpath. It enforces
+        the replay window and compares in constant time. Server-side only (uses <code>node:crypto</code>):
+      </p>
+      <pre><code>{`import { verifyWebhook } from "@arcora/sdk/webhook";
+
+const ok = verifyWebhook({
+  body: rawBody,                                   // raw string, not re-stringified JSON
+  signature: req.headers["x-arcora-signature-v2"],
+  timestamp: req.headers["x-arcora-timestamp"],
+  secret: process.env.ARCORA_WEBHOOK_SECRET,
+});`}</code></pre>
+      <p>
+        The header value carries a <code>sha256=</code> prefix followed by the lowercase hex HMAC — the prefix is
+        part of the header value, so compare against the whole string, do not strip it before you have a
+        constant-time match.
+      </p>
+
+      <h3>Verifying without the SDK</h3>
+      <p>
+        The same algorithm works in any runtime with an HMAC-SHA256 primitive and a constant-time compare:
       </p>
       <pre><code>{`import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const TOLERANCE_SECONDS = 300; // ±5 min replay window
 
-// Both headers are 'sha256=<hex>'. Compare the whole value in constant time.
-function safeEqual(a: string, b: string) {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
-}
+function verifyWebhookV2(headers: Headers, rawBody: string, secret: string) {
+  const sig = headers.get('x-arcora-signature-v2') ?? '';
+  const ts  = headers.get('x-arcora-timestamp') ?? '';
 
-function verifyWebhook(headers: Headers, rawBody: string, secret: string) {
-  const sigV2 = headers.get('x-arcora-signature-v2');
-  const ts    = headers.get('x-arcora-timestamp');
-
-  // Prefer V2: timestamp-bound, replay-protected.
-  if (sigV2 && ts) {
-    const tsNum = Number(ts);
-    if (!Number.isFinite(tsNum) || Math.abs(Date.now() / 1000 - tsNum) > TOLERANCE_SECONDS) {
-      return false; // outside the replay window
-    }
-    const expected = 'sha256=' + createHmac('sha256', secret).update(ts + '.' + rawBody).digest('hex');
-    return safeEqual(expected, sigV2);
+  const tsNum = Number(ts);
+  if (!Number.isFinite(tsNum) || Math.abs(Date.now() / 1000 - tsNum) > TOLERANCE_SECONDS) {
+    return false; // outside the replay window
   }
 
-  // Legacy fallback (no replay protection): sha256=HMAC(rawBody).
-  const sig = headers.get('x-arcora-signature') ?? '';
-  const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
-  return safeEqual(expected, sig);
+  const expected = 'sha256=' + createHmac('sha256', secret).update(ts + '.' + rawBody).digest('hex');
+  const ab = Buffer.from(expected);
+  const bb = Buffer.from(sig);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
 }`}</code></pre>
+
+      <h2>Legacy V1 signature (deprecated)</h2>
+      <div className="rounded-[var(--radius-field)] border border-[color-mix(in_oklch,var(--warning)_40%,transparent)] bg-[var(--warning-bg)] p-4 text-sm text-[var(--fg-1)] my-5">
+        <strong>Deprecated — do not build new integrations on V1.</strong> The legacy{" "}
+        <code>X-Arcora-Signature</code> header (<code>sha256=HMAC-SHA256(rawBody, secret)</code>) has{" "}
+        <strong>no timestamp</strong>, so a captured V1 delivery can be replayed indefinitely. It is kept only for
+        existing receivers and <strong>will be removed at mainnet launch</strong>. Migrate to{" "}
+        <code>X-Arcora-Signature-V2</code> now.
+      </div>
       <p>
-        Verification deliberately stays out of the SDK — the snippet above is all you need, and it works in any
-        runtime with Node&apos;s <code>crypto</code> (or the equivalent HMAC in your language of choice).
+        Deliveries still carry the V1 header alongside V2 during the deprecation window, plus two signal headers:{" "}
+        <code>Deprecation: version=1</code> and a{" "}
+        <code>Link: &lt;https://arcorapay.xyz/docs/webhooks#v2&gt;; rel=&quot;deprecation&quot;</code> header
+        pointing at this section. When both signatures are present, always verify V2 and ignore V1.
       </p>
 
       <h2>Event types</h2>

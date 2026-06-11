@@ -10,6 +10,7 @@ import { resolveComplianceProvider, complianceRequired } from "@/lib/compliance/
 import { screenWithAudit } from "@/lib/compliance/screen";
 import { assertOriginAllowed, assertSafePublicUrl } from "@/lib/security/safeUrl";
 import { takeToken } from "@/lib/rate/limiter";
+import { parseBaseUnits } from "@arcora/crosschain-core";
 import { encodeAbiParameters, keccak256, type Address, type Hex } from "viem";
 
 /**
@@ -38,17 +39,17 @@ const INVOICE_WINDOW_SECONDS = 60;
 // customer with no merchant site). When omitted, the invoice page itself
 // shows the paid status — no external redirect happens.
 // amountUsdc ceiling: $1,000,000 per invoice. Above ~9e15 a JS double loses
-// integer precision and Math.round(amountUsdc * 1e6) silently corrupts the
-// on-chain BigInt; an Infinity input would crash BigInt() outright. $1M is
-// well clear of both and a sane single-invoice cap. (Audit M1)
+// integer precision, so the float→base-unit conversion would silently corrupt
+// the on-chain BigInt; an Infinity input would break the conversion outright.
+// $1M is well clear of both and a sane single-invoice cap. (Audit M1)
 // metadata is stored verbatim as JSONB and echoed back on GET — cap key
 // count and value length so a merchant can't bloat every row. (Audit M2)
 const Body = z.object({
   // Audit App-L-7 (2026-05-31): `.positive()` alone allowed sub-micro-dollar
-  // amounts (e.g. 0.0000004) that BigInt(Math.round(amountUsdc * 1e6)) rounds
-  // to 0 — a zero-value on-chain invoice that burns gas and pollutes the
-  // treasury aggregate. Floor at 1 micro-USDC (the smallest representable base
-  // unit) so the rounded amount is always >= 1.
+  // amounts (e.g. 0.0000004) that amountUsdc.toFixed(6) rounds to 0 — a
+  // zero-value on-chain invoice that burns gas and pollutes the treasury
+  // aggregate. Floor at 1 micro-USDC (the smallest representable base unit)
+  // so the converted amount is always >= 1.
   amountUsdc: z.number().min(0.000001).max(1_000_000),
   payInToken: z.enum(["USDC", "EURC"]),
   successUrl: z.string().url().optional(),
@@ -269,7 +270,10 @@ export async function POST(req: NextRequest) {
       [merchant.address as Address, merchantInvoiceId],
     ),
   );
-  const amountOut = BigInt(Math.round(amountUsdc * 1_000_000));
+  // Audit H-1: string-based conversion — BigInt(Math.round(amountUsdc * 1e6))
+  // is exposed to IEEE-754 artifacts; toFixed(6) is exact to the charged unit
+  // because amountUsdc is Zod-validated positive finite <= 1,000,000.
+  const amountOut = parseBaseUnits(amountUsdc.toFixed(6), 6);
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + INVOICE_TTL_SEC);
 
   let txHash: Hex;

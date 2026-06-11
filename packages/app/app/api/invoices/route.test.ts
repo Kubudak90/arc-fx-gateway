@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { parseBaseUnits } from "@arcora/crosschain-core";
 import { POST } from "./route";
 
 vi.mock("@/lib/auth/apikey", async () => {
@@ -432,6 +433,28 @@ describe("POST /api/invoices", () => {
       expect(res.status).toBe(400);
       expect(body.error).toBe("merchant_origins_not_configured");
       expect(writeContract).not.toHaveBeenCalled();
+    });
+  });
+
+  // Audit H-1 — the route converts amountUsdc to base units via
+  // parseBaseUnits(amountUsdc.toFixed(6), 6) instead of
+  // BigInt(Math.round(amountUsdc * 1e6)), so IEEE-754 float artifacts can
+  // never corrupt the on-chain amount.
+  describe("audit H-1 — exact USDC base-unit conversion", () => {
+    it("amountUsdc float artifacts do not corrupt base units", () => {
+      for (const [usd, expected] of [
+        ["4.50", 4_500_000n],
+        ["10.99", 10_990_000n],
+        ["0.000001", 1n],
+        ["1005.55", 1_005_550_000n],
+      ] as const) {
+        expect(parseBaseUnits(usd, 6)).toBe(expected);
+      }
+    });
+
+    it("toFixed(6) bridge from the Zod-validated number is exact", () => {
+      expect(parseBaseUnits((4.5).toFixed(6), 6)).toBe(4_500_000n);
+      expect(parseBaseUnits((10.99).toFixed(6), 6)).toBe(10_990_000n);
     });
   });
 });

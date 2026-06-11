@@ -7,6 +7,8 @@ export type ArcoraErrorCode =
   | "NO_SECURE_RANDOM"
   // AFG-019: a publishable (pk_live_) key was used on a server-only operation.
   | "PUBLISHABLE_KEY_FORBIDDEN"
+  // Audit 2026-06-11 C-2: a secret (ak_) key was used in a browser context.
+  | "SECRET_KEY_IN_BROWSER"
   | "UNKNOWN";
 
 export interface ArcoraErrorOptions {

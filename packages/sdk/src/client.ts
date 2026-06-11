@@ -33,19 +33,21 @@ function resolveBaseUrl(opts: InitOptions): string {
 // browser-safe and may only create checkouts; a secret `ak_live_` key is
 // server-side only and authorizes privileged reads (escrows, private invoice
 // fields). The SDK refuses to use a publishable key on a privileged call and
-// warns if a secret key is constructed in a browser.
+// refuses to construct with a secret key in a browser.
 function isPublishableKey(key: string): boolean {
   return key.startsWith("pk_live_");
 }
 
-function warnIfSecretKeyInBrowser(key: string): void {
-  if (typeof window !== "undefined" && key.startsWith("ak_live_")) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      "[arcora] A SECRET key (ak_live_…) is being used in a browser. Secret " +
-      "keys must stay server-side — anyone can read this one from your page " +
-      "and create invoices or read your data. Use your publishable key " +
-      "(pk_live_…) in client code instead.",
+// AFG-019 / audit 2026-06-11 C-2: secret keys must never run in a browser.
+// V1.3: this THROWS (was console.warn — universally ignored). Covers every
+// ak_ prefix: test-class keys hold the same privileges against the live API.
+function assertKeySafeInContext(key: string): void {
+  if (typeof window !== "undefined" && key.startsWith("ak_")) {
+    throw new ArcoraError(
+      "SECRET_KEY_IN_BROWSER",
+      "A SECRET key (ak_…) was used in a browser. Anyone can read it from your " +
+      "page and list your escrows or create invoices. Use your publishable key " +
+      "(pk_live_…) in client code; keep ak_ keys server-side.",
     );
   }
 }
@@ -145,7 +147,7 @@ function doOpenCheckout(invoice: { url: string }): void {
 export class Arcora {
   constructor(public readonly options: InitOptions) {
     if (!options.apiKey) throw new ArcoraError("INVALID_API_KEY", "apiKey required");
-    warnIfSecretKeyInBrowser(options.apiKey);
+    assertKeySafeInContext(options.apiKey);
   }
 
   async createInvoice(params: CreateInvoiceParams): Promise<Invoice> {
@@ -167,6 +169,8 @@ export class Arcora {
 
   /** @deprecated Use `new Arcora({ apiKey })` — singleton is unsafe in multi-tenant apps. */
   static init(opts: InitOptions): void {
+    // C-2: guard before assigning so a rejected init leaves no singleton state.
+    assertKeySafeInContext(opts.apiKey);
     Arcora._opts = opts;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const proc = (typeof globalThis !== "undefined" && (globalThis as any).process) || undefined;

@@ -63,13 +63,20 @@ describe("Arcora.createInvoice", () => {
 describe("Arcora.openCheckout", () => {
   it("sets window.location.href to invoice.url", () => {
     const setHref = vi.fn();
+    const hadWindow = "window" in globalThis;
     Object.defineProperty(globalThis, "window", {
       value: { location: { set href(url: string) { setHref(url); } } },
       configurable: true,
       writable: true,
     });
-    Arcora.openCheckout({ url: "https://arcorapay.xyz/i/0xabc" });
-    expect(setHref).toHaveBeenCalledWith("https://arcorapay.xyz/i/0xabc");
+    try {
+      Arcora.openCheckout({ url: "https://arcorapay.xyz/i/0xabc" });
+      expect(setHref).toHaveBeenCalledWith("https://arcorapay.xyz/i/0xabc");
+    } finally {
+      // C-2: leaving `window` defined would make every later ak_ construction
+      // in this file trip the browser secret-key guard.
+      if (!hadWindow) delete (globalThis as any).window;
+    }
   });
 });
 
@@ -159,15 +166,16 @@ describe("AFG-019 — key-class guards", () => {
     expect(call[1].headers["X-Arcora-Api-Key"]).toMatch(/^pk_live_/);
   });
 
-  it("warns when a secret key is constructed in a browser environment", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("throws when a secret key is constructed in a browser environment (C-2)", () => {
     const hadWindow = "window" in globalThis;
     Object.defineProperty(globalThis, "window", { value: {}, configurable: true, writable: true });
     try {
       new Arcora({ apiKey: "ak_live_" + "s".repeat(56), environment: "testnet" });
-      expect(warn).toHaveBeenCalled();
+      throw new Error("expected throw");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(ArcoraError);
+      expect(e.code).toBe("SECRET_KEY_IN_BROWSER");
     } finally {
-      warn.mockRestore();
       if (!hadWindow) delete (globalThis as any).window;
     }
   });

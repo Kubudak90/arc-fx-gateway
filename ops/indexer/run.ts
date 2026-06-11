@@ -75,8 +75,12 @@ async function getLastBlock(): Promise<bigint> {
   return r.rows[0] ? BigInt(r.rows[0].value) : 0n;
 }
 
-async function setLastBlock(v: bigint): Promise<void> {
-  await pool.query(
+// Audit MED-4 (2026-06-11): takes the chunk's transaction client so the
+// cursor advance commits atomically with the chunk's row writes — it is
+// the FINAL statement inside the per-chunk transaction in tick().
+// pg.Pool and pg.PoolClient share the .query interface.
+async function setLastBlock(db: pg.Pool | pg.PoolClient, v: bigint): Promise<void> {
+  await db.query(
     `insert into indexer_state(key, value, updated_at)
      values ('last_processed_block', $1, now())
      on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at`,
@@ -84,20 +88,22 @@ async function setLastBlock(v: bigint): Promise<void> {
   );
 }
 
+// Audit MED-4 (2026-06-11): runs on the chunk's transaction client, not the
+// pool, so a webhook enqueue can't outlive a rolled-back invoice update.
 async function enqueueWebhook(
-  pool: pg.Pool,
+  client: pg.PoolClient,
   invoiceId: string,
   merchantId: string,
   eventType: string,
   extra: Record<string, unknown>,
   txHash: string | null,
 ): Promise<void> {
-  const mr = await pool.query<{ webhook_url: string | null }>(
+  const mr = await client.query<{ webhook_url: string | null }>(
     "select webhook_url from merchants where id = $1", [merchantId],
   );
   const url = mr.rows[0]?.webhook_url;
   if (!url) return;
-  await pool.query(
+  await client.query(
     `insert into webhook_attempts(invoice_id, url, payload, attempts, next_attempt, event_type)
      values ($1, $2, $3::jsonb, 0, now(), $4)
      on conflict (invoice_id, event_type) do nothing`,
@@ -175,229 +181,252 @@ async function tick(): Promise<{
       });
     }
 
-    for (const log of createdLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "InvoiceCreated") continue;
-      const a = d.args;
-      const id            = a.globalId as Hex;
-      const merchantAddr  = (a.merchant as string).toLowerCase();
+    // Audit MED-4 (2026-06-11), parity with replay.ts (Ops-L-2): every
+    // chunk's DB writes are bracketed by BEGIN/COMMIT on a single client,
+    // with setLastBlock(end) as the FINAL write inside the transaction. A
+    // mid-chunk crash rolls back cleanly — no invoice flipped to paid
+    // without its claimable_at sibling, no webhook enqueued for a row
+    // update that never landed, no cursor advanced past unwritten rows.
+    // The next tick re-walks the chunk; every handler is idempotent
+    // (status-conditional UPDATEs, ON CONFLICT DO NOTHING inserts).
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-      // Audit #20: dropped pre-check `select 1 from invoices`. ON CONFLICT
-      // DO NOTHING is already idempotent, and the RETURNING here lets us
-      // increment `created` only on actual inserts (duplicates return 0
-      // rows). One round-trip per event instead of two on backfill.
-      const mr = await pool.query<{ id: string }>(
-        "select id from merchants where lower(address) = $1 limit 1", [merchantAddr],
-      );
-      if (!mr.rowCount) continue; // unknown merchant - cannot satisfy FK
+      for (const log of createdLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "InvoiceCreated") continue;
+        const a = d.args;
+        const id            = a.globalId as Hex;
+        const merchantAddr  = (a.merchant as string).toLowerCase();
 
-      // gateway_address comes from the log itself (log.address) so an
-      // invoice discovered on V11 is recorded against the gateway that
-      // actually emitted it during the dual-watch window.
-      const sourceGateway = log.address.toLowerCase();
-      const inserted = await pool.query<{ id: string }>(
-        `insert into invoices
-           (id, merchant_invoice_id, merchant_id, pay_in_token, payout_token,
-            amount_out, expires_at, status, success_url, metadata, gateway_address)
-         values ($1, $2, $3, $4, $5, $6, to_timestamp($7), 'created', '', $8::jsonb, $9)
-         on conflict (id) do nothing
-         returning id`,
-        [
-          id,
-          a.merchantInvoiceId as Hex,
-          mr.rows[0].id,
-          a.payIn as Hex,
-          a.payoutToken as Hex,
-          (a.amountOut as bigint).toString(),
-          Number(a.expiresAt as bigint),
-          JSON.stringify({ backfilled: true, txHash: log.transactionHash }),
-          sourceGateway,
-        ],
-      );
-      if (inserted.rowCount && inserted.rowCount > 0) {
-        created++;
-        backfilled++;
+        // Audit #20: dropped pre-check `select 1 from invoices`. ON CONFLICT
+        // DO NOTHING is already idempotent, and the RETURNING here lets us
+        // increment `created` only on actual inserts (duplicates return 0
+        // rows). One round-trip per event instead of two on backfill.
+        const mr = await client.query<{ id: string }>(
+          "select id from merchants where lower(address) = $1 limit 1", [merchantAddr],
+        );
+        if (!mr.rowCount) continue; // unknown merchant - cannot satisfy FK
+
+        // gateway_address comes from the log itself (log.address) so an
+        // invoice discovered on V11 is recorded against the gateway that
+        // actually emitted it during the dual-watch window.
+        const sourceGateway = log.address.toLowerCase();
+        const inserted = await client.query<{ id: string }>(
+          `insert into invoices
+             (id, merchant_invoice_id, merchant_id, pay_in_token, payout_token,
+              amount_out, expires_at, status, success_url, metadata, gateway_address)
+           values ($1, $2, $3, $4, $5, $6, to_timestamp($7), 'created', '', $8::jsonb, $9)
+           on conflict (id) do nothing
+           returning id`,
+          [
+            id,
+            a.merchantInvoiceId as Hex,
+            mr.rows[0].id,
+            a.payIn as Hex,
+            a.payoutToken as Hex,
+            (a.amountOut as bigint).toString(),
+            Number(a.expiresAt as bigint),
+            JSON.stringify({ backfilled: true, txHash: log.transactionHash }),
+            sourceGateway,
+          ],
+        );
+        if (inserted.rowCount && inserted.rowCount > 0) {
+          created++;
+          backfilled++;
+        }
       }
+
+      for (const log of paidLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "InvoicePaid") continue;
+        const id              = d.args.globalId as Hex;
+        const payer           = d.args.payer as string;
+        const amountIn        = (d.args.amountIn        as bigint).toString();
+        const merchantPayout  = (d.args.merchantPayout  as bigint).toString();
+        const protocolFee     = (d.args.fee             as bigint).toString();
+
+        const ctx = settleCtxByInvoice.get(id.toLowerCase());
+        // Block timestamp for catch-up replay accuracy (same pattern as
+        // failed_at — paid_at and refunded_at both used DB now() before).
+        const paidAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+             set status = 'paid', paid_by = $2, paid_tx = $3, paid_at = $8,
+                 amount_in = $4, merchant_payout = $5, protocol_fee = $6,
+                 metadata  = coalesce(metadata, '{}'::jsonb) || $7::jsonb
+           where id = $1 and status = 'created'
+           returning id, merchant_id`,
+          [
+            id, payer, log.transactionHash, amountIn, merchantPayout, protocolFee,
+            ctx
+              ? JSON.stringify({ pay_in_actual: ctx.payInToken, swap_tx: ctx.swapTxHash, source_address: log.address })
+              : JSON.stringify({ source_address: log.address }),
+            paidAt,
+          ],
+        );
+        if (!upd.rowCount) continue;
+        paid++;
+
+        await enqueueWebhook(client, id, upd.rows[0].merchant_id, "invoice.paid",
+          { paid_by: payer }, log.transactionHash);
+      }
+
+      for (const log of refundedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "InvoiceRefunded") continue;
+        const id         = d.args.globalId as Hex;
+        const refundedTo = d.args.refundedTo as string;
+
+        // Status guard widened to include 'created' so an out-of-order
+        // InvoiceRefunded (landing before InvoicePaid) still flips the row to
+        // refunded — without this, the row sticks in 'created' forever despite
+        // the customer being made whole on-chain.
+        const refundedAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+             set status = 'refunded', refund_tx = $2, refunded_at = $3
+           where id = $1 and status in ('created', 'paid')
+           returning id, merchant_id`,
+          [id, log.transactionHash, refundedAt],
+        );
+        if (!upd.rowCount) continue;
+        refunded++;
+
+        await enqueueWebhook(client, id, upd.rows[0].merchant_id, "invoice.refunded",
+          { refunded_to: refundedTo }, log.transactionHash);
+      }
+
+      for (const log of payerRefundedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "PayerRefunded") continue;
+        const id     = d.args.globalId as Hex;
+        const payer  = d.args.payer as string;
+        const amount = (d.args.amount as bigint).toString();
+
+        // V10 path: the relayer couldn't settle, sent the customer their
+        // pay-in back off-chain, and emitted this event so the indexer flips
+        // the row to `failed`. webhooks fire so the merchant's app sees a
+        // terminal "this won't pay" state.
+        const failedAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+             set status   = 'failed',
+                 metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb
+           where id = $1 and status in ('created', 'paid')
+           returning id, merchant_id`,
+          [
+            id,
+            JSON.stringify({
+              failed_at:    failedAt,
+              failed_tx:    log.transactionHash,
+              refunded_to:  payer.toLowerCase(),
+              refund_amount: amount,
+            }),
+          ],
+        );
+        if (!upd.rowCount) continue;
+        failed++;
+
+        await enqueueWebhook(client, id, upd.rows[0].merchant_id, "invoice.failed",
+          { payer: payer.toLowerCase(), amount }, log.transactionHash);
+      }
+
+      // EscrowCreated → set claimable_at on the invoice row.
+      // Guard: only update rows still in 'paid' state with no claimable_at set.
+      // This makes the handler idempotent on replay and protects against
+      // out-of-order events overwriting a row that has already progressed to
+      // claimed/refunded/recovered (first sighting wins).
+      for (const log of escrowCreatedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "EscrowCreated") continue;
+        const id          = d.args.globalId as Hex;
+        const claimableAt = d.args.claimableAt as bigint;
+        await client.query(
+          `update invoices set claimable_at = to_timestamp($2)
+             where id = $1 and status = 'paid' and claimable_at is null`,
+          [id, Number(claimableAt)],
+        );
+      }
+
+      // InvoiceClaimed → flip status to 'claimed', record claim_tx and fee
+      for (const log of claimedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "InvoiceClaimed") continue;
+        const id          = d.args.globalId as Hex;
+        const fee         = (d.args.fee        as bigint).toString();
+        const toMerchant  = (d.args.toMerchant as bigint).toString();
+
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+             set status          = 'claimed',
+                 claimed_at      = now(),
+                 claim_tx        = $2,
+                 protocol_fee    = $3,
+                 merchant_payout = $4
+           where id = $1 and status = 'paid'
+           returning id, merchant_id`,
+          [id, log.transactionHash, fee, toMerchant],
+        );
+        if (!upd.rowCount) continue;
+        claimed++;
+
+        await enqueueWebhook(client, id, upd.rows[0].merchant_id, "invoice.claimed",
+          { fee, to_merchant: toMerchant }, log.transactionHash);
+      }
+
+      // EscrowRecovered → flip status to 'recovered'
+      for (const log of escrowRecoveredLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "EscrowRecovered") continue;
+        const id = d.args.globalId as Hex;
+
+        const upd = await client.query<{ id: string; merchant_id: string }>(
+          `update invoices
+             set status       = 'recovered',
+                 recovered_at = now(),
+                 recovery_tx  = $2
+           where id = $1 and status = 'paid'
+           returning id, merchant_id`,
+          [id, log.transactionHash],
+        );
+        if (!upd.rowCount) continue;
+        recovered++;
+
+        await enqueueWebhook(client, id, upd.rows[0].merchant_id, "invoice.recovered",
+          {}, log.transactionHash);
+      }
+
+      // MerchantReactivated → clear deactivated_at.
+      // Note: this is intentionally NOT guarded by a prior-state check. The
+      // operator explicitly issued a reactivation on-chain, so clearing
+      // deactivated_at is always correct. On replay, if a later deactivation
+      // event also replays, it will re-set the column — the final DB state
+      // will converge to whatever the most-recently-processed event dictates,
+      // which is the correct observable on-chain state.
+      for (const log of merchantReactivatedLogs) {
+        const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
+        if (d.eventName !== "MerchantReactivated") continue;
+        const merchant = (d.args.merchant as string).toLowerCase();
+        await client.query(
+          `update merchants set deactivated_at = null where lower(address) = $1`,
+          [merchant],
+        );
+      }
+
+      // Cursor advance is the FINAL write inside the transaction: either the
+      // whole chunk landed and the cursor moved, or neither happened.
+      await setLastBlock(client, end);
+
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw e; // surfaces as tick.error; next tick re-walks from the old cursor
+    } finally {
+      client.release();
     }
 
-    for (const log of paidLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "InvoicePaid") continue;
-      const id              = d.args.globalId as Hex;
-      const payer           = d.args.payer as string;
-      const amountIn        = (d.args.amountIn        as bigint).toString();
-      const merchantPayout  = (d.args.merchantPayout  as bigint).toString();
-      const protocolFee     = (d.args.fee             as bigint).toString();
-
-      const ctx = settleCtxByInvoice.get(id.toLowerCase());
-      // Block timestamp for catch-up replay accuracy (same pattern as
-      // failed_at — paid_at and refunded_at both used DB now() before).
-      const paidAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-           set status = 'paid', paid_by = $2, paid_tx = $3, paid_at = $8,
-               amount_in = $4, merchant_payout = $5, protocol_fee = $6,
-               metadata  = coalesce(metadata, '{}'::jsonb) || $7::jsonb
-         where id = $1 and status = 'created'
-         returning id, merchant_id`,
-        [
-          id, payer, log.transactionHash, amountIn, merchantPayout, protocolFee,
-          ctx
-            ? JSON.stringify({ pay_in_actual: ctx.payInToken, swap_tx: ctx.swapTxHash, source_address: log.address })
-            : JSON.stringify({ source_address: log.address }),
-          paidAt,
-        ],
-      );
-      if (!upd.rowCount) continue;
-      paid++;
-
-      await enqueueWebhook(pool, id, upd.rows[0].merchant_id, "invoice.paid",
-        { paid_by: payer }, log.transactionHash);
-    }
-
-    for (const log of refundedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "InvoiceRefunded") continue;
-      const id         = d.args.globalId as Hex;
-      const refundedTo = d.args.refundedTo as string;
-
-      // Status guard widened to include 'created' so an out-of-order
-      // InvoiceRefunded (landing before InvoicePaid) still flips the row to
-      // refunded — without this, the row sticks in 'created' forever despite
-      // the customer being made whole on-chain.
-      const refundedAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-           set status = 'refunded', refund_tx = $2, refunded_at = $3
-         where id = $1 and status in ('created', 'paid')
-         returning id, merchant_id`,
-        [id, log.transactionHash, refundedAt],
-      );
-      if (!upd.rowCount) continue;
-      refunded++;
-
-      await enqueueWebhook(pool, id, upd.rows[0].merchant_id, "invoice.refunded",
-        { refunded_to: refundedTo }, log.transactionHash);
-    }
-
-    for (const log of payerRefundedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "PayerRefunded") continue;
-      const id     = d.args.globalId as Hex;
-      const payer  = d.args.payer as string;
-      const amount = (d.args.amount as bigint).toString();
-
-      // V10 path: the relayer couldn't settle, sent the customer their
-      // pay-in back off-chain, and emitted this event so the indexer flips
-      // the row to `failed`. webhooks fire so the merchant's app sees a
-      // terminal "this won't pay" state.
-      const failedAt = new Date(await blockTsMs(log.blockNumber)).toISOString();
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-           set status   = 'failed',
-               metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb
-         where id = $1 and status in ('created', 'paid')
-         returning id, merchant_id`,
-        [
-          id,
-          JSON.stringify({
-            failed_at:    failedAt,
-            failed_tx:    log.transactionHash,
-            refunded_to:  payer.toLowerCase(),
-            refund_amount: amount,
-          }),
-        ],
-      );
-      if (!upd.rowCount) continue;
-      failed++;
-
-      await enqueueWebhook(pool, id, upd.rows[0].merchant_id, "invoice.failed",
-        { payer: payer.toLowerCase(), amount }, log.transactionHash);
-    }
-
-    // EscrowCreated → set claimable_at on the invoice row.
-    // Guard: only update rows still in 'paid' state with no claimable_at set.
-    // This makes the handler idempotent on replay and protects against
-    // out-of-order events overwriting a row that has already progressed to
-    // claimed/refunded/recovered (first sighting wins).
-    for (const log of escrowCreatedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "EscrowCreated") continue;
-      const id          = d.args.globalId as Hex;
-      const claimableAt = d.args.claimableAt as bigint;
-      await pool.query(
-        `update invoices set claimable_at = to_timestamp($2)
-           where id = $1 and status = 'paid' and claimable_at is null`,
-        [id, Number(claimableAt)],
-      );
-    }
-
-    // InvoiceClaimed → flip status to 'claimed', record claim_tx and fee
-    for (const log of claimedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "InvoiceClaimed") continue;
-      const id          = d.args.globalId as Hex;
-      const fee         = (d.args.fee        as bigint).toString();
-      const toMerchant  = (d.args.toMerchant as bigint).toString();
-
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-           set status          = 'claimed',
-               claimed_at      = now(),
-               claim_tx        = $2,
-               protocol_fee    = $3,
-               merchant_payout = $4
-         where id = $1 and status = 'paid'
-         returning id, merchant_id`,
-        [id, log.transactionHash, fee, toMerchant],
-      );
-      if (!upd.rowCount) continue;
-      claimed++;
-
-      await enqueueWebhook(pool, id, upd.rows[0].merchant_id, "invoice.claimed",
-        { fee, to_merchant: toMerchant }, log.transactionHash);
-    }
-
-    // EscrowRecovered → flip status to 'recovered'
-    for (const log of escrowRecoveredLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "EscrowRecovered") continue;
-      const id = d.args.globalId as Hex;
-
-      const upd = await pool.query<{ id: string; merchant_id: string }>(
-        `update invoices
-           set status       = 'recovered',
-               recovered_at = now(),
-               recovery_tx  = $2
-         where id = $1 and status = 'paid'
-         returning id, merchant_id`,
-        [id, log.transactionHash],
-      );
-      if (!upd.rowCount) continue;
-      recovered++;
-
-      await enqueueWebhook(pool, id, upd.rows[0].merchant_id, "invoice.recovered",
-        {}, log.transactionHash);
-    }
-
-    // MerchantReactivated → clear deactivated_at.
-    // Note: this is intentionally NOT guarded by a prior-state check. The
-    // operator explicitly issued a reactivation on-chain, so clearing
-    // deactivated_at is always correct. On replay, if a later deactivation
-    // event also replays, it will re-set the column — the final DB state
-    // will converge to whatever the most-recently-processed event dictates,
-    // which is the correct observable on-chain state.
-    for (const log of merchantReactivatedLogs) {
-      const d = decodeEventLog({ abi: ABI, data: log.data, topics: log.topics });
-      if (d.eventName !== "MerchantReactivated") continue;
-      const merchant = (d.args.merchant as string).toLowerCase();
-      await pool.query(
-        `update merchants set deactivated_at = null where lower(address) = $1`,
-        [merchant],
-      );
-    }
-
-    await setLastBlock(end);
     cursor = end + 1n;
     chunks++;
   }

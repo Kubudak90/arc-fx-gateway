@@ -29,12 +29,31 @@ export function ApiKeyCard({ hasMerchant, publishableKey, onBootstrap }: { hasMe
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [originsRaw, setOriginsRaw] = useState("");
+  // MED-6: after a rotate, show the fresh key instead of the (stale) prop.
+  const [rotatedPk, setRotatedPk] = useState<string | null>(null);
+  const [pkBusy, setPkBusy] = useState(false);
+  const pk = rotatedPk ?? publishableKey;
 
   async function copyPublishable() {
-    if (publishableKey) {
-      await navigator.clipboard.writeText(publishableKey);
+    if (pk) {
+      await navigator.clipboard.writeText(pk);
       toast.success("Publishable key copied");
     }
+  }
+
+  async function rotatePublishable() {
+    setPkBusy(true);
+    try {
+      const res = await fetch("/api/merchant/publishable-key", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "failed");
+      setRotatedPk(data.publishableKey);
+      toast.success("Publishable key rotated");
+    } catch (e: any) { toast.error(e.message); }
+    finally { setPkBusy(false); }
   }
 
   const parsed = useMemo(() => parseOriginLines(originsRaw), [originsRaw]);
@@ -75,14 +94,14 @@ export function ApiKeyCard({ hasMerchant, publishableKey, onBootstrap }: { hasMe
         Use your publishable key in the browser SDK and your secret key on the server.
       </p>
       <div className="space-y-4">
-        {publishableKey && (
+        {pk && (
           <div className="space-y-2 pb-4 border-b border-[var(--border)]">
             <div className="flex items-center justify-between">
               <span className="eyebrow">Publishable key</span>
               <span className="tagchip tagchip--ok">Browser-safe</span>
             </div>
             <div className="field flex items-center gap-2.5 px-3 py-2.5">
-              <code className="mono text-xs flex-1 break-all text-[var(--fg-2)]">{publishableKey}</code>
+              <code className="mono text-xs flex-1 break-all text-[var(--fg-2)]">{pk}</code>
               <button
                 type="button"
                 onClick={copyPublishable}
@@ -97,6 +116,12 @@ export function ApiKeyCard({ hasMerchant, publishableKey, onBootstrap }: { hasMe
             <p className="text-xs text-[var(--fg-3)]">
               Safe to embed in client-side code (storefront, SDK <code className="mono">&lt;CheckoutButton&gt;</code>, CDN script). Checkouts are accepted from your allowed origins.
             </p>
+            <p className="text-sm text-[var(--fg-2)]">
+              Rotate your publishable key. The previous key will stop working immediately.
+            </p>
+            <button type="button" onClick={rotatePublishable} disabled={pkBusy} className="pill pill--ghost pill--sm">
+              <RefreshCw className="size-3.5" />Rotate publishable key
+            </button>
           </div>
         )}
         <div className="eyebrow">Secret key</div>

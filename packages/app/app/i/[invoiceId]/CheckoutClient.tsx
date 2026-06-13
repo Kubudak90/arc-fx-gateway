@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTheme } from "next-themes";
-import { ConnectButton } from "thirdweb/react";
-import { createThirdwebClient } from "thirdweb";
 import { QuoteDisplay } from "@/components/checkout/QuoteDisplay";
 import { PayButton } from "@/components/checkout/PayButton";
+import { CheckoutConnectButton } from "@/components/checkout/CheckoutConnectButton";
 import { ChainSelector } from "@/components/checkout/ChainSelector";
 import { CrossChainPayButton } from "@/components/checkout/CrossChainPayButton";
 import { SuccessScreen, ExpiredScreen } from "@/components/checkout/StatusScreens";
@@ -13,10 +11,6 @@ import { MobileWalletQR } from "@/components/checkout/MobileWalletQR";
 import { Smartphone } from "lucide-react";
 import type { Address } from "viem";
 import type { invoiceStatus } from "@/lib/db/schema";
-
-const thirdwebClient = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ?? "",
-});
 
 /** Mirrors the DB `invoice_status` enum (type-only import — drizzle never
  *  reaches the client bundle). All 7 states, not just the happy-path 4:
@@ -42,7 +36,6 @@ interface CheckoutClientProps {
 }
 
 export default function CheckoutClient(props: CheckoutClientProps) {
-  const { resolvedTheme } = useTheme();
   const [status, setStatus] = useState(props.initialStatus);
   // QuoteDisplay quotes the forward direction: the customer commits to a
   // payIn upfront and the relayer's kit.swap converts it; the merchant gets
@@ -104,17 +97,7 @@ export default function CheckoutClient(props: CheckoutClientProps) {
           <ChainSelector value={sourceChainId} onChange={setSourceChainId} />
         )}
 
-        <ConnectButton
-          client={thirdwebClient}
-          connectButton={{
-            label: "Connect wallet",
-            className: "pill pill--acc w-full",
-            // thirdweb injects its own emotion styles after ours; inline
-            // styles keep the accent pill colors authoritative in both themes.
-            style: { background: "var(--acc)", color: "var(--acc-ink)" },
-          }}
-          theme={resolvedTheme === "light" ? "light" : "dark"}
-        />
+        <CheckoutConnectButton />
 
         {crosschainEnabled && (
           <div className="space-y-2">

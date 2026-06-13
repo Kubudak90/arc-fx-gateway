@@ -4,7 +4,6 @@ import { createConfig, createStorage, http, noopStorage, WagmiProvider } from "w
 import { defineChain } from "viem";
 import { baseSepolia, sepolia } from "viem/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThirdwebProvider } from "thirdweb/react";
 import { injected, walletConnect } from "wagmi/connectors";
 import { useState, type PropsWithChildren } from "react";
 
@@ -51,12 +50,10 @@ export const wagmiConfig = createConfig({
 export function ChainProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(() => new QueryClient());
   return (
-    <ThirdwebProvider>
-      <WagmiProvider config={wagmiConfig}>
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      </WagmiProvider>
-    </ThirdwebProvider>
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }

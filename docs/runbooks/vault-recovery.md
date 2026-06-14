@@ -73,14 +73,31 @@ vault operator rekey <existing-key>
 
 ## Daily rotation cron failure
 
-If `secret-id-rotation.sh` errors:
-- Relayer still has its current `secret_id` valid for 24h. Manual re-run:
-  ```
-  ssh root@<ops-vps>
-  VAULT_TOKEN=$(cat /root/.vault-rotation-token) bash /opt/arcora/ops/vault/secret-id-rotation.sh
-  ```
-- Past 24h without rotation → relayer signing fails (invalid secret_id). Use the rotation operator token to mint a new secret_id manually:
-  ```
+A stuck rotation is surfaced by the freshness monitor `ops/vault/vault-rotation-health.sh`
+(hourly cron; FAILs once no `ok` line has appeared for 25h and pushes to ntfy.sh).
+The rotation cron itself runs daily at 03:00 and logs to `/var/log/secret-id-rotation.log`.
+
+If `secret-id-rotation.sh` errors, re-run it manually with the SAME env the cron
+uses. The script defaults `VAULT_ADDR` to plain http, which the TLS listener now
+rejects — you MUST pass https + the CA, or the `vault` calls fail with "Client
+sent an HTTP request to an HTTPS server":
+```
+ssh root@<ops-vps>
+VAULT_ADDR=https://127.0.0.1:8200 VAULT_CACERT=/opt/vault/tls/vault.crt \
+  VAULT_TOKEN=$(cat /etc/arcora/rotation-operator.token) \
+  /opt/arcora-ops/vault/secret-id-rotation.sh >> /var/log/secret-id-rotation.log 2>&1
+```
+
+A running relayer keeps signing with the private key it fetched at boot (held in
+memory), so an aged-out `secret_id` does NOT break live signing — it breaks the
+NEXT relayer restart/login (AppRole 400/invalid). If the script can't run at all,
+mint a secret_id and swap it in by hand:
+```
+VAULT_ADDR=https://127.0.0.1:8200 VAULT_CACERT=/opt/vault/tls/vault.crt \
+  VAULT_TOKEN=$(cat /etc/arcora/rotation-operator.token) \
   vault write -f auth/approle/role/relayer/secret-id
-  # write secret_id into /etc/arcora/relayer.env, systemctl reload arcora-relayer
-  ```
+# Put the new value in VAULT_SECRET_ID= in /opt/arcora-ops/relayer/.env, then:
+systemctl restart arcora-relayer.service   # NOT reload — the unit is Type=simple,
+                                            # has no ExecReload, and only AppRole-logs
+                                            # in at boot (2026-05-13 prod incident).
+```

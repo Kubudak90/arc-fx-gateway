@@ -96,8 +96,20 @@ systemctl restart arcora-relayer.service
 # secret_id works end-to-end inside the daemon, not just in the pre-commit test
 # login above (closes the is-active-true-then-crash race the freshness monitor
 # would otherwise miss for ~25h).
+#
+# Audit Ops-M-7 (2026-06-14): the original 15s ceiling was shorter than the
+# relayer's real cold start. After the TLS migration the daemon does DB TLS
+# verify-full (pinned Supabase CA) + tsx/esbuild warmup + AppRole login + KV
+# fetch before emitting relayer.start — measured ~21s on the box (restart
+# 03:00:16 → relayer.start 03:00:37). The 15s wait expired 6s early, so a
+# rotation that ACTUALLY succeeded (env rewritten, new secret_id live, relayer
+# healthy) was logged as a failure and skipped the `ok` line — leaving the
+# freshness monitor permanently red and unable to flag a real outage. Wait long
+# enough to clear the true cold start with margin; the loop still breaks the
+# instant relayer.start appears, so the larger ceiling costs nothing on success.
+START_CONFIRM_SECS="${ROTATION_START_CONFIRM_SECS:-60}"
 started=""
-for _ in $(seq 1 15); do
+for _ in $(seq 1 "$START_CONFIRM_SECS"); do
   sleep 1
   if [[ -n "$CURSOR" ]]; then
     JLINES=$(journalctl -u arcora-relayer.service --after-cursor "$CURSOR" -o cat 2>/dev/null)
@@ -107,7 +119,7 @@ for _ in $(seq 1 15); do
   if grep -q 'relayer.start' <<<"$JLINES"; then started=1; break; fi
 done
 if [[ -z "$started" ]]; then
-  echo "[rotation] ERROR: relayer did not emit relayer.start within 15s of restart — new secret_id may not have authenticated inside the daemon" >&2
+  echo "[rotation] ERROR: relayer did not emit relayer.start within ${START_CONFIRM_SECS}s of restart — new secret_id may not have authenticated inside the daemon" >&2
   exit 2
 fi
 if ! systemctl is-active --quiet arcora-relayer.service; then

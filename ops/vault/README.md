@@ -27,7 +27,10 @@ sudo bash ops/vault/install.sh
 Then, interactively in an SSH session:
 
 ```bash
-export VAULT_ADDR=http://127.0.0.1:8200
+# Vault serves HTTPS on loopback (TLS migration 2026-06-13); plain http is now
+# rejected by the listener. Trust the cert for CLI use via VAULT_CACERT.
+export VAULT_ADDR=https://127.0.0.1:8200
+export VAULT_CACERT=/opt/vault/tls/vault.crt
 
 # 1. Init — save the 3 unseal keys offline, distributed across holders
 #    (custody arrangement is documented in the private operator runbook).
@@ -88,7 +91,7 @@ chmod 600 <root-only token file>
 crontab -e
 # Add a daily entry that sources VAULT_ADDR + the scoped operator token,
 # runs the rotation script, and appends to the rotation log, e.g.:
-# <schedule> VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=$(cat <operator-token-file>) <rotation-script> >> <rotation-log> 2>&1
+# <schedule> VAULT_ADDR=https://127.0.0.1:8200 VAULT_CACERT=/opt/vault/tls/vault.crt VAULT_TOKEN=$(cat <operator-token-file>) <rotation-script> >> <rotation-log> 2>&1
 
 # 11. Wire the rotation freshness check (audit Ops-M4, 2026-05-24).
 # Runs on a recurring schedule; exits 1 if no successful rotation within the
@@ -122,7 +125,7 @@ EOF
 ## What goes in the relayer .env file
 
 ```
-VAULT_URL=http://127.0.0.1:8200
+VAULT_URL=https://127.0.0.1:8200
 VAULT_ROLE_ID=<step 8 ROLE_ID>
 VAULT_SECRET_ID=<step 8 SECRET_ID — rotated daily>
 VAULT_KV_PATH=secret/data/relayer-v10
@@ -132,6 +135,14 @@ ARC_TESTNET_RPC=https://rpc.testnet.arc.network
 POSTGRES_URL_NON_POOLING=postgresql://…
 KIT_KEY=KIT_KEY:...
 ```
+
+> **TLS (migration 2026-06-13).** Vault serves HTTPS on loopback; `VAULT_URL`
+> is `https://` and plain http is rejected. The relayer uses the global `fetch`
+> (undici), which has no per-request CA option, so the systemd unit trusts the
+> Vault CA process-wide via
+> `Environment=NODE_EXTRA_CA_CERTS=/opt/vault/tls/vault.crt` (see the TLS-trust
+> note in `ops/relayer/vault-signer.ts`). The rotation cron passes `VAULT_CACERT`
+> for the same trust on the `vault` CLI.
 
 The relayer derives both the viem `LocalAccount` and the App Kit adapter
 from the single Vault-fetched private key — no separate

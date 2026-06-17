@@ -1,0 +1,3 @@
+# Frozen security baseline lives here.
+# Run `../pre-deploy-audit.sh --freeze-baseline` to create slither-baseline.json on a blessed commit,
+# then COMMIT that JSON — it is the reference every future run diffs against.

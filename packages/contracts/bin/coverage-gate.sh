@@ -33,13 +33,16 @@ if [[ ! -f "$LCOV" ]]; then
 fi
 
 # Sum LF/LH/BRF/BRH across audit-scope files only.
-# Pattern of audit scope: src/ArcFXGatewayV8.sol (and any future src/*.sol
-# the gate should care about). script/ and helpers are excluded.
+# Pattern of audit scope: src/ArcFXGateway.sol (the live gateway). script/,
+# test/, and testnet helpers are excluded.
 awk '
   BEGIN { in_scope = 0 }
   /^SF:/ {
-    # Audit scope: V10 (current canonical custody gateway). V8/V9 retired to legacy/.
-    in_scope = ($0 ~ /^SF:src\/ArcFXGatewayV10\.sol$/) ? 1 : 0
+    # Audit scope: the live ArcFXGateway (version-neutral filename). Deprecated
+    # contracts live in legacy/ and are excluded. NOTE: the previous pattern
+    # "ArcFXGatewayV10.sol" matched NO file on disk -> 0 lines summed -> the gate
+    # reported 100% and passed vacuously. Fixed 2026-06-17 to src/ArcFXGateway.sol.
+    in_scope = ($0 ~ /^SF:src\/ArcFXGateway\.sol$/) ? 1 : 0
   }
   in_scope && /^LF:/  { sub(/^LF:/,"");  lf  += $0 }
   in_scope && /^LH:/  { sub(/^LH:/,"");  lh  += $0 }

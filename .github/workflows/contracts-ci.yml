@@ -94,7 +94,13 @@ jobs:
           python-version: "3.11"
 
       - name: Install Mythril
-        run: pip install mythril==0.24.8
+        # mythril's eth/py-evm dependency does `import pkg_resources` at runtime, which
+        # setuptools>=81 removed -> `myth` crashes on import (this was failing CI since the
+        # runner started shipping setuptools>=81). Pin setuptools<81 AFTER mythril so the
+        # final runtime version still provides pkg_resources. (Verified locally 2026-06-17.)
+        run: |
+          pip install mythril==0.24.8
+          pip install 'setuptools<81'
 
       - name: Analyse canonical contracts
         working-directory: packages/contracts

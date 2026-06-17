@@ -277,6 +277,7 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         if (grossPayout < inv.amountOut)             revert PayoutShortfall(grossPayout, inv.amountOut);
 
         address payoutToken = inv.payoutToken;
+        // slither-disable-next-line reentrancy-no-eth -- nonReentrant + RELAYER_ROLE; escrow/status writes after this pull are guard-protected (reviewed 2026-06-17, .slither-triage.md)
         IERC20(payoutToken).safeTransferFrom(msg.sender, address(this), grossPayout);
 
         // V13 fee model: the protocol fee is taken ONLY at claim (PROTOCOL_FEE_BPS
@@ -389,6 +390,7 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
             delete escrows[globalId];
             protocolFeesAccrued[e.payoutToken] += fee;
 
+            // slither-disable-next-line reentrancy-no-eth -- nonReentrant; effects precede this transfer, flag is cross-iteration only (reviewed 2026-06-17, .slither-triage.md)
             IERC20(e.payoutToken).safeTransfer(payoutAddress, toMerchant);
 
             emit InvoiceClaimed(globalId, inv.merchant, payoutAddress, e.payoutToken, toMerchant, fee);
@@ -428,6 +430,7 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
             inv.status = InvoiceStatus.Recovered;
             delete escrows[globalId];
 
+            // slither-disable-next-line reentrancy-no-eth -- nonReentrant + DEFAULT_ADMIN_ROLE; effects precede this transfer (reviewed 2026-06-17, .slither-triage.md)
             IERC20(e.payoutToken).safeTransfer(to, e.amount);
 
             emit EscrowRecovered(globalId, inv.merchant, e.payoutToken, e.amount, to);

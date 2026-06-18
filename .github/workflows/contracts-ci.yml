@@ -94,10 +94,8 @@ jobs:
           python-version: "3.11"
 
       - name: Install Mythril
-        # mythril's eth/py-evm dependency does `import pkg_resources` at runtime, which
-        # setuptools>=81 removed -> `myth` crashes on import (this was failing CI since the
-        # runner started shipping setuptools>=81). Pin setuptools<81 AFTER mythril so the
-        # final runtime version still provides pkg_resources. (Verified locally 2026-06-17.)
+        # Defensive: eth/py-evm imports pkg_resources, which setuptools>=81 removed; pin
+        # setuptools<81 AFTER mythril so the runtime still provides it (harmless if already <81).
         run: |
           pip install mythril==0.24.8
           pip install 'setuptools<81'
@@ -108,9 +106,11 @@ jobs:
           set -e
           # Audit scope: the live gateway only. Deprecated contracts
           # (StablePool, OracleAMM, Registry) are NOT in scope.
+          # NOTE: mythril 0.24.8 has no --output-dir flag (it errors "unrecognized
+          # arguments" -> exit 2 — this was the real CI failure). Output goes to stdout;
+          # myth exits non-zero if it finds issues, failing the step under `set -e`.
           myth analyze src/ArcFXGateway.sol \
             --solv 0.8.26 \
             --solc-args "--allow-paths .,lib --base-path . --include-path lib/openzeppelin-contracts/contracts" \
             --execution-timeout 600 \
-            --max-depth 12 \
-            --output-dir mythril-reports
+            --max-depth 12

@@ -3,19 +3,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "smoke":            "tsx --env-file-if-exists=.env smoke.ts",
+    "smoke": "tsx --env-file-if-exists=.env smoke.ts",
     "smoke:crosschain": "tsx --env-file-if-exists=.env smoke-crosschain.ts",
-    "start":     "tsx run.ts",
-    "replay":    "tsx replay.ts",
+    "start": "tsx run.ts",
+    "replay": "tsx replay.ts",
     "typecheck": "tsc --noEmit",
-    "test":      "vitest run"
+    "test": "vitest run"
   },
   "dependencies": {
     "@arcora/crosschain-core": "workspace:*",
     "@circle-fin/app-kit": "^1.4.1",
     "@circle-fin/adapter-viem-v2": "^1.0.0",
     "pg": "^8.13.0",
-    "viem": "^2.21.0"
+    "viem": "^2.21.0",
+    "@arcora/router": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -54,6 +54,16 @@ active surface.
   Sepolia / Base Sepolia with a CCTP attestation adapter, cross-chain payment
   schema, and a relayer payment state machine. Not enabled in the public
   beta yet.
+- **Chain-agnostic no-custody router (integrated, feature-flagged `V2_ENABLED`).**
+  Supersedes the Arc-only custodial cross-chain spine above. The buyer locks
+  USDC in a per-chain `PaymentEscrow` on whatever chain they pay from; settlement
+  picks path A (same-chain) / B (cross-chain USDC) / C (cross-chain token) via
+  CCTP V2; custody is eliminated (the relayer becomes a keeper that only relays
+  Iris attestations and submits `receiveAndSettle` — it never holds funds);
+  refunds self-route from the `escrowId` to the buyer on the chain they paid from.
+  Deployed + verified on Arc Testnet + Base Sepolia (incl. the 0.30% protocol fee
+  skimmed at settle). See [`runbooks/v2-chain-agnostic-router.md`](runbooks/v2-chain-agnostic-router.md).
+  Drains v1 escrows on the old path during cutover; off by default.
 
 ---
 

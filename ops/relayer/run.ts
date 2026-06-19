@@ -44,6 +44,7 @@ import { fetchIrisAttestation, receiveMessageCall } from "./cctp";
 import { buildSettleArgs, tokenSymbolForArcAddress } from "./arc-settlement";
 import { processCrosschainPayment } from "./crosschain-worker";
 import type { CrosschainPaymentRow, CrosschainWorkerDeps } from "./crosschain-types";
+import { processSettlementsOnce } from "./v2-keeper";
 
 const RPC           = need("ARC_TESTNET_RPC");
 const PG_URL        = need("POSTGRES_URL_NON_POOLING");
@@ -1257,6 +1258,15 @@ async function main() {
       if (row) {
         await processOne(row);
         continue; // back to the top — drain anything else queued
+      }
+
+      // v2 no-custody settlements (flag-gated). Same single-hot-wallet, one-at-a-
+      // time discipline — the keeper never holds funds; it only settles/relays.
+      if (process.env.V2_ENABLED === "1" || process.env.V2_ENABLED === "true") {
+        await processSettlementsOnce({
+          pool, account,
+          log: (m) => console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "v2keeper", detail: m })),
+        });
       }
     } catch (e) {
       console.error(JSON.stringify({

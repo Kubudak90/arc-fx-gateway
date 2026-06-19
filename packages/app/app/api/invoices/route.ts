@@ -5,7 +5,11 @@ import { classifyKey, lookupMerchantByApiKey, lookupMerchantByPublishableKey } f
 import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { GATEWAY, getServerWalletClient, publicClient } from "@/lib/chain/client";
 import { db } from "@/lib/db/client";
-import { invoices } from "@/lib/db/schema";
+import { invoices, merchants } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { V2_ENABLED } from "@/lib/flags";
+import { createInvoiceV2 } from "@/lib/v2/createInvoice";
+import type { PayoutToken as Currency } from "@arcora/router";
 import { resolveComplianceProvider, complianceRequired } from "@/lib/compliance/factory";
 import { screenWithAudit } from "@/lib/compliance/screen";
 import { assertOriginAllowed, assertSafePublicUrl } from "@/lib/security/safeUrl";
@@ -70,7 +74,7 @@ const INVOICE_TTL_SEC = 30 * 60;
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "content-type, x-arcora-api-key",
+  "Access-Control-Allow-Headers": "content-type, x-arcora-api-key, idempotency-key",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -132,6 +136,54 @@ export async function POST(req: NextRequest) {
       { error: "rate_limited", retryAfterSeconds: INVOICE_WINDOW_SECONDS },
       { status: 429, headers: { "retry-after": String(INVOICE_WINDOW_SECONDS) } },
     );
+  }
+
+  // ── v2 chain-agnostic path (flag-gated). No on-chain createInvoiceFor; the
+  // buyer locks USDC via PaymentEscrow.deposit() at pay time. The v1 custody
+  // path below is untouched and used while the flag is off. ──────────────────
+  if (V2_ENABLED) {
+    const V2Body = z.object({
+      amount: z.string(),
+      currency: z.enum(["USDC", "EURC", "USDT"]).optional(),
+      successUrl: z.string().url().optional(),
+      cancelUrl: z.string().url().optional(),
+      metadata: z.record(z.string().max(256)).optional()
+        .refine((m) => !m || Object.keys(m).length <= 50, { message: "metadata may not exceed 50 keys" }),
+    });
+    const p = V2Body.safeParse(await req.json());
+    if (!p.success) return corsResponse({ error: "bad_body", detail: p.error.format() }, { status: 400 });
+    const v2 = p.data;
+
+    // Same redirect allowlist + SSRF guards as v1.
+    const origins = (merchant as { allowedOrigins?: string[] }).allowedOrigins ?? [];
+    if ((v2.successUrl || v2.cancelUrl) && origins.length === 0) {
+      return corsResponse({ error: "merchant_origins_not_configured" }, { status: 400 });
+    }
+    try {
+      if (v2.successUrl) { assertOriginAllowed(v2.successUrl, origins); await assertSafePublicUrl(v2.successUrl); }
+      if (v2.cancelUrl) { assertOriginAllowed(v2.cancelUrl, origins); await assertSafePublicUrl(v2.cancelUrl); }
+    } catch (e) {
+      return corsResponse({ error: "unsafe_redirect_url", detail: e instanceof Error ? e.message : String(e) }, { status: 400 });
+    }
+
+    const [pc] = await db
+      .select({ payoutChainId: merchants.payoutChainId, payoutAddress: merchants.payoutAddress, payoutCurrency: merchants.payoutCurrency })
+      .from(merchants).where(eq(merchants.id, merchant.id)).limit(1);
+
+    const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://arcorapay.xyz";
+    const result = await createInvoiceV2(
+      {
+        id: merchant.id,
+        address: merchant.address as string,
+        payoutChainId: pc?.payoutChainId ?? null,
+        payoutAddress: pc?.payoutAddress ?? null,
+        payoutCurrency: (pc?.payoutCurrency as Currency | null) ?? null,
+      },
+      { amount: v2.amount, currency: v2.currency, successUrl: v2.successUrl, cancelUrl: v2.cancelUrl, metadata: v2.metadata },
+      req.headers.get("Idempotency-Key"),
+      baseUrl,
+    );
+    return corsResponse(result.body, { status: result.http });
   }
 
   const parsed = Body.safeParse(await req.json());

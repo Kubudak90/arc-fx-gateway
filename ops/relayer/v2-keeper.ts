@@ -25,7 +25,7 @@ import {
   CCTP_FINALITY, type ChainConfig,
 } from "@arcora/router";
 
-interface ChainClient {
+export interface ChainClient {
   cfg: ChainConfig;
   pub: PublicClient;
   wallet: WalletClient;
@@ -39,6 +39,8 @@ export interface V2KeeperDeps {
   rpcFor?: (c: ChainConfig) => string | undefined;
   now?: () => number;
   log?: (msg: string) => void;
+  /** Injectable Iris client (defaults to @arcora/router getMessages) — for tests. */
+  getMessages?: typeof getMessages;
 }
 
 export function buildChainClients(account: Account, rpcFor?: (c: ChainConfig) => string | undefined): Map<number, ChainClient> {
@@ -61,7 +63,7 @@ export function buildChainClients(account: Account, rpcFor?: (c: ChainConfig) =>
   return map;
 }
 
-interface Row {
+export interface Row {
   invoice_ref: Hex;
   escrow_id: Hex | null;
   path: "A" | "B" | "C" | null;
@@ -98,7 +100,8 @@ async function setState(deps: V2KeeperDeps, ref: Hex, state: string, extra: Reco
   await deps.pool.query(`UPDATE settlements SET ${sets} WHERE invoice_ref=$1`, [ref, state, ...cols.map((c) => extra[c])]);
 }
 
-async function processRow(r: Row, clients: Map<number, ChainClient>, deps: V2KeeperDeps, log: (m: string) => void): Promise<void> {
+export async function processRow(r: Row, clients: Map<number, ChainClient>, deps: V2KeeperDeps, log: (m: string) => void): Promise<void> {
+  const fetchMessages = deps.getMessages ?? getMessages;
   const escrowId = r.escrow_id!;
   const src = r.escrow_domain != null ? clients.get(r.escrow_domain) : undefined;
   const dest = clients.get(r.payout_domain);
@@ -136,7 +139,7 @@ async function processRow(r: Row, clients: Map<number, ChainClient>, deps: V2Kee
 
   if (r.state === "BURN_SENT") {
     if (!dest || !src || !r.burn_tx) return;
-    const msgs = await getMessages(r.escrow_domain!, r.burn_tx, { testnet: true });
+    const msgs = await fetchMessages(r.escrow_domain!, r.burn_tx, { testnet: true });
     const m = msgs[0];
     if (!m || m.status !== "complete" || m.attestation === "PENDING") return; // not attested yet
     const rcv = dest.cfg.contracts.settlementReceiver as Address;

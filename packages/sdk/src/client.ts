@@ -59,26 +59,47 @@ async function doCreateInvoice(opts: InitOptions, params: CreateInvoiceParams): 
   if (params.cancelUrl && !isHttp(params.cancelUrl)) {
     throw new ArcoraError("INVALID_URL", `cancelUrl must be http(s): got ${params.cancelUrl}`);
   }
-  // Audit #38: server already rejects via Zod (positive number), but
-  // catching invalid amounts client-side is cheaper, more actionable, and
-  // closes the Infinity/NaN/negative paths that JSON.stringify would
-  // otherwise serialise into nonsense ("null" for NaN/Infinity).
-  if (typeof params.amountUsdc !== "number" || !Number.isFinite(params.amountUsdc) || params.amountUsdc <= 0) {
-    throw new ArcoraError(
-      "UNKNOWN",
-      `amountUsdc must be a finite positive number, got ${String(params.amountUsdc)}`,
-    );
+  // v2 (chain-agnostic) when `amount` is a decimal string; else v1 (amountUsdc).
+  // v2: money is bigint minor-units server-side, so the wire amount is a STRING —
+  // a number/NaN/Infinity/non-positive is rejected before it can serialise wrong.
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "X-Arcora-Api-Key": opts.apiKey,
+  };
+  let body: string;
+  if (typeof params.amount === "string") {
+    const amount = params.amount.trim();
+    if (!/^\d+(\.\d+)?$/.test(amount) || Number(amount) <= 0) {
+      throw new ArcoraError("UNKNOWN", `amount must be a positive decimal string (e.g. "49.99"), got ${String(params.amount)}`);
+    }
+    if (params.idempotencyKey) headers["Idempotency-Key"] = params.idempotencyKey;
+    body = JSON.stringify({
+      amount,
+      currency: params.currency ?? "USDC",
+      successUrl: params.successUrl,
+      cancelUrl: params.cancelUrl,
+      metadata: params.metadata,
+    });
+  } else {
+    // Audit #38: catch invalid amounts client-side (Infinity/NaN/negative).
+    if (typeof params.amountUsdc !== "number" || !Number.isFinite(params.amountUsdc) || params.amountUsdc <= 0) {
+      throw new ArcoraError("UNKNOWN", `amountUsdc must be a finite positive number, got ${String(params.amountUsdc)}`);
+    }
+    body = JSON.stringify({
+      amountUsdc: params.amountUsdc,
+      payInToken: params.payInToken ?? "USDC",
+      successUrl: params.successUrl,
+      cancelUrl: params.cancelUrl,
+      metadata: params.metadata,
+    });
   }
 
   let res: Response;
   try {
     res = await fetch(`${resolveBaseUrl(opts)}/api/invoices`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "X-Arcora-Api-Key": opts.apiKey,
-      },
-      body: JSON.stringify(params),
+      headers,
+      body,
     });
   } catch (e) {
     throw new ArcoraError("NETWORK", "request failed", { cause: e });

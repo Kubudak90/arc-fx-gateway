@@ -2,20 +2,23 @@
 
 import { Coin } from "@/components/ui/Coin";
 
-const CHAINS = [
+const DEFAULT_CHAINS: readonly { chainId: number; label: string }[] = [
   { chainId: 84532, label: "Base Sepolia" },
   { chainId: 11155111, label: "Ethereum Sepolia" },
-] as const;
+];
 
 export function ChainSelector(props: {
   value: number;
   onChange: (chainId: number) => void;
+  /** Override the pay-from chain list (v2 passes the registry-driven chains). */
+  chains?: readonly { chainId: number; label: string }[];
 }) {
+  const chains = props.chains ?? DEFAULT_CHAINS;
   return (
     <div className="space-y-2">
       <span className="eyebrow">Pay from</span>
       <div role="radiogroup" aria-label="Source chain" className="flex flex-wrap gap-2">
-        {CHAINS.map((chain) => {
+        {chains.map((chain) => {
           const selected = props.value === chain.chainId;
           return (
             <button
@@ -46,5 +49,5 @@ export function ChainSelector(props: {
 }
 
 export function chainLabel(chainId: number): string {
-  return CHAINS.find((chain) => chain.chainId === chainId)?.label ?? `chain ${chainId}`;
+  return DEFAULT_CHAINS.find((chain) => chain.chainId === chainId)?.label ?? `chain ${chainId}`;
 }

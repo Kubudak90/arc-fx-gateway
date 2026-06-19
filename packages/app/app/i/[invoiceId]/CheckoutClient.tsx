@@ -6,6 +6,8 @@ import { PayButton } from "@/components/checkout/PayButton";
 import { CheckoutConnectButton } from "@/components/checkout/CheckoutConnectButton";
 import { ChainSelector } from "@/components/checkout/ChainSelector";
 import { CrossChainPayButton } from "@/components/checkout/CrossChainPayButton";
+import { DepositButton } from "@/components/checkout/DepositButton";
+import { payFromChains } from "@/lib/v2/chains";
 import { SuccessScreen, ExpiredScreen } from "@/components/checkout/StatusScreens";
 import { MobileWalletQR } from "@/components/checkout/MobileWalletQR";
 import { Smartphone } from "lucide-react";
@@ -33,6 +35,15 @@ interface CheckoutClientProps {
    *  payment. Defense-in-depth in the browser; server already enforces the
    *  same list at invoice-create. Audit H1 (2026-05-05). */
   allowedOrigins: readonly string[];
+  // ── v2 (chain-agnostic, no custody). Present only for v2 invoices. ──────────
+  isV2?: boolean;
+  invoiceRef?: string;
+  /** Merchant's own payout address (no custody). */
+  merchantPayout?: string;
+  /** Merchant payout CCTP domain (frozen at create). */
+  payoutDomain?: number;
+  /** PaymentEscrow.PayoutToken index (USDC=0, EURC=1, USDT=2). */
+  payoutTokenIndex?: number;
 }
 
 export default function CheckoutClient(props: CheckoutClientProps) {
@@ -80,6 +91,69 @@ export default function CheckoutClient(props: CheckoutClientProps) {
 
   if (showQR) {
     return <MobileWalletQR url={typeof window !== "undefined" ? window.location.href : ""} onBack={() => setShowQR(false)} />;
+  }
+
+  // ── v2 chain-agnostic checkout: buyer locks USDC via PaymentEscrow.deposit().
+  // No quote (buyer always pays USDC == amount), no Permit2, no relayer custody.
+  if (props.isV2 && props.invoiceRef && props.merchantPayout && props.payoutDomain != null && props.payoutTokenIndex != null) {
+    const v2chains = payFromChains().map((c) => ({ chainId: c.chainId, label: c.name }));
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-3">
+          {v2chains.length > 1 && (
+            <ChainSelector value={sourceChainId} onChange={setSourceChainId} chains={v2chains} />
+          )}
+          <CheckoutConnectButton />
+          <DepositButton
+            invoiceRef={props.invoiceRef as `0x${string}`}
+            amount={BigInt(props.amountOut)}
+            merchant={props.merchantPayout as Address}
+            payoutDomain={props.payoutDomain}
+            payoutTokenIndex={props.payoutTokenIndex}
+            payFromChainId={sourceChainId}
+            onDeposited={() => setStatus("paid")}
+          />
+          <button
+            type="button"
+            onClick={() => setShowQR(true)}
+            className="w-full inline-flex items-center justify-center gap-2 text-[13px] text-[var(--action)] hover:underline py-2"
+          >
+            <Smartphone className="size-4" /> Pay with mobile wallet
+          </button>
+        </div>
+
+        <div className="field mt-2 overflow-hidden">
+          <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[var(--border)]">
+            <div className="p-4">
+              <p className="eyebrow mb-2">What you&apos;re doing</p>
+              <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]">
+                You lock USDC in a per-chain escrow on the chain you pay from. No relayer ever holds
+                your funds — custody is eliminated by CCTP V2 hooks.
+              </p>
+            </div>
+            <div className="p-4">
+              <p className="eyebrow mb-2">What happens next</p>
+              <p className="text-[12px] text-[var(--fg-2)] leading-[1.55]">
+                After a short refund window the merchant is settled on their chosen chain + token. Within
+                the window you can refund — USDC-only, back to you, on the chain you paid from.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {props.cancelUrl && (() => {
+          try {
+            const origin = new URL(props.cancelUrl).origin;
+            if (!props.allowedOrigins.includes(origin)) return null;
+          } catch { return null; }
+          return (
+            <div className="text-center pt-1">
+              <a href={props.cancelUrl} className="text-[13px] text-[var(--fg-3)] hover:underline">Cancel</a>
+            </div>
+          );
+        })()}
+      </div>
+    );
   }
 
   return (

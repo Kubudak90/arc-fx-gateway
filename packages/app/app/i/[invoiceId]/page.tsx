@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db/client";
-import { invoices, merchants } from "@/lib/db/schema";
+import { invoices, merchants, settlements } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { PAYOUT_TOKEN_INDEX } from "@/lib/v2/chains";
 import { abbreviateAddress } from "@/lib/ui/format";
 import { ArcoraSymbol, ArcoraLogo } from "@/components/brand/Logo";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -20,6 +21,8 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
       successUrl: invoices.successUrl,
       cancelUrl: invoices.cancelUrl,
       payoutToken: invoices.payoutToken,
+      currency: invoices.currency,
+      invoiceRef: invoices.invoiceRef,
       metadata: invoices.metadata,
       merchantAddress: merchants.address,
       // Audit H1 (2026-05-05): server-rendered checkout passes the merchant's
@@ -35,6 +38,16 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
 
   if (rows.length === 0) notFound();
   const inv = rows[0]!;
+
+  // v2 invoices carry a settlement row (frozen payout config). Its presence marks
+  // this as a chain-agnostic, no-custody checkout.
+  const [settlement] = await db
+    .select({ merchant: settlements.merchant, payoutDomain: settlements.payoutDomain, payoutToken: settlements.payoutToken })
+    .from(settlements)
+    .where(eq(settlements.invoiceRef, inv.id))
+    .limit(1);
+  const isV2 = !!settlement;
+
   const expired = inv.expiresAt.getTime() < Date.now();
   const initialStatus = expired && inv.status === "created" ? "expired" : inv.status;
   const payable = initialStatus === "created";
@@ -50,7 +63,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
           <div className="flex items-center gap-3">
             <span className="mono hidden sm:inline-flex items-center gap-2 text-[10.5px] uppercase tracking-[0.1em] text-[var(--fg-3)]">
               <span className="dot dot--live" aria-hidden />
-              Secure checkout · Permit2
+              {isV2 ? "Secure checkout · self-custody" : "Secure checkout · Permit2"}
             </span>
             <ThemeToggle />
           </div>
@@ -94,12 +107,17 @@ export default async function CheckoutPage({ params }: { params: Promise<{ invoi
               successUrl={inv.successUrl}
               cancelUrl={inv.cancelUrl ?? undefined}
               allowedOrigins={inv.merchantAllowedOrigins ?? []}
+              isV2={isV2}
+              invoiceRef={inv.invoiceRef ?? inv.id}
+              merchantPayout={settlement?.merchant}
+              payoutDomain={settlement?.payoutDomain ?? undefined}
+              payoutTokenIndex={settlement ? PAYOUT_TOKEN_INDEX[settlement.payoutToken] : undefined}
             />
           </div>
         </div>
 
         <p className="mono text-center text-[10.5px] uppercase tracking-[0.12em] text-[var(--fg-3)]">
-          Gas-less Permit2 / EIP-712 · settles on Arc
+          {isV2 ? "Lock USDC in escrow · CCTP V2 · custody-free · refundable" : "Gas-less Permit2 / EIP-712 · settles on Arc"}
         </p>
         <p className="mono text-center text-[10.5px] uppercase tracking-[0.12em] text-[var(--fg-3)]">
           <a href="/terms" className="hover:text-[var(--fg-2)] transition-colors">Terms</a>

@@ -37,6 +37,20 @@ export const crosschainPaymentStatus = pgEnum("crosschain_payment_status", [
 
 export const settlementTier = pgEnum("settlement_tier", ["zero_day", "one_day", "seven_day"]);
 
+// ── v2 chain-agnostic router (no-custody) ──────────────────────────────────
+// Payout currencies a merchant can settle in. The buyer ALWAYS locks USDC.
+export const currencyEnum = pgEnum("currency", ["USDC", "EURC", "USDT"]);
+// Settlement path (PLAN §2): A same-chain, B cross-chain USDC, C cross-chain token.
+export const settlementPath = pgEnum("settlement_path", ["A", "B", "C"]);
+// v2 Orchestrator state machine (agent-commerce-v2 router stateMachine.ts).
+export const settlementState = pgEnum("settlement_state", [
+  "INVOICE_CREATED", "AWAITING_DEPOSIT", "DEPOSITED",
+  "SETTLING", "SETTLED",
+  "BURN_SENT", "ATTESTATION_PENDING", "RECEIVE_SENT",
+  "PAYOUT_FAILED", "RECOVERED_TO_BUYER", "SETTLED_FALLBACK_USDC",
+  "REFUND_REQUESTED", "REFUNDED", "EXPIRED",
+]);
+
 export const merchants = pgTable("merchants", {
   id: uuid("id").defaultRandom().primaryKey(),
   address: text("address").notNull().unique(),
@@ -60,6 +74,12 @@ export const merchants = pgTable("merchants", {
   // Set when admin calls deactivateMerchant; cleared on MerchantReactivated.
   // Surfaces "deactivated since X" copy in the dashboard.
   deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+  // v2 payout config (PLAN §6, no custody): the merchant settles to their OWN
+  // address on payoutChainId in payoutCurrency. Nullable — v1 merchants keep only
+  // payout_token (a token address) until they re-onboard for v2.
+  payoutChainId: integer("payout_chain_id"),
+  payoutAddress: text("payout_address"),
+  payoutCurrency: currencyEnum("payout_currency"),
 });
 
 export const invoices = pgTable("invoices", {
@@ -99,7 +119,57 @@ export const invoices = pgTable("invoices", {
   recoveryTx:  text("recovery_tx"),
   settlementTier: settlementTier("settlement_tier").notNull().default("seven_day"),
   settlementPolicySnapshot: jsonb("settlement_policy_snapshot").notNull().default({}),
-});
+  // v2 fields (nullable — only set on v2 invoices). currency = merchant payout
+  // currency; invoiceRef = chain-agnostic logical id; escrowId set when the buyer's
+  // PaymentEscrow.deposit Deposited event lands; idempotencyKey dedupes create.
+  // amountOut above holds the USDC amount (minor units) for v2.
+  currency: currencyEnum("currency"),
+  idempotencyKey: text("idempotency_key"),
+  invoiceRef: text("invoice_ref"),
+  escrowId: text("escrow_id"),
+}, (t) => ({
+  // Idempotent create: a retried POST /api/invoices with the same key never
+  // duplicates. Partial — only enforced on v2 rows that carry a key.
+  v2IdempotencyKey: uniqueIndex("invoices_merchant_idempotency_key")
+    .on(t.merchantId, t.idempotencyKey)
+    .where(sql`${t.idempotencyKey} is not null`),
+}));
+
+// v2 settlements — the durable Store backing the @arcora/router Orchestrator
+// (one row per deposit; 1:1 invoiceRef↔escrowId). Replaces the v1 custody model
+// (relayer_queue + crosschain_payments); no relayer ever holds funds.
+export const settlements = pgTable("settlements", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: text("invoice_id").notNull().references(() => invoices.id),
+  invoiceRef: text("invoice_ref").notNull(),
+  escrowId: text("escrow_id"), // 0x bytes32; byte[1]=escrow CCTP domain; set when Deposited lands
+  path: settlementPath("path"),
+  escrowChainId: integer("escrow_chain_id"),
+  escrowDomain: integer("escrow_domain"),
+  payoutChainId: integer("payout_chain_id").notNull(),
+  payoutDomain: integer("payout_domain").notNull(),
+  payoutToken: currencyEnum("payout_token").notNull(),
+  amount: numeric("amount").notNull(), // USDC minor units locked
+  merchant: text("merchant").notNull(),
+  payer: text("payer"),
+  state: settlementState("state").notNull().default("INVOICE_CREATED"),
+  depositTx: text("deposit_tx"),
+  burnTx: text("burn_tx"), // persisted so Iris attestation polling resumes across restarts
+  cctpMessage: text("cctp_message"),
+  cctpAttestation: text("cctp_attestation"),
+  receiveTx: text("receive_tx"),
+  settleTx: text("settle_tx"),
+  recoverTx: text("recover_tx"),
+  feeTx: text("fee_tx"),
+  leaseOwner: text("lease_owner"),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniqInvoiceRef: uniqueIndex("settlements_invoice_ref").on(t.invoiceRef),
+  uniqEscrowId: uniqueIndex("settlements_escrow_id").on(t.escrowId).where(sql`${t.escrowId} is not null`),
+}));
 
 export const webhookAttempts = pgTable("webhook_attempts", {
   id: uuid("id").defaultRandom().primaryKey(),

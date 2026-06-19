@@ -1,0 +1,1925 @@
+{
+  "id": "e7c96b4a-2845-4f43-a48e-7a8eaa4fadf0",
+  "prevId": "4213ecac-cb72-4ab0-8341-ecc6160f8c16",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.checkout_authorizations": {
+      "name": "checkout_authorizations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payer": {
+          "name": "payer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pay_in_token": {
+          "name": "pay_in_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_amount_in": {
+          "name": "min_amount_in",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "checkout_authorizations_invoice_id_invoices_id_fk": {
+          "name": "checkout_authorizations_invoice_id_invoices_id_fk",
+          "tableFrom": "checkout_authorizations",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.checkout_telemetry": {
+      "name": "checkout_telemetry",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crosschain_payment_id": {
+          "name": "crosschain_payment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_chain_id": {
+          "name": "source_chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "elapsed_ms": {
+          "name": "elapsed_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_checkout_telemetry_invoice_created": {
+          "name": "idx_checkout_telemetry_invoice_created",
+          "columns": [
+            {
+              "expression": "invoice_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_checkout_telemetry_event_created": {
+          "name": "idx_checkout_telemetry_event_created",
+          "columns": [
+            {
+              "expression": "event_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "checkout_telemetry_invoice_id_invoices_id_fk": {
+          "name": "checkout_telemetry_invoice_id_invoices_id_fk",
+          "tableFrom": "checkout_telemetry",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "checkout_telemetry_crosschain_payment_id_crosschain_payments_id_fk": {
+          "name": "checkout_telemetry_crosschain_payment_id_crosschain_payments_id_fk",
+          "tableFrom": "checkout_telemetry",
+          "tableTo": "crosschain_payments",
+          "columnsFrom": [
+            "crosschain_payment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.compliance_screenings": {
+      "name": "compliance_screenings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "flow": {
+          "name": "flow",
+          "type": "compliance_flow",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "risk": {
+          "name": "risk",
+          "type": "compliance_risk",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reasons": {
+          "name": "reasons",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_score": {
+          "name": "provider_score",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_snapshot": {
+          "name": "provider_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision": {
+          "name": "decision",
+          "type": "compliance_decision",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_compliance_screenings_address_flow": {
+          "name": "idx_compliance_screenings_address_flow",
+          "columns": [
+            {
+              "expression": "address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "flow",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_compliance_screenings_invoice": {
+          "name": "idx_compliance_screenings_invoice",
+          "columns": [
+            {
+              "expression": "invoice_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_compliance_screenings_merchant": {
+          "name": "idx_compliance_screenings_merchant",
+          "columns": [
+            {
+              "expression": "merchant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_compliance_screenings_expires_at": {
+          "name": "idx_compliance_screenings_expires_at",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "compliance_screenings_invoice_id_invoices_id_fk": {
+          "name": "compliance_screenings_invoice_id_invoices_id_fk",
+          "tableFrom": "compliance_screenings",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "compliance_screenings_merchant_id_merchants_id_fk": {
+          "name": "compliance_screenings_merchant_id_merchants_id_fk",
+          "tableFrom": "compliance_screenings",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.crosschain_payments": {
+      "name": "crosschain_payments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payer": {
+          "name": "payer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_chain_id": {
+          "name": "source_chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_domain": {
+          "name": "source_domain",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_token": {
+          "name": "source_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_amount": {
+          "name": "source_amount",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destination_chain_id": {
+          "name": "destination_chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destination_domain": {
+          "name": "destination_domain",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "destination_token": {
+          "name": "destination_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mint_recipient": {
+          "name": "mint_recipient",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payout_token": {
+          "name": "payout_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_out_min": {
+          "name": "amount_out_min",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "route_version": {
+          "name": "route_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "crosschain_payment_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'created'"
+        },
+        "burn_tx_hash": {
+          "name": "burn_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "burn_submitted_at": {
+          "name": "burn_submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cctp_message": {
+          "name": "cctp_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cctp_attestation": {
+          "name": "cctp_attestation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bridge_receive_tx_hash": {
+          "name": "bridge_receive_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bridge_amount_received": {
+          "name": "bridge_amount_received",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bridge_confirmed_at": {
+          "name": "bridge_confirmed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arc_swap_tx_hash": {
+          "name": "arc_swap_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arc_swap_amount_out": {
+          "name": "arc_swap_amount_out",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settle_tx_hash": {
+          "name": "settle_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refund_tx_hash": {
+          "name": "refund_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_attempt": {
+          "name": "next_attempt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uniq_crosschain_payments_invoice": {
+          "name": "uniq_crosschain_payments_invoice",
+          "columns": [
+            {
+              "expression": "invoice_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uniq_crosschain_payments_idempotency": {
+          "name": "uniq_crosschain_payments_idempotency",
+          "columns": [
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_crosschain_payments_status_next_attempt": {
+          "name": "idx_crosschain_payments_status_next_attempt",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "next_attempt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_crosschain_payments_invoice": {
+          "name": "idx_crosschain_payments_invoice",
+          "columns": [
+            {
+              "expression": "invoice_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uniq_crosschain_payments_burn_tx": {
+          "name": "uniq_crosschain_payments_burn_tx",
+          "columns": [
+            {
+              "expression": "source_chain_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "burn_tx_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"crosschain_payments\".\"burn_tx_hash\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "crosschain_payments_invoice_id_invoices_id_fk": {
+          "name": "crosschain_payments_invoice_id_invoices_id_fk",
+          "tableFrom": "crosschain_payments",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.indexer_state": {
+      "name": "indexer_state",
+      "schema": "",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.invoices": {
+      "name": "invoices",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "merchant_invoice_id": {
+          "name": "merchant_invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pay_in_token": {
+          "name": "pay_in_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payout_token": {
+          "name": "payout_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_out": {
+          "name": "amount_out",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "invoice_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paid_by": {
+          "name": "paid_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paid_tx": {
+          "name": "paid_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paid_at": {
+          "name": "paid_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount_in": {
+          "name": "amount_in",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "merchant_payout": {
+          "name": "merchant_payout",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "protocol_fee": {
+          "name": "protocol_fee",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refund_tx": {
+          "name": "refund_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refunded_at": {
+          "name": "refunded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gateway_address": {
+          "name": "gateway_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "success_url": {
+          "name": "success_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cancel_url": {
+          "name": "cancel_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_token": {
+          "name": "status_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_token_expires_at": {
+          "name": "status_token_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "claimable_at": {
+          "name": "claimable_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claim_tx": {
+          "name": "claim_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recovered_at": {
+          "name": "recovered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recovery_tx": {
+          "name": "recovery_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settlement_tier": {
+          "name": "settlement_tier",
+          "type": "settlement_tier",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'seven_day'"
+        },
+        "settlement_policy_snapshot": {
+          "name": "settlement_policy_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "currency": {
+          "name": "currency",
+          "type": "currency",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "invoice_ref": {
+          "name": "invoice_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "escrow_id": {
+          "name": "escrow_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "invoices_merchant_idempotency_key": {
+          "name": "invoices_merchant_idempotency_key",
+          "columns": [
+            {
+              "expression": "merchant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"invoices\".\"idempotency_key\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "invoices_merchant_id_merchants_id_fk": {
+          "name": "invoices_merchant_id_merchants_id_fk",
+          "tableFrom": "invoices",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.merchants": {
+      "name": "merchants",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payout_token": {
+          "name": "payout_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "webhook_url": {
+          "name": "webhook_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "api_key_hash": {
+          "name": "api_key_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "api_key_prefix": {
+          "name": "api_key_prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "publishable_key": {
+          "name": "publishable_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "publishable_key_prefix": {
+          "name": "publishable_key_prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "allowed_origins": {
+          "name": "allowed_origins",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "webhook_secret_enc": {
+          "name": "webhook_secret_enc",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "webhook_secret_iv": {
+          "name": "webhook_secret_iv",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_chain_id": {
+          "name": "payout_chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_address": {
+          "name": "payout_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_currency": {
+          "name": "payout_currency",
+          "type": "currency",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "merchants_address_unique": {
+          "name": "merchants_address_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "address"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rate_limit_counters": {
+      "name": "rate_limit_counters",
+      "schema": "",
+      "columns": {
+        "bucket": {
+          "name": "bucket",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_start": {
+          "name": "window_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "idx_rate_limit_counters_window_start": {
+          "name": "idx_rate_limit_counters_window_start",
+          "columns": [
+            {
+              "expression": "window_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.relayer_queue": {
+      "name": "relayer_queue",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payer": {
+          "name": "payer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pay_in_token": {
+          "name": "pay_in_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_in": {
+          "name": "amount_in",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payout_token": {
+          "name": "payout_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_out_min": {
+          "name": "amount_out_min",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "permit2_data": {
+          "name": "permit2_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "permit2_signature": {
+          "name": "permit2_signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "relayer_queue_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "permit2_tx_hash": {
+          "name": "permit2_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "swap_tx_hash": {
+          "name": "swap_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "swap_amount_out": {
+          "name": "swap_amount_out",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settle_tx_hash": {
+          "name": "settle_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refund_tx_hash": {
+          "name": "refund_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_attempt": {
+          "name": "next_attempt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "relayer_queue_invoice_id_invoices_id_fk": {
+          "name": "relayer_queue_invoice_id_invoices_id_fk",
+          "tableFrom": "relayer_queue",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.server_wallets": {
+      "name": "server_wallets",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "encrypted_pk": {
+          "name": "encrypted_pk",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pk_iv": {
+          "name": "pk_iv",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "balance_alert_below": {
+          "name": "balance_alert_below",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "server_wallets_address_unique": {
+          "name": "server_wallets_address_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "address"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.settlements": {
+      "name": "settlements",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invoice_ref": {
+          "name": "invoice_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "escrow_id": {
+          "name": "escrow_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "path": {
+          "name": "path",
+          "type": "settlement_path",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "escrow_chain_id": {
+          "name": "escrow_chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "escrow_domain": {
+          "name": "escrow_domain",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_chain_id": {
+          "name": "payout_chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payout_domain": {
+          "name": "payout_domain",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payout_token": {
+          "name": "payout_token",
+          "type": "currency",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merchant": {
+          "name": "merchant",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payer": {
+          "name": "payer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "settlement_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'INVOICE_CREATED'"
+        },
+        "deposit_tx": {
+          "name": "deposit_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "burn_tx": {
+          "name": "burn_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cctp_message": {
+          "name": "cctp_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cctp_attestation": {
+          "name": "cctp_attestation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receive_tx": {
+          "name": "receive_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settle_tx": {
+          "name": "settle_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recover_tx": {
+          "name": "recover_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fee_tx": {
+          "name": "fee_tx",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "settlements_invoice_ref": {
+          "name": "settlements_invoice_ref",
+          "columns": [
+            {
+              "expression": "invoice_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "settlements_escrow_id": {
+          "name": "settlements_escrow_id",
+          "columns": [
+            {
+              "expression": "escrow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"settlements\".\"escrow_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "settlements_invoice_id_invoices_id_fk": {
+          "name": "settlements_invoice_id_invoices_id_fk",
+          "tableFrom": "settlements",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.siwe_nonces": {
+      "name": "siwe_nonces",
+      "schema": "",
+      "columns": {
+        "nonce": {
+          "name": "nonce",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used": {
+          "name": "used",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {
+        "idx_siwe_nonces_expires_at": {
+          "name": "idx_siwe_nonces_expires_at",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.webhook_attempts": {
+      "name": "webhook_attempts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "next_attempt": {
+          "name": "next_attempt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "succeeded_at": {
+          "name": "succeeded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terminal_reason": {
+          "name": "terminal_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "webhook_attempts_invoice_id_invoices_id_fk": {
+          "name": "webhook_attempts_invoice_id_invoices_id_fk",
+          "tableFrom": "webhook_attempts",
+          "tableTo": "invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.compliance_decision": {
+      "name": "compliance_decision",
+      "schema": "public",
+      "values": [
+        "allow",
+        "review",
+        "reject"
+      ]
+    },
+    "public.compliance_flow": {
+      "name": "compliance_flow",
+      "schema": "public",
+      "values": [
+        "merchant_payout",
+        "customer_pay"
+      ]
+    },
+    "public.compliance_risk": {
+      "name": "compliance_risk",
+      "schema": "public",
+      "values": [
+        "low",
+        "medium",
+        "high",
+        "sanctions"
+      ]
+    },
+    "public.crosschain_payment_status": {
+      "name": "crosschain_payment_status",
+      "schema": "public",
+      "values": [
+        "created",
+        "authorized",
+        "bridge_pending",
+        "bridge_confirmed",
+        "arc_swap_pending",
+        "settle_pending",
+        "paid",
+        "bridge_failed",
+        "arc_swap_failed",
+        "settle_failed",
+        "refunded",
+        "expired"
+      ]
+    },
+    "public.currency": {
+      "name": "currency",
+      "schema": "public",
+      "values": [
+        "USDC",
+        "EURC",
+        "USDT"
+      ]
+    },
+    "public.invoice_status": {
+      "name": "invoice_status",
+      "schema": "public",
+      "values": [
+        "created",
+        "paid",
+        "expired",
+        "refunded",
+        "failed",
+        "claimed",
+        "recovered"
+      ]
+    },
+    "public.relayer_queue_status": {
+      "name": "relayer_queue_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "processing",
+        "settled",
+        "refunded",
+        "failed"
+      ]
+    },
+    "public.settlement_path": {
+      "name": "settlement_path",
+      "schema": "public",
+      "values": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    "public.settlement_state": {
+      "name": "settlement_state",
+      "schema": "public",
+      "values": [
+        "INVOICE_CREATED",
+        "AWAITING_DEPOSIT",
+        "DEPOSITED",
+        "SETTLING",
+        "SETTLED",
+        "BURN_SENT",
+        "ATTESTATION_PENDING",
+        "RECEIVE_SENT",
+        "PAYOUT_FAILED",
+        "RECOVERED_TO_BUYER",
+        "SETTLED_FALLBACK_USDC",
+        "REFUND_REQUESTED",
+        "REFUNDED",
+        "EXPIRED"
+      ]
+    },
+    "public.settlement_tier": {
+      "name": "settlement_tier",
+      "schema": "public",
+      "values": [
+        "zero_day",
+        "one_day",
+        "seven_day"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

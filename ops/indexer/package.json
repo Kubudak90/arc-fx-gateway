@@ -3,13 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start":     "tsx run.ts",
-    "replay":    "tsx replay.ts",
+    "start": "tsx run.ts",
+    "replay": "tsx replay.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "pg": "^8.13.0",
-    "viem": "^2.21.0"
+    "viem": "^2.21.0",
+    "@arcora/router": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

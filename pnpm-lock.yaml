@@ -21,6 +21,9 @@ importers:
 
   ops/indexer:
     dependencies:
+      '@arcora/router':
+        specifier: workspace:*
+        version: link:../../packages/router
       pg:
         specifier: ^8.13.0
         version: 8.20.0

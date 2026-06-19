@@ -5,6 +5,7 @@ import {
 import pg from "pg";
 import { randomUUID } from "node:crypto";
 import { buildOpsPoolConfig, describeDbTls, assertSecureDbTls } from "./db";
+import { indexV2Once } from "./v2-indexer";
 
 const RPC = need("ARC_TESTNET_RPC");
 
@@ -503,6 +504,11 @@ async function main() {
           refunded: r.refunded, failed: r.failed, claimed: r.claimed, recovered: r.recovered,
           chunks: r.chunks,
         }));
+      }
+      // v2 reconciliation indexer (flag-gated) — multi-chain PaymentEscrow /
+      // SettlementReceiver events backstop the no-custody settlements table.
+      if (process.env.V2_ENABLED === "1" || process.env.V2_ENABLED === "true") {
+        await indexV2Once({ pool, log: (m) => console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "v2indexer", detail: m })) });
       }
     } catch (e) {
       console.error(JSON.stringify({

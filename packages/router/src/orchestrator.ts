@@ -75,7 +75,20 @@ export class Orchestrator {
   /** Register a new invoice. Path is fixed up front from the route inputs. */
   async create(input: CreateInput): Promise<SettlementRecord> {
     const existing = await this.store.get(input.invoiceRef);
-    if (existing) return existing; // idempotent at the orchestration layer too
+    if (existing) {
+      // Idempotent ONLY for identical inputs — a repeat of the same invoiceRef with different
+      // routing (amount/domains/token) is a conflict, not an idempotent replay. Silently returning
+      // the old record would settle against stale routing.
+      if (
+        existing.escrowDomain !== input.escrowDomain ||
+        existing.payoutDomain !== input.payoutDomain ||
+        existing.payoutToken !== input.payoutToken ||
+        existing.amount !== input.amount
+      ) {
+        throw new Error(`invoice_conflict:${input.invoiceRef}`);
+      }
+      return existing;
+    }
     const path = selectRoute({
       escrowDomain: input.escrowDomain,
       payoutDomain: input.payoutDomain,

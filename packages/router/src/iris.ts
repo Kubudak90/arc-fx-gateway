@@ -48,7 +48,12 @@ export async function getMessages(
   // 404 = Iris hasn't indexed the burn yet; treat as "no messages yet".
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`iris_error:${res.status}`);
-  const json = (await res.json()) as { messages?: RawMessage[] };
+  let json: { messages?: RawMessage[] };
+  try {
+    json = (await res.json()) as { messages?: RawMessage[] };
+  } catch {
+    throw new Error(`iris_parse_error:${res.status}`);
+  }
   return (json.messages ?? []).map(normalize);
 }
 

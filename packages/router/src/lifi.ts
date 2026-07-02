@@ -91,7 +91,12 @@ export async function getSwapPlan(params: LifiQuoteParams): Promise<SwapPlan> {
 
   const res = await f(url.toString());
   if (!res.ok) throw new Error(`lifi_error:${res.status}`);
-  const quote = (await res.json()) as LifiQuote;
+  let quote: LifiQuote;
+  try {
+    quote = (await res.json()) as LifiQuote;
+  } catch {
+    throw new Error(`lifi_parse_error:${res.status}`);
+  }
 
   assertSwapOnly(quote);
 

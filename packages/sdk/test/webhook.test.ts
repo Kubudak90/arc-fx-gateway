@@ -43,4 +43,19 @@ describe("verifyWebhook", () => {
   it("rejects a non-numeric timestamp without throwing", () => {
     expect(verifyWebhook({ body, secret, signature: v2sig, timestamp: "not-a-number" })).toBe(false);
   });
+
+  // Audit follow-up: the canonical malicious input is a webhook-shaped POST with NO signature
+  // header. `req.headers.get("x-arcora-signature-v2")` returns null when absent, so verifyWebhook
+  // must reject (return false), never throw — a throw crashes the merchant's handler (DoS).
+  it("returns false (never throws) when the signature header is missing", () => {
+    expect(verifyWebhook({ body, secret, signature: null as unknown as string, timestamp: ts })).toBe(false);
+    expect(verifyWebhook({ body, secret, signature: undefined as unknown as string, timestamp: ts })).toBe(false);
+  });
+
+  it("returns false (never throws) for a missing body, timestamp, or secret", () => {
+    expect(verifyWebhook({ body: null as unknown as string, secret, signature: v2sig, timestamp: ts })).toBe(false);
+    expect(verifyWebhook({ body, secret, signature: v2sig, timestamp: null as unknown as string })).toBe(false);
+    expect(verifyWebhook({ body, secret, signature: v2sig, timestamp: undefined as unknown as string })).toBe(false);
+    expect(verifyWebhook({ body, secret: null as unknown as string, signature: v2sig, timestamp: ts })).toBe(false);
+  });
 });

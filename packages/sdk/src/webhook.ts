@@ -30,6 +30,18 @@ export interface VerifyWebhookParams {
  * Server-side only (uses node:crypto).
  */
 export function verifyWebhook(p: VerifyWebhookParams): boolean {
+  // Reject (never throw) on any missing/non-string field. The canonical malicious input is a
+  // webhook-shaped POST with NO signature header: `req.headers.get("x-arcora-signature-v2")`
+  // returns null, and `Buffer.from(null)` / `createHmac(_, null)` would throw — crashing the
+  // merchant's handler (DoS). The documented contract is a boolean, so fail closed instead.
+  if (
+    typeof p.body !== "string" ||
+    typeof p.signature !== "string" ||
+    typeof p.timestamp !== "string" ||
+    typeof p.secret !== "string"
+  ) {
+    return false;
+  }
   const tolerance = p.toleranceSeconds ?? 300;
   const ts = Number(p.timestamp);
   if (!Number.isFinite(ts)) return false;

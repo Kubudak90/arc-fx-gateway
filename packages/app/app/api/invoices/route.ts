@@ -6,7 +6,7 @@ import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
 import { GATEWAY, getServerWalletClient, publicClient } from "@/lib/chain/client";
 import { db } from "@/lib/db/client";
 import { invoices, merchants } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { V2_ENABLED } from "@/lib/flags";
 import { createInvoiceV2 } from "@/lib/v2/createInvoice";
 import type { PayoutToken as Currency } from "@arcora/router";
@@ -315,6 +315,22 @@ export async function POST(req: NextRequest) {
     }, { status: 202 });
   }
 
+  // Audit #18: honor the advertised Idempotency-Key on the v1 path too (the v2 path already does).
+  // Dedupe BEFORE the on-chain createInvoiceFor mint so a retried request returns the existing
+  // invoice instead of minting a duplicate + paying duplicate gas.
+  const idempotencyKey = req.headers.get("Idempotency-Key");
+  const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://arcorapay.xyz";
+  if (idempotencyKey) {
+    const [existing] = await db
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(and(eq(invoices.merchantId, merchant.id), eq(invoices.idempotencyKey, idempotencyKey)))
+      .limit(1);
+    if (existing) {
+      return corsResponse({ invoiceId: existing.id, url: `${baseUrl}/i/${existing.id}` }, { status: 201 });
+    }
+  }
+
   const merchantInvoiceId = ("0x" + randomBytes(32).toString("hex")) as Hex;
   const globalId = keccak256(
     encodeAbiParameters(
@@ -345,25 +361,42 @@ export async function POST(req: NextRequest) {
     return corsResponse({ error: "chain_error", detail: e?.shortMessage ?? String(e) }, { status: 502 });
   }
 
-  await db.insert(invoices).values({
-    id: globalId,
-    merchantInvoiceId,
-    merchantId: merchant.id,
-    payInToken: TOKEN_ADDR[payInToken],
-    payoutToken: merchant.payoutToken,
-    amountOut: amountOut.toString(),
-    expiresAt: new Date(Number(expiresAt) * 1000),
-    status: "created",
-    gatewayAddress: targetGateway.toLowerCase(),
-    metadata: metadata ?? {},
-    successUrl: successUrl ?? "",
-    cancelUrl: cancelUrl ?? null,
-  });
+  try {
+    await db.insert(invoices).values({
+      id: globalId,
+      merchantInvoiceId,
+      merchantId: merchant.id,
+      payInToken: TOKEN_ADDR[payInToken],
+      payoutToken: merchant.payoutToken,
+      amountOut: amountOut.toString(),
+      expiresAt: new Date(Number(expiresAt) * 1000),
+      status: "created",
+      gatewayAddress: targetGateway.toLowerCase(),
+      metadata: metadata ?? {},
+      successUrl: successUrl ?? "",
+      cancelUrl: cancelUrl ?? null,
+      idempotencyKey: idempotencyKey ?? null,
+    });
+  } catch (e: any) {
+    // Race-safe: a concurrent retry with the same Idempotency-Key won the insert (unique
+    // violation on invoices_merchant_idempotency_key) — return that row instead of erroring.
+    if (idempotencyKey && e?.code === "23505") {
+      const [existing] = await db
+        .select({ id: invoices.id })
+        .from(invoices)
+        .where(and(eq(invoices.merchantId, merchant.id), eq(invoices.idempotencyKey, idempotencyKey)))
+        .limit(1);
+      if (existing) {
+        return corsResponse({ invoiceId: existing.id, url: `${baseUrl}/i/${existing.id}` }, { status: 201 });
+      }
+    }
+    throw e;
+  }
 
   // Falls back to arcorapay.xyz (the canonical live host) when PUBLIC_BASE_URL
   // is unset. The previous `checkout.arcorapay.com` default pointed at an
   // unregistered DNS record, so any deploy that forgot to set this env var
-  // returned working API responses with dead checkout URLs.
-  const baseUrl = process.env.PUBLIC_BASE_URL ?? "https://arcorapay.xyz";
+  // returned working API responses with dead checkout URLs. (baseUrl is resolved above, before
+  // the idempotency dedup, and reused here.)
   return corsResponse({ invoiceId: globalId, url: `${baseUrl}/i/${globalId}` }, { status: 201 });
 }

@@ -159,6 +159,15 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
             return ['result' => 'failure'];
         }
 
+        // Audit #29: a retried checkout (customer refreshes / back-and-forward) must not mint a
+        // duplicate on-chain invoice. If this order already has a live Arcora invoice and hasn't
+        // settled yet, reuse it instead of POSTing again.
+        $existing_url = $order->get_meta('_arcora_invoice_url');
+        if ($existing_url && in_array($order->get_status(), ['pending', 'on-hold', 'failed'], true)) {
+            WC()->cart->empty_cart();
+            return ['result' => 'success', 'redirect' => $existing_url];
+        }
+
         $body = [
             'amountUsdc'  => (float) $order->get_total(),
             'payInToken'  => $this->pay_in_token,
@@ -176,6 +185,9 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
             'headers' => [
                 'content-type'      => 'application/json',
                 'X-Arcora-Api-Key'  => $this->api_key,
+                // Stable per-order key so a retried POST dedupes server-side (v1 route honors it)
+                // instead of minting a second on-chain invoice.
+                'Idempotency-Key'   => (string) $order->get_id() . '-' . $order->get_order_key(),
             ],
             'body'    => wp_json_encode($body),
         ]);
@@ -203,6 +215,7 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
         }
 
         $order->update_meta_data('_arcora_invoice_id', $invoice['invoiceId']);
+        $order->update_meta_data('_arcora_invoice_url', $invoice['url']);
         $order->update_meta_data('_arcora_environment', $this->environment);
         $order->save();
 

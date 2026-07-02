@@ -42,10 +42,31 @@ const RATE_MAX = 20;
 const RATE_WINDOW_MS = 60_000;
 const hits = new Map<string, number[]>();
 
+// Gap #15 (per audit App-L-4): the old derivation returned the LEFTMOST
+// x-forwarded-for hop, which the client appends/controls — an attacker rotating
+// a fresh left-XFF lands in a new rate-limit bucket every request and sails past
+// the 20/min cap. Copied verbatim from packages/app/lib/rate/clientIp.ts (shop is
+// a separate workspace, so the logic is duplicated rather than imported to avoid
+// a cross-app dependency; keep the two in sync). Trust, in order: the
+// Vercel-injected canonical client IP, then x-real-ip, then only as a non-Vercel
+// fallback the RIGHTMOST (trusted-proxy-appended) hop via TRUST_XFF_HOPS.
 function clientIp(req: NextRequest): string {
+  const vercel = req.headers.get("x-vercel-forwarded-for");
+  if (vercel) return vercel.split(",")[0]!.trim();
+
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  if (xff) {
+    const hops = xff.split(",").map((h) => h.trim()).filter(Boolean);
+    if (hops.length > 0) {
+      const trusted = Math.max(1, Number(process.env.TRUST_XFF_HOPS ?? "1") || 1);
+      const idx = Math.max(0, hops.length - trusted);
+      return hops[idx]!;
+    }
+  }
+  return "unknown";
 }
 
 function rateOk(ip: string, now: number): boolean {

@@ -139,4 +139,32 @@ describe("POST /api/checkout/start — error branches", () => {
     expect(res.status).toBe(502);
     expect((await res.json()).error).toBe("arcora_bad_response");
   });
+
+  // Gap #15: the limiter must key on the rightmost (trusted-proxy-appended) XFF
+  // hop, not the leftmost client-supplied one. A single attacker behind one real
+  // IP (8.8.8.8) rotates a fresh spoofed leftmost hop on every request; if the
+  // limiter keyed on the leftmost value it would land in a new bucket each time
+  // and never trip. It must still 429 after RATE_MAX since the real IP is constant.
+  it("does not let a spoofed leftmost x-forwarded-for evade the 429", async () => {
+    (globalThis.fetch as any).mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ invoiceId: "0xabc", url: "https://arcorapay.xyz/i/0xabc" }), { status: 201 })),
+    );
+    const spoof = (n: number) =>
+      new Request("https://shop.test/api/checkout/start", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          // <rotating spoofed client hop>, <real IP the trusted proxy appended>
+          "x-forwarded-for": `203.0.113.${n}, 8.8.8.8`,
+        },
+        body: JSON.stringify(VALID),
+      }) as any;
+    for (let i = 0; i < 20; i++) {
+      expect((await POST(spoof(i))).status).toBe(200);
+    }
+    // 21st request: brand-new spoofed leftmost, same real 8.8.8.8 — must be capped.
+    const res = await POST(spoof(200));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toBe("rate_limited");
+  });
 });

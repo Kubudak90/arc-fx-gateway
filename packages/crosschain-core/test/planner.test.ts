@@ -67,4 +67,64 @@ describe("planCrosschainRoute", () => {
       enabledSourceChains: [],
     })).toThrow(/source chain disabled/);
   });
+
+  // Lock in the four validation guards on the payment-routing path (previously untested).
+  it("rejects a non-Arc destination chain", () => {
+    expect(() => planCrosschainRoute({
+      registry,
+      sourceChainId: 84532,
+      destinationChainId: 84532, // Base Sepolia, not Arc
+      sourceAmountBaseUnits: 5_000_000n,
+      payoutToken: "0x3600000000000000000000000000000000000000",
+      enabledSourceChains: [84532],
+    })).toThrow(/unsupported destination chain/);
+  });
+
+  it("rejects a zero or negative source amount", () => {
+    const base = {
+      registry,
+      sourceChainId: 84532,
+      destinationChainId: 5042002,
+      payoutToken: "0x3600000000000000000000000000000000000000" as `0x${string}`,
+      enabledSourceChains: [84532],
+    };
+    expect(() => planCrosschainRoute({ ...base, sourceAmountBaseUnits: 0n })).toThrow(/source amount must be positive/);
+    expect(() => planCrosschainRoute({ ...base, sourceAmountBaseUnits: -1n })).toThrow(/source amount must be positive/);
+  });
+
+  it("rejects when the Arc destination has no EURC configured", () => {
+    const noEurc = parseChainRegistryJson(JSON.stringify({
+      "arc-testnet": {
+        cctpDomain: 30,
+        tokenMessenger: "0x1111111111111111111111111111111111111111",
+        messageTransmitter: "0x2222222222222222222222222222222222222222",
+        usdcAddress: "0x3600000000000000000000000000000000000000",
+      },
+      "base-sepolia": {
+        cctpDomain: 6,
+        tokenMessenger: "0x3333333333333333333333333333333333333333",
+        messageTransmitter: "0x4444444444444444444444444444444444444444",
+        usdcAddress: "0x5555555555555555555555555555555555555555",
+      },
+    }));
+    expect(() => planCrosschainRoute({
+      registry: noEurc,
+      sourceChainId: 84532,
+      destinationChainId: 5042002,
+      sourceAmountBaseUnits: 5_000_000n,
+      payoutToken: "0x3600000000000000000000000000000000000000",
+      enabledSourceChains: [84532],
+    })).toThrow(/Arc EURC config missing/);
+  });
+
+  it("rejects an unsupported Arc payout token", () => {
+    expect(() => planCrosschainRoute({
+      registry,
+      sourceChainId: 84532,
+      destinationChainId: 5042002,
+      sourceAmountBaseUnits: 5_000_000n,
+      payoutToken: "0x9999999999999999999999999999999999999999",
+      enabledSourceChains: [84532],
+    })).toThrow(/unsupported Arc payout token/);
+  });
 });

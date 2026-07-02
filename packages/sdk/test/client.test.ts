@@ -204,6 +204,13 @@ describe("network + timeout error paths", () => {
     ).rejects.toMatchObject({ code: "TIMEOUT" });
   });
 
+  it("maps a malformed JSON body to ArcoraError SERVER_ERROR, not a raw SyntaxError", async () => {
+    (globalThis.fetch as any).mockResolvedValue(new Response("<html>oops</html>", { status: 201 }));
+    await expect(
+      Arcora.createInvoice({ amountUsdc: 1, payInToken: "USDC", successUrl: "https://m.test/ok" })
+    ).rejects.toMatchObject({ code: "SERVER_ERROR" });
+  });
+
   it("passes an abort signal so a hung server cannot block forever", async () => {
     let sawSignal = false;
     (globalThis.fetch as any).mockImplementation((_url: string, init: any) => {

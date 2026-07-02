@@ -120,7 +120,12 @@ async function doCreateInvoice(opts: InitOptions, params: CreateInvoiceParams): 
     throw new ArcoraError("UNKNOWN", `unexpected ${res.status}`);
   }
 
-  const json = await res.json() as { invoiceId: string; url: string };
+  let json: { invoiceId: string; url: string };
+  try {
+    json = await res.json() as { invoiceId: string; url: string };
+  } catch (e) {
+    throw new ArcoraError("SERVER_ERROR", "invalid JSON response", { cause: e });
+  }
   return { invoiceId: json.invoiceId, url: json.url };
 }
 
@@ -161,7 +166,11 @@ async function doEscrows(opts: InitOptions): Promise<{ pending: EscrowSummary[];
     throw new ArcoraError("UNKNOWN", `unexpected ${res.status}`);
   }
 
-  return res.json() as Promise<{ pending: EscrowSummary[]; matured: EscrowSummary[]; claimed: EscrowSummary[]; }>;
+  try {
+    return await res.json() as { pending: EscrowSummary[]; matured: EscrowSummary[]; claimed: EscrowSummary[]; };
+  } catch (e) {
+    throw new ArcoraError("SERVER_ERROR", "invalid JSON response", { cause: e });
+  }
 }
 
 function doOpenCheckout(invoice: { url: string }): void {

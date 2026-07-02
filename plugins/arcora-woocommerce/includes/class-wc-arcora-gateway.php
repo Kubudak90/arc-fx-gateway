@@ -20,7 +20,14 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
             'Accept USDC and EURC on Arc Network through Arcora\'s hosted checkout. Customer pays with their preferred stablecoin; merchant settles in the stable you choose.',
             'arcora-woocommerce'
         );
-        $this->supports           = ['products', 'refunds'];
+        // Gap #17: 'refunds' is NOT declared — the gateway implements no
+        // process_refund(), so declaring it would render the WooCommerce admin
+        // Refund button, whose click hits the base (false-returning) process_refund
+        // and fails with a generic, guidance-free error. Refunds are executed in
+        // the Arcora merchant dashboard; the invoice.refunded webhook still mirrors
+        // status via update_status('refunded') independently of this flag.
+        // Re-add 'refunds' when a process_refund() → Arcora refund API is wired (v0.2).
+        $this->supports           = ['products'];
 
         $this->init_form_fields();
         $this->init_settings();
@@ -30,7 +37,10 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
         $this->enabled       = $this->get_option('enabled');
         $this->environment   = $this->get_option('environment');
         $this->api_key       = $this->get_option('api_key');
-        $this->settle_token  = $this->get_option('settle_token');
+        // Gap #16: settle_token removed — payout currency is authoritatively set
+        // by the merchant dashboard (payoutCurrency); the invoice body never sent a
+        // settleToken and the API has no such field, so the old select was dead
+        // config that looked authoritative but did nothing.
         $this->pay_in_token  = $this->get_option('pay_in_token');
         $this->base_url      = $this->resolve_base_url();
 
@@ -73,16 +83,9 @@ class WC_Arcora_Gateway extends WC_Payment_Gateway {
                 'description' => __('Get this from your Arcora merchant dashboard → Settings → API key.', 'arcora-woocommerce'),
                 'desc_tip'    => true,
             ],
-            'settle_token' => [
-                'title'   => __('Settlement token', 'arcora-woocommerce'),
-                'type'    => 'select',
-                'default' => 'USDC',
-                'options' => [
-                    'USDC' => 'USDC',
-                    'EURC' => 'EURC',
-                ],
-                'description' => __('The stablecoin Arcora sends to your payout address. The customer can pay in either USDC or EURC; Arcora swaps atomically.', 'arcora-woocommerce'),
-            ],
+            // Gap #16: the 'settle_token' select was removed — payout currency is
+            // controlled by the merchant dashboard, so an editable field here only
+            // implied control it never had.
             'pay_in_token' => [
                 'title'   => __('Default pay-in token', 'arcora-woocommerce'),
                 'type'    => 'select',

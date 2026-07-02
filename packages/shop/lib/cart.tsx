@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { z } from "zod";
+import { MAX_QTY_PER_LINE } from "./products";
 
 export interface CartItem {
   sku:     string;          // product slug
@@ -68,9 +69,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const k = keyOf(item);
       const existing = prev.find(p => keyOf(p) === k);
       if (existing) {
-        return prev.map(p => keyOf(p) === k ? { ...p, qty: p.qty + qty } : p);
+        return prev.map(p => keyOf(p) === k ? { ...p, qty: Math.min(MAX_QTY_PER_LINE, p.qty + qty) } : p);
       }
-      return [...prev, { ...item, qty }];
+      return [...prev, { ...item, qty: Math.min(MAX_QTY_PER_LINE, qty) }];
     });
   }, []);
 
@@ -78,7 +79,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems(prev =>
       qty <= 0
         ? prev.filter(p => keyOf(p) !== key)
-        : prev.map(p => keyOf(p) === key ? { ...p, qty } : p),
+        : prev.map(p => keyOf(p) === key ? { ...p, qty: Math.min(MAX_QTY_PER_LINE, qty) } : p),
     );
   }, []);
 

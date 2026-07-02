@@ -165,6 +165,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // A 2xx with a malformed/parse-failed body (no usable checkout url) must not reach the client
+  // as `url: undefined` — the browser would navigate to the string "undefined". Fail closed 502.
+  if (typeof arcoraJson.url !== "string" || !arcoraJson.url) {
+    return NextResponse.json(
+      { error: "arcora_bad_response", status: arcoraRes.status, detail: arcoraJson },
+      { status: 502 },
+    );
+  }
+
   return NextResponse.json({
     invoiceId: arcoraJson.invoiceId,
     url: arcoraJson.url,

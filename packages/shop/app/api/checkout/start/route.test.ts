@@ -85,3 +85,58 @@ describe("POST /api/checkout/start — AFG-003 server-priced cart", () => {
     expect((await POST(makeReq({ items: [{ sku: "cap", qty: 1 }], address: ADDRESS, payIn: "DOGE" }))).status).toBe(400);
   });
 });
+
+// Server error branches — previously all untested. Each uses a unique IP so the module-scoped
+// rate limiter's hit map can't cross-contaminate.
+describe("POST /api/checkout/start — error branches", () => {
+  const VALID = { items: [{ sku: "cap", qty: 1 }], address: ADDRESS, payIn: "USDC" };
+
+  it("returns 500 shop_not_configured (and no upstream call) when the API key is unset", async () => {
+    delete process.env.ARCORA_API_KEY;
+    const res = await POST(makeReq(VALID, "10.0.0.1"));
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("shop_not_configured");
+    expect(globalThis.fetch as any).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 rate_limited with retry-after after 20 requests from one IP", async () => {
+    // fresh Response per call — a single Response instance's body is consumed after the first read
+    (globalThis.fetch as any).mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ invoiceId: "0xabc", url: "https://arcorapay.xyz/i/0xabc" }), { status: 201 })),
+    );
+    for (let i = 0; i < 20; i++) {
+      expect((await POST(makeReq(VALID, "9.9.9.9"))).status).toBe(200);
+    }
+    const res = await POST(makeReq(VALID, "9.9.9.9"));
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toBe("rate_limited");
+    expect(res.headers.get("retry-after")).toBe("60");
+  });
+
+  it("returns 502 arcora_unreachable when the upstream fetch rejects", async () => {
+    (globalThis.fetch as any).mockRejectedValue(new Error("boom"));
+    const res = await POST(makeReq(VALID, "10.0.0.2"));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe("arcora_unreachable");
+  });
+
+  it("returns 502 arcora_create_failed when the upstream returns a non-2xx", async () => {
+    (globalThis.fetch as any).mockResolvedValue(
+      new Response(JSON.stringify({ error: "x" }), { status: 500 }),
+    );
+    const res = await POST(makeReq(VALID, "10.0.0.3"));
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toBe("arcora_create_failed");
+    expect(body.status).toBe(500);
+  });
+
+  it("returns 502 arcora_bad_response when a 2xx body has no checkout url", async () => {
+    (globalThis.fetch as any).mockResolvedValue(
+      new Response(JSON.stringify({ invoiceId: "0xabc" }), { status: 201 }),
+    );
+    const res = await POST(makeReq(VALID, "10.0.0.4"));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toBe("arcora_bad_response");
+  });
+});

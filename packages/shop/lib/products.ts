@@ -1,3 +1,7 @@
+/** Server-enforced cap on quantity per cart line (mirrored by the checkout route's zod schema).
+ *  The cart clamps to this so a user can never build a cart the checkout will reject. */
+export const MAX_QTY_PER_LINE = 10;
+
 export interface Product {
   slug:       string;
   name:       string;

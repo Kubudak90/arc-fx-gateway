@@ -51,7 +51,16 @@ function address(value: unknown, field: string): Address {
 }
 
 export function parseChainRegistryJson(raw: string): ChainRegistry {
-  const parsed = JSON.parse(raw) as Record<string, {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("invalid chain registry JSON");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("chain registry must be a JSON object");
+  }
+  const config = parsed as Record<string, {
     cctpDomain: number;
     tokenMessenger: string;
     messageTransmitter: string;
@@ -60,7 +69,7 @@ export function parseChainRegistryJson(raw: string): ChainRegistry {
   }>;
   const entries: [number, CctpChainConfig][] = [];
 
-  for (const [rawKey, runtime] of Object.entries(parsed)) {
+  for (const [rawKey, runtime] of Object.entries(config)) {
     const key = rawKey as ChainKey;
     const staticConfig = STATIC_CHAINS[key];
     if (!staticConfig) throw new Error(`unknown chain config key: ${rawKey}`);
@@ -83,8 +92,12 @@ export function parseChainRegistryJson(raw: string): ChainRegistry {
   return new Map(entries);
 }
 
-export function chainById(registry: ChainRegistry, chainId: number): CctpChainConfig {
+export function chainById(
+  registry: ChainRegistry,
+  chainId: number,
+  role: "source" | "destination" = "source",
+): CctpChainConfig {
   const chain = registry.get(chainId);
-  if (!chain) throw new Error(`unsupported source chain: ${chainId}`);
+  if (!chain) throw new Error(`unsupported ${role} chain: ${chainId}`);
   return chain;
 }

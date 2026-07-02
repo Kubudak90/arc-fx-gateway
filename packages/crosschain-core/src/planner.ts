@@ -27,7 +27,7 @@ export function planCrosschainRoute(args: {
   payoutToken: Address;
   enabledSourceChains: readonly number[];
 }): PlannedCrosschainRoute {
-  const destination = chainById(args.registry, args.destinationChainId);
+  const destination = chainById(args.registry, args.destinationChainId, "destination");
   if (destination.key !== "arc-testnet") throw new Error(`unsupported destination chain: ${args.destinationChainId}`);
   if (!args.enabledSourceChains.includes(args.sourceChainId)) {
     throw new Error(`source chain disabled: ${args.sourceChainId}`);

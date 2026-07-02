@@ -100,8 +100,12 @@ async function doCreateInvoice(opts: InitOptions, params: CreateInvoiceParams): 
       method: "POST",
       headers,
       body,
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 30000),
     });
   } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new ArcoraError("TIMEOUT", `request timed out after ${opts.timeoutMs ?? 30000}ms`, { cause: e });
+    }
     throw new ArcoraError("NETWORK", "request failed", { cause: e });
   }
 
@@ -137,8 +141,12 @@ async function doEscrows(opts: InitOptions): Promise<{ pending: EscrowSummary[];
         "content-type": "application/json",
         "X-Arcora-Api-Key": opts.apiKey,
       },
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 30000),
     });
   } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new ArcoraError("TIMEOUT", `request timed out after ${opts.timeoutMs ?? 30000}ms`, { cause: e });
+    }
     throw new ArcoraError("NETWORK", "request failed", { cause: e });
   }
 

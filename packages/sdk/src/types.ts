@@ -44,4 +44,7 @@ export interface InitOptions {
   apiKey: string;
   environment?: Environment;
   baseUrl?: string;
+  /** Per-request timeout in ms (default 30000). Bounds createInvoice()/escrows() so a hung
+   *  server can't block forever; a timeout rejects with ArcoraError code "TIMEOUT". */
+  timeoutMs?: number;
 }

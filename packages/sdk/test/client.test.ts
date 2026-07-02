@@ -180,3 +180,37 @@ describe("AFG-019 — key-class guards", () => {
     }
   });
 });
+
+describe("network + timeout error paths", () => {
+  it("maps a createInvoice fetch rejection to NETWORK and preserves the cause", async () => {
+    const cause = new Error("ECONNREFUSED");
+    (globalThis.fetch as any).mockRejectedValue(cause);
+    await expect(
+      Arcora.createInvoice({ amountUsdc: 1, payInToken: "USDC", successUrl: "https://m.test/ok" })
+    ).rejects.toMatchObject({ code: "NETWORK", cause });
+  });
+
+  it("maps an escrows() fetch rejection to NETWORK and preserves the cause", async () => {
+    const cause = new Error("ENOTFOUND");
+    (globalThis.fetch as any).mockRejectedValue(cause);
+    await expect(Arcora.escrows()).rejects.toMatchObject({ code: "NETWORK", cause });
+  });
+
+  it("maps a request timeout to the TIMEOUT code, not NETWORK", async () => {
+    // AbortSignal.timeout(...) rejects fetch with a DOMException named "TimeoutError"
+    (globalThis.fetch as any).mockRejectedValue(new DOMException("timed out", "TimeoutError"));
+    await expect(
+      Arcora.createInvoice({ amountUsdc: 1, payInToken: "USDC", successUrl: "https://m.test/ok" })
+    ).rejects.toMatchObject({ code: "TIMEOUT" });
+  });
+
+  it("passes an abort signal so a hung server cannot block forever", async () => {
+    let sawSignal = false;
+    (globalThis.fetch as any).mockImplementation((_url: string, init: any) => {
+      sawSignal = init?.signal instanceof AbortSignal;
+      return Promise.resolve(new Response(JSON.stringify({ invoiceId: "0x1", url: "https://x/i/0x1" }), { status: 201 }));
+    });
+    await Arcora.createInvoice({ amountUsdc: 1, payInToken: "USDC", successUrl: "https://m.test/ok" });
+    expect(sawSignal).toBe(true);
+  });
+});

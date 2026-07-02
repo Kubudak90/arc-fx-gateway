@@ -254,7 +254,7 @@ arcora.openCheckout(inv);
 ```tsx
 import { useCheckout, CheckoutButton } from "@arcora/sdk-react";
 
-const { checkout, loading, error, refundEndsAt } = useCheckout({ apiKey });
+const { checkout, loading, error } = useCheckout({ apiKey });
 
 <CheckoutButton
   apiKey={publicKey}

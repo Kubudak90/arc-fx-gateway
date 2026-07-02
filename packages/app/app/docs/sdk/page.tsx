@@ -126,8 +126,8 @@ function PayButton() {
 }`}</code></pre>
       <p>
         <code>checkout(params)</code> creates the invoice and immediately redirects via <code>window.location.href</code>.
-        <code>refundEndsAt</code> populates once the invoice is paid — useful for showing the customer when the refund
-        window closes.
+        <code>refundEndsAt</code> is <code>null</code> after checkout — the created invoice is still unpaid — so read the
+        merchant claim deadline from <code>escrows()</code> once the invoice is paid.
       </p>
 
       <h3><code>&lt;CheckoutButton /&gt;</code></h3>

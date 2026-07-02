@@ -30,6 +30,10 @@ import { timingSafeEqual } from "node:crypto";
 // branch must be uncacheable. Deliberately NOT privateJson: this is a public
 // endpoint, so `private` would be misleading; plain no-store is the contract.
 const PUBLIC_NO_STORE = { "Cache-Control": "no-store" } as const;
+// relayerQueue.id is a v4 uuid; reject a malformed id up front so a bad path segment returns 404
+// instead of a 500 from the uuid column cast (mirrors the crosschain status sibling).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function tokensEqual(a: string | null, b: string | null): boolean {
   if (!a || !b) return false;
@@ -47,6 +51,9 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
+  if (!UUID_RE.test(id)) {
+    return NextResponse.json({ error: "not_found" }, { status: 404, headers: PUBLIC_NO_STORE });
+  }
   const rows = await db
     .select({
       status:       relayerQueue.status,

@@ -15,10 +15,19 @@ export interface CheckoutButtonProps extends InitOptions {
 }
 
 export function CheckoutButton({ apiKey, environment, baseUrl, invoice, children, className }: CheckoutButtonProps) {
-  const { checkout, loading } = useCheckout({ apiKey, environment, baseUrl });
+  const { checkout, loading, error } = useCheckout({ apiKey, environment, baseUrl });
   return (
-    <button onClick={() => checkout(invoice)} disabled={loading} className={className}>
-      {children ?? (loading ? "Loading..." : "Pay")}
-    </button>
+    <>
+      {/* useCheckout records the error in state before re-throwing, so swallowing the rejection
+          here is safe and prevents an unhandled promise rejection from the floating checkout(). */}
+      <button
+        onClick={() => { void checkout(invoice).catch(() => {}); }}
+        disabled={loading}
+        className={className}
+      >
+        {children ?? (loading ? "Loading..." : "Pay")}
+      </button>
+      {error && <span role="alert">{error.message}</span>}
+    </>
   );
 }

@@ -271,7 +271,13 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
     ) external nonReentrant whenNotPaused onlyRole(RELAYER_ROLE) {
         Invoice storage inv = invoices[globalId];
         if (inv.status == InvoiceStatus.None)        revert InvoiceNotFound(globalId);
-        if (inv.status != InvoiceStatus.Created)     revert InvoiceAlreadyPaid(globalId);
+        // Gap #2: only Paid/Claimed genuinely mean "already paid"; a Failed
+        // (payer-refunded) or otherwise non-Created invoice was never paid, so
+        // report the accurate InvoiceNotInCreatedState instead of the misleading
+        // InvoiceAlreadyPaid.
+        if (inv.status == InvoiceStatus.Paid || inv.status == InvoiceStatus.Claimed)
+            revert InvoiceAlreadyPaid(globalId);
+        if (inv.status != InvoiceStatus.Created)     revert InvoiceNotInCreatedState(globalId);
         if (block.timestamp > inv.expiresAt)         revert InvoiceExpired(globalId);
         if (payInToken != inv.payIn)                 revert InvalidPayInToken();
         if (grossPayout < inv.amountOut)             revert PayoutShortfall(grossPayout, inv.amountOut);

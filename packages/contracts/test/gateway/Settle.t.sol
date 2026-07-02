@@ -85,4 +85,49 @@ contract SettleTest is GatewayTestBase {
         vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
         gw.createInvoice(bytes32("z"), address(usdc), 0, uint64(block.timestamp + 1 hours));
     }
+
+    // Gap #2: a Failed invoice (via recordPayerRefund) is not Created, but it was
+    // never "paid" either — settling it must say InvoiceNotInCreatedState, not the
+    // misleading InvoiceAlreadyPaid (which stays reserved for Paid/Claimed).
+    function test_Settle_AfterPayerRefund_RevertsNotInCreatedState() public {
+        bytes32 g = _createInvoice(bytes32("fail-settle"), 100e6, 1 hours);
+        vm.prank(relayer);
+        gw.recordPayerRefund(g, customer, address(usdc), 100e6, bytes32(0)); // -> Failed
+
+        // status gate reverts before any token pull, so no relayer funding needed
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSignature("InvoiceNotInCreatedState(bytes32)", g));
+        gw.settleInvoice(g, customer, address(usdc), 110e6, 100e6, bytes32(0));
+    }
+
+    // Gap #3: _createInvoice snapshots the merchant's payoutToken; a later
+    // updatePayoutToken must NOT retro-change an already-Created invoice. Lock in
+    // the snapshot semantics across a rotation so a future refactor can't silently
+    // start settling/paying in the merchant's *current* token.
+    function test_Settle_UsesSnapshotToken_AfterPayoutTokenRotation() public {
+        bytes32 g = _createInvoice(bytes32("rot-1"), 100e6, 1 hours); // snapshots EURC
+
+        vm.prank(merchant);
+        gw.updatePayoutToken(address(usdc)); // rotate the merchant's CURRENT token
+
+        (, , address invTok, , , , ) = gw.invoices(g);
+        assertEq(invTok, address(eurc), "invoice keeps its snapshot token (EURC)");
+
+        // Relayer must fund the SNAPSHOT token (EURC), not the rotated USDC.
+        _fundRelayer(eurc, 100e6);
+        vm.prank(relayer);
+        gw.settleInvoice(g, customer, address(usdc), 110e6, 100e6, bytes32(0));
+
+        (uint256 amt, address escrowTok, ) = gw.escrows(g);
+        assertEq(escrowTok, address(eurc), "escrow denominated in the snapshot EURC, not USDC");
+        assertEq(amt, 100e6);
+
+        vm.warp(block.timestamp + REFUND_WINDOW + 1);
+        bytes32[] memory ids = new bytes32[](1); ids[0] = g;
+        gw.claim(ids);
+
+        uint256 fee = (100e6 * FEE_BPS) / 10_000;
+        assertEq(eurc.balanceOf(payee), 100e6 - fee, "payout in the snapshot EURC");
+        assertEq(usdc.balanceOf(payee), 0, "nothing paid in the rotated USDC");
+    }
 }

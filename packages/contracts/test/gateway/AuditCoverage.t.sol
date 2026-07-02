@@ -44,8 +44,11 @@ contract AuditCoverageTest is GatewayTestBase {
         uint256 excess1,
         uint256 excess2
     ) public {
-        amountOut1 = bound(amountOut1, 1e6, 1_000_000e6);
-        amountOut2 = bound(amountOut2, 1e6, 1_000_000e6);
+        // Gap #1: lower bound is 1 (not 1e6) so the fuzz exercises the sub-10000/FEE_BPS
+        // band where the claim-time fee rounds to 0. The invariants below (accrued ==
+        // sum of (gross*FEE_BPS)/10_000, merchant == gross - fee) hold when fee == 0.
+        amountOut1 = bound(amountOut1, 1, 1_000_000e6);
+        amountOut2 = bound(amountOut2, 1, 1_000_000e6);
         excess1    = bound(excess1,    0,   100_000e6);
         excess2    = bound(excess2,    0,   100_000e6);
 

@@ -143,4 +143,40 @@ contract ClaimTest is GatewayTestBase {
         vm.expectRevert(abi.encodeWithSignature("PayoutAddressUnset(address)", merchant));
         gw.claim(ids);
     }
+
+    // Gap #1: for a fee-taking protocol, the fee-rounds-to-zero boundary is an
+    // explicit rounding edge that must be pinned. FEE_BPS=30 → fee = amount*30/10_000;
+    // amount <= 333 rounds the fee to 0 and the merchant receives 100%.
+    function test_Claim_FeeRoundsToZero_AtDustBoundary() public {
+        // gross == 333 → fee = 9_990/10_000 = 0
+        bytes32 g = _settle(bytes32("inv-fee0"), 333, 333);
+        vm.warp(block.timestamp + REFUND_WINDOW + 1);
+        bytes32[] memory ids = new bytes32[](1); ids[0] = g;
+
+        // InvoiceClaimed reports fee == 0, merchant gets the full 333
+        vm.expectEmit(true, true, false, true, address(gw));
+        emit ArcFXGateway.InvoiceClaimed(g, merchant, payee, address(eurc), 333, 0);
+        gw.claim(ids);
+
+        assertEq(eurc.balanceOf(payee), 333, "payee gets the full gross when the fee rounds to 0");
+        assertEq(gw.protocolFeesAccrued(address(eurc)), 0, "no fee accrued at the dust boundary");
+        (uint256 amt, , ) = gw.escrows(g);
+        assertEq(amt, 0, "escrow deleted even when fee == 0");
+        // conservation still holds: toMerchant + fee == escrow.amount
+        assertEq(333 + 0, uint256(333));
+    }
+
+    function test_Claim_FeeIsOne_JustAboveDustBoundary() public {
+        // gross == 334 → fee = 10_020/10_000 = 1
+        bytes32 g = _settle(bytes32("inv-fee1"), 334, 334);
+        vm.warp(block.timestamp + REFUND_WINDOW + 1);
+        bytes32[] memory ids = new bytes32[](1); ids[0] = g;
+        gw.claim(ids);
+
+        uint256 fee = (334 * FEE_BPS) / 10_000;
+        assertEq(fee, 1, "fee is exactly 1 one unit above the boundary");
+        assertEq(eurc.balanceOf(payee), 333, "payee gets gross - 1");
+        assertEq(gw.protocolFeesAccrued(address(eurc)), 1, "one unit accrued");
+        assertEq(eurc.balanceOf(payee) + fee, uint256(334), "conservation: toMerchant + fee == gross");
+    }
 }

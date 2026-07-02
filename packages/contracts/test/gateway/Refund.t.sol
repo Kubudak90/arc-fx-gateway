@@ -98,6 +98,32 @@ contract RefundTest is GatewayTestBase {
         gw.refundInvoice(g);
     }
 
+    // Gap #2: a Failed invoice (payer already refunded off-chain via
+    // recordPayerRefund) is a terminal, non-Paid state — refundInvoice must reject
+    // it. Distinct from test_Refund_NotPaid_Reverts, which covers the Created state.
+    function test_Refund_AfterPayerRefund_RevertsNotRefundable() public {
+        bytes32 g = _createInvoice(bytes32("inv-fail-refund"), 100e6, 1 hours);
+        vm.prank(relayer);
+        gw.recordPayerRefund(g, customer, address(usdc), 100e6, bytes32(0)); // -> Failed
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("InvoiceNotRefundable(bytes32)", g));
+        gw.refundInvoice(g);
+    }
+
+    // Gap #2: a genuine second refundInvoice on an already-Refunded invoice must
+    // revert (the Reentrancy test only proves a single-drain indirectly — this is
+    // the direct double-refund guard on the money path).
+    function test_Refund_DoubleRefund_RevertsNotRefundable() public {
+        bytes32 g = _settle(bytes32("inv-dbl-refund"), 100e6, 100e6);
+        vm.prank(merchant);
+        gw.refundInvoice(g); // Paid -> Refunded, escrow returned to payer
+        assertEq(eurc.balanceOf(customer), 100e6, "first refund pays the customer");
+
+        vm.prank(merchant);
+        vm.expectRevert(abi.encodeWithSignature("InvoiceNotRefundable(bytes32)", g));
+        gw.refundInvoice(g); // second refund on Refunded status
+    }
+
     function test_Refund_WorksDuringPause() public {
         bytes32 g = _settle(bytes32("inv-8"), 100e6, 100e6);
         vm.prank(admin);

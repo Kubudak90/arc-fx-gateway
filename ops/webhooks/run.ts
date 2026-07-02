@@ -3,6 +3,7 @@ import { createHmac, createDecipheriv } from "node:crypto";
 import dns from "node:dns/promises";
 import { buildOpsPoolConfig, describeDbTls, assertSecureDbTls } from "./db";
 import { assertAddressesPublic, postPinned } from "./ssrf";
+import { webhookRetryDecision } from "./retry";
 
 const PG_URL    = need("POSTGRES_URL_NON_POOLING");
 const MASTER_B64 = need("MASTER_KEY");
@@ -11,6 +12,7 @@ const BATCH     = Number(process.env.WEBHOOKS_BATCH ?? "50");
 const DELIVERY_TIMEOUT_MS = Number(process.env.WEBHOOKS_TIMEOUT_MS ?? "10000");
 const MAX_BACKOFF_HOURS  = 24;
 const TERMINAL_4XX_AFTER = 3;
+const WEBHOOK_MAX_ATTEMPTS = Number(process.env.WEBHOOKS_MAX_ATTEMPTS ?? "5");
 const SIG_HEADER     = "X-Arcora-Signature";       // legacy: sha256(body)
 // Audit 2026-05-24 Ops-M2 — replay protection. We dual-sign every delivery:
 // the legacy header is kept verbatim so existing receivers don't break, and
@@ -92,32 +94,29 @@ async function markSucceeded(id: string): Promise<void> {
 }
 
 async function markFailed(id: string, attempts: number, lastError: string, status: number): Promise<void> {
-  const isTerminal4xx =
-    status >= 400 && status < 500 && attempts >= TERMINAL_4XX_AFTER;
-  if (isTerminal4xx) {
-    // Audit M5 (2026-05-06): 4xx responses after TERMINAL_4XX_AFTER attempts
-    // are permanently terminated. Set terminal_reason and NULL next_attempt
-    // so fetchDue (which filters terminal_reason IS NULL) never re-queues
-    // this row. Operator must manually clear terminal_reason to retry.
-    const reason = `http_${status}`;
+  // Audit #19 follow-up: terminate on a persistent 4xx (M5) OR once the status-independent
+  // attempt cap is hit — previously 5xx/network/redirect failures only ever backed off, so a
+  // long-down endpoint retried forever (contradicting the documented "5x over 30 min, then stop").
+  const decision = webhookRetryDecision(attempts, status, {
+    terminal4xxAfter: TERMINAL_4XX_AFTER,
+    maxAttempts: WEBHOOK_MAX_ATTEMPTS,
+    maxBackoffHours: MAX_BACKOFF_HOURS,
+  });
+  if (decision.terminal) {
+    // NULL next_attempt + set terminal_reason so fetchDue (terminal_reason IS NULL) never
+    // re-queues this row. Operator must manually clear terminal_reason to retry.
     await pool.query(
       `update webhook_attempts
           set attempts = $2, last_error = $3, next_attempt = null, terminal_reason = $4
         where id = $1`,
-      [id, attempts, lastError, reason],
+      [id, attempts, lastError, decision.reason],
     );
   } else {
-    // Audit #19: align with relayer's 2^attempts*30 schedule. The previous
-    // `2 ** attempts` started at 2s and ramped slowly; during a multi-hour
-    // outage that means fetchDue (10s tick × 50 rows) churns the table at
-    // tens of writes per second. The relayer formula starts at 60s, doubles
-    // to 30-min cap, capped harder by MAX_BACKOFF_HOURS.
-    const backoffSec = Math.min(2 ** attempts * 30, MAX_BACKOFF_HOURS * 3600);
     await pool.query(
       `update webhook_attempts
           set attempts = $2, last_error = $3, next_attempt = now() + ($4 || ' seconds')::interval
         where id = $1`,
-      [id, attempts, lastError, backoffSec],
+      [id, attempts, lastError, decision.backoffSec],
     );
   }
 }

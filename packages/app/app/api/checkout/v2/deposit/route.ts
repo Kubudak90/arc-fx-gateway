@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createPublicClient, http, defineChain, type Address } from "viem";
 import { db } from "@/lib/db/client";
 import { invoices, settlements } from "@/lib/db/schema";
@@ -71,6 +71,34 @@ export async function POST(req: NextRequest) {
     payoutToken: s.payoutToken as PayoutToken,
   });
 
+  // Audit #20: this endpoint is UNAUTHENTICATED and public, so the terminal-state writes must be
+  // guarded — otherwise a replay flips an already-'paid' invoice back to 'paid', overwriting its
+  // paidTx/paidBy. Gate on the pre-deposit 'created' state and use the row count as the guard.
+  const paidRows = await db.update(invoices).set({
+    escrowId,
+    status: "paid",
+    paidBy: payer,
+    paidTx: depositTx,
+    paidAt: new Date(),
+  }).where(and(eq(invoices.id, invoiceRef), eq(invoices.status, "created"))).returning({ id: invoices.id });
+
+  if (paidRows.length === 0) {
+    // Not in the pre-deposit state. Treat a replay of the SAME escrow as an idempotent no-op;
+    // reject any other terminal-state overwrite.
+    const [inv] = await db
+      .select({ status: invoices.status, escrowId: invoices.escrowId })
+      .from(invoices)
+      .where(eq(invoices.id, invoiceRef))
+      .limit(1);
+    if (inv?.status === "paid" && inv.escrowId?.toLowerCase() === escrowId.toLowerCase()) {
+      return Response.json({ ok: true, escrowId, path, state: "DEPOSITED", idempotent: true });
+    }
+    return Response.json({ error: "invoice_not_pending", status: inv?.status ?? "unknown" }, { status: 409 });
+  }
+
+  // Only reached once (the invoice gate above ensures single execution), so the settlement
+  // advance is safe. From the buyer's perspective payment is complete (USDC escrowed);
+  // settlement to the merchant happens asynchronously after the refund window.
   await db.update(settlements).set({
     escrowId,
     escrowChainId,
@@ -81,16 +109,6 @@ export async function POST(req: NextRequest) {
     payer,
     updatedAt: new Date(),
   }).where(eq(settlements.invoiceRef, invoiceRef));
-
-  // From the buyer's perspective payment is complete (USDC escrowed). Settlement
-  // to the merchant happens asynchronously after the refund window.
-  await db.update(invoices).set({
-    escrowId,
-    status: "paid",
-    paidBy: payer,
-    paidTx: depositTx,
-    paidAt: new Date(),
-  }).where(eq(invoices.id, invoiceRef));
 
   return Response.json({ ok: true, escrowId, path, state: "DEPOSITED" });
 }

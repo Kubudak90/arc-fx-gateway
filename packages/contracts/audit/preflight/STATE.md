@@ -53,15 +53,23 @@ Promote to L2 only after: 1 frozen baseline + 3 clean runs reviewed by hand (see
     identically; after `setuptools<81` myth runs and reports **0 issues** on the contract → CI ✗ was
     tooling, not a real finding). **FIXED 2026-06-17 in `contracts-ci.yml`:** `pip install 'setuptools<81'`
     added AFTER `pip install mythril==0.24.8` in the Install Mythril step. → confirm green on next push.
-- ⚠️ **no V10+ fuzz/invariant suite** (per CI comment + threat model). `forge test --profile ci`
-  runs 10k fuzz but there are no invariant tests for current scope yet. Recipe-B can't assert the
-  fee-once / refund-window invariants until they're written as invariant tests.
+- ✅ **invariant suite EXISTS + widened — 2026-07-05.** `test/gateway/Invariant.t.sol` drives
+  settle/refund/claim/**adminRecover**/**recordPayerRefund**/withdrawFees across TWO merchants on
+  DIFFERENT payout tokens (EURC + USDC) — the multi-token solvency identity is now non-trivial (was
+  0==0). Reentrancy tests now arm claim + adminRecoverEscrow too (was refundInvoice only). 103 tests
+  green. (Closes the disclosed pre-audit coverage gaps in `docs/audit/rfp-external-audit.md` §4.)
+- ✅ **slither baseline diff hardened — 2026-07-05.** The key now includes the finding's start
+  line, so a NEW medium+ that lands on an existing baseline element can't silently collapse onto its
+  key (was fail-OPEN). CLEAR runs now WIPE stale BLOCKED findings from the New-findings block (was:
+  BLOCKED sections accumulated forever, even after the tree went clean).
 - ✅ **mythril local — WORKING 2026-06-17.** `myth v0.24.8` via `pipx --python python3.11` + injected
   `setuptools<81` (else `eth/__init__.py` → `import pkg_resources` crashes). Drop `ALLOW_NO_MYTHRIL=1`
   from gate runs now.
 
-## New findings — needs human   (rewritten each failing run; empty when last run was CLEAR)
+## New findings — needs human   (rewritten each run: findings when BLOCKED, cleared when CLEAR)
+<!-- BEGIN new-findings -->
 - _none recorded yet — first run pending_
+<!-- END new-findings -->
 
 ## Run log   (newest first; prune to ~10)
 - 2026-06-17T20:36Z · @9bcfc43 · remediation: 3 reentrancy mediums suppressed inline (slither now 0 medium, verified) · baseline RE-FROZEN clean (0 medium+) · slither.db.json abandoned

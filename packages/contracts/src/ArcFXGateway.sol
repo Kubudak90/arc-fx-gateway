@@ -51,10 +51,18 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
     struct DelegateAuth { uint64 expiresAt; uint8 rights; }
     mapping(address merchant => mapping(address delegate => DelegateAuth)) public delegates;
 
+    // Live count of DEFAULT_ADMIN_ROLE holders, maintained by the _grantRole /
+    // _revokeRole overrides below so the last admin can never be removed.
+    uint256 private _adminCount;
+
     error InvalidPayoutAddress();
     error InvalidWindow();
     error ProtocolFeeTooHigh(uint256 supplied);
     error NoFeesToWithdraw();
+    // Audit LOW (2026-07-05): removing the final DEFAULT_ADMIN_ROLE holder —
+    // via renounceRole OR revokeRole — permanently bricks every admin op
+    // (pause, withdrawFees, adminRecover, token allowlist). Refuse it.
+    error CannotRemoveLastAdmin();
 
     constructor(
         uint256 protocolFeeBps,
@@ -491,5 +499,37 @@ contract ArcFXGateway is AccessControl, ReentrancyGuard, Pausable {
         protocolFeesAccrued[token] = 0;
         IERC20(token).safeTransfer(to, amount);
         emit FeesWithdrawn(token, to, amount);
+    }
+
+    // =========================================================================
+    // Admin-role floor — the last DEFAULT_ADMIN_ROLE holder cannot be removed
+    // =========================================================================
+    //
+    // Both revokeRole and renounceRole funnel through _revokeRole in OZ v5, so a
+    // single override covers every removal path. _grantRole/_revokeRole return a
+    // bool that is true only when membership actually changed, which keeps the
+    // count exact under idempotent grant/revoke.
+
+    function _grantRole(bytes32 role, address account)
+        internal
+        virtual
+        override
+        returns (bool granted)
+    {
+        granted = super._grantRole(role, account);
+        if (granted && role == DEFAULT_ADMIN_ROLE) _adminCount++;
+    }
+
+    function _revokeRole(bytes32 role, address account)
+        internal
+        virtual
+        override
+        returns (bool revoked)
+    {
+        if (role == DEFAULT_ADMIN_ROLE && _adminCount <= 1 && hasRole(DEFAULT_ADMIN_ROLE, account)) {
+            revert CannotRemoveLastAdmin();
+        }
+        revoked = super._revokeRole(role, account);
+        if (revoked && role == DEFAULT_ADMIN_ROLE) _adminCount--;
     }
 }

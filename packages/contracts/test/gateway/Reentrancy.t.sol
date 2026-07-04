@@ -45,4 +45,58 @@ contract ReentrancyTest is Test {
         assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Refunded), "single refund");
         assertEq(token.balanceOf(customer), 100e6, "no double drain");
     }
+
+    // 2026-07-05 (audit LOW): claim shares the nonReentrant guard but was
+    // untested for reentry. Arm the payout token to re-enter claim() during
+    // the merchant safeTransfer and assert a single payout, status flipped once.
+    function test_Claim_ReentryReverts() public {
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("re-claim"), address(token), 100e6, uint64(block.timestamp + 1 hours));
+        token.mint(relayer, 100e6);
+        vm.prank(relayer); token.approve(address(gw), 100e6);
+        vm.prank(relayer);
+        gw.settleInvoice(g, customer, address(token), 100e6, 100e6, bytes32(0));
+
+        vm.warp(block.timestamp + 7 days + 1); // past the refund window
+
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = g;
+        token.arm(address(gw), abi.encodeWithSignature("claim(bytes32[])", ids));
+
+        gw.claim(ids);
+
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Claimed), "single claim");
+        // 0.30% fee → payee nets 99.7e6 exactly once; the gateway keeps only the fee.
+        assertEq(token.balanceOf(payee), 99_700_000, "no double drain to payee");
+        assertEq(token.balanceOf(address(gw)), 300_000, "gateway retains fee only");
+    }
+
+    // 2026-07-05 (audit LOW): adminRecoverEscrow shares the guard but was
+    // untested for reentry. Arm the payout token to re-enter recovery during
+    // the sweep transfer; assert a single full sweep, status Recovered once.
+    function test_AdminRecover_ReentryReverts() public {
+        vm.prank(merchant);
+        bytes32 g = gw.createInvoice(bytes32("re-rec"), address(token), 100e6, uint64(block.timestamp + 1 hours));
+        token.mint(relayer, 100e6);
+        vm.prank(relayer); token.approve(address(gw), 100e6);
+        vm.prank(relayer);
+        gw.settleInvoice(g, customer, address(token), 100e6, 100e6, bytes32(0));
+
+        vm.prank(merchant); gw.deactivateMerchant();
+        vm.warp(block.timestamp + 7 days + 7 days + 1); // refund window + recovery delay
+
+        address recip = makeAddr("recip");
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = g;
+        token.arm(address(gw), abi.encodeWithSignature("adminRecoverEscrow(bytes32[],address)", ids, recip));
+
+        vm.prank(admin);
+        gw.adminRecoverEscrow(ids, recip);
+
+        (, , , , , ArcFXGateway.InvoiceStatus s, ) = gw.invoices(g);
+        assertEq(uint8(s), uint8(ArcFXGateway.InvoiceStatus.Recovered), "single recovery");
+        assertEq(token.balanceOf(recip), 100e6, "single full sweep, no double drain");
+        assertEq(token.balanceOf(address(gw)), 0, "gateway emptied exactly once");
+    }
 }

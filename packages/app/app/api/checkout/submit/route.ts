@@ -240,18 +240,19 @@ export async function POST(req: NextRequest) {
     throw e;
   }
 
-  // Issue a status token bound to this invoice. Audit M12.
-  // Without this token, /api/checkout/status/[id] returns only { status } —
-  // no lastError, no tx hashes, no internal state.
+  // Issue a status token bound to THIS submission (audit M12; scoping fixed
+  // 2026-07-05). Without it, /api/checkout/status/[id] returns only { status }
+  // — no lastError, no tx hashes, no internal state. Stored on the submission
+  // row so a later submitter on the same invoice can't read this one's detail.
   const statusToken = randomBytes(24).toString("hex");
   const statusTokenExpiresAt = new Date(Date.now() + STATUS_TOKEN_TTL_MS);
   try {
-    await db.update(invoices)
+    await db.update(relayerQueue)
       .set({ statusToken, statusTokenExpiresAt })
-      .where(eq(invoices.id, invoiceId));
+      .where(eq(relayerQueue.id, inserted[0]!.id));
   } catch {
     // Token persistence failure isn't fatal — status route degrades to
-    // public-minimum mode for everyone, which is the safe default.
+    // public-minimum mode for this submission, which is the safe default.
   }
 
   return NextResponse.json({

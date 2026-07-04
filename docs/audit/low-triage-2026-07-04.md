@@ -26,13 +26,32 @@ All H/M findings were fixed same-day (commits `9bb8cf6`…`052ab35`); this pass 
 | `cli.ts` re-onboard keeps loose file perms | `chmodSync(0o600)` after write, like `wallet.ts`. |
 | `config-writer.ts` unpinned `npx -y` | Generated configs pin `@arcora/agent-commerce@<exact>`; `PKG_VERSION` sync with package.json is test-enforced. |
 
-## DEFERRED (scheduled, with a home)
+## DEFERRED → RESOLVED (worked 2026-07-05)
 
-- **Webhook signature has no timestamp/expiry** (`crypto/webhook.ts`) — a captured `(body,sig)` replays forever, mitigated today by merchant `event_id` dedupe. The fix (Stripe-style `t=…,v1=…`) changes the wire format every merchant verifies, so it must ship as a **coordinated SDK minor** (emit both headers, SDK accepts both, deprecate old). → do with the next `@arcora/sdk` release; tracked in MAINNET-READINESS item 9.
-- **`checkout/status/[id]` token is invoice-scoped** — second payer on the same invoice can read the first submission's tx hashes/error. Needs the token bound to the `relayer_queue` row (schema + issuance change). → bundle with the next migration (0023), before V2 flip.
-- **Contract: `renounceRole(DEFAULT_ADMIN_ROLE)` can brick admin ops** — real, but a contract change (`AccessControlDefaultAdminRules`) means redeploy; current testnet deploy stays as-is. → **mainnet contract rev**, already implied by MAINNET-READINESS items 4/5 (multisig + timelock work).
-- **Invariant fuzz under-coverage** (single merchant/token; `adminRecoverEscrow`/`recordPayerRefund` unexercised; trivial multi-token solvency) and **reentrancy tests only arm `refundInvoice`** — test debt, no code defect. → precondition for the external audit; listed in the RFP scope so the auditors see honest coverage.
-- **Slither baseline keys without line numbers + stale `BLOCKED` sections in `STATE.md`** — tooling debt in the preflight loop. → fix next time the audit loop runs (owner: preflight `audit/preflight/`).
+The whole DEFERRED tail was worked in a follow-up pass. Outcomes:
+
+- **Webhook signature has no timestamp/expiry** — **ALREADY SHIPPED, no action needed.** The live
+  dispatcher (`ops/webhooks/run.ts`) already dual-signs every delivery with the timestamped
+  `X-Arcora-Signature-V2` (HMAC over `<ts>.<body>`) + `X-Arcora-Timestamp` (Ops-M2, 2026-05-24), and
+  the SDK's `verifyWebhook` checks it against a 300s replay window. The finding pointed at
+  `lib/crypto/webhook.ts`'s `signWebhook` — a body-only helper with ZERO non-test callers. It's now
+  marked DEPRECATED/UNUSED so nobody wires the replayable form into a live path.
+- **`checkout/status/[id]` token invoice-scoped** — **FIXED.** Token moved to the `relayer_queue`
+  row (migration `0023`); the status route validates against the row it already fetched (dropping a
+  second query), so a later submitter on the same invoice can't read an earlier one's detail.
+  Regression test added (`a DIFFERENT submission's token can't unlock this row`).
+- **`renounceRole(DEFAULT_ADMIN_ROLE)` can brick admin** — **FIXED in code (deploys at mainnet).**
+  `ArcFXGateway` now tracks the admin count via `_grantRole`/`_revokeRole` overrides and reverts
+  `CannotRemoveLastAdmin` on the last removal — covers both `revokeRole` and `renounceRole`. 5 tests
+  in `test/gateway/AdminRole.t.sol`. (No redeploy today; lands with the mainnet contract rev.)
+- **Invariant under-coverage + reentrancy gaps** — **FIXED.** `Invariant.t.sol` now runs two
+  merchants on different payout tokens (EURC + USDC → non-trivial multi-token solvency) and exercises
+  `adminRecoverEscrow` + `recordPayerRefund`; `Reentrancy.t.sol` arms `claim` and `adminRecoverEscrow`
+  (was `refundInvoice` only). Contract suite 96→103 tests, all green. Closes RFP §4 pre-audit gaps.
+- **Slither baseline keying + stale `STATE.md`** — **FIXED.** `slither_keys` now includes the finding
+  start line (fail-SAFE: a new medium+ can't collapse onto an existing baseline key); the verdict
+  rewrites a marked New-findings block every run, so a CLEAR wipes stale BLOCKED findings instead of
+  letting them accumulate.
 
 ## ACCEPTED (kept, with rationale)
 

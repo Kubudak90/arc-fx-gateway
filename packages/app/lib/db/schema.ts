@@ -315,6 +315,13 @@ export const relayerQueue = pgTable("relayer_queue", {
   swapAmountOut: numeric("swap_amount_out"),
   settleTxHash: text("settle_tx_hash"),
   refundTxHash: text("refund_tx_hash"),
+  // Status-detail bearer token, bound to THIS submission (migration 0023,
+  // 2026-07-05). Previously stored on the invoice, which let a second payer on
+  // the same invoice — a new submission once the prior one went terminal and
+  // freed the active-submission unique index — read the first payer's tx
+  // hashes/error. The token now lives on the submission row it authorizes.
+  statusToken: text("status_token"),
+  statusTokenExpiresAt: timestamp("status_token_expires_at", { withTimezone: true }),
   nextAttempt: timestamp("next_attempt", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

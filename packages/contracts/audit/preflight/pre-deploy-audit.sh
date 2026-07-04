@@ -50,12 +50,22 @@ hr() { printf '\n── %s ──\n' "$1"; }
 # Extract sorted unique medium+ finding keys from a Slither JSON.
 # Key = impact|check|file|element  (stable across line drift; ignores line numbers).
 slither_keys() {
+  # Audit LOW (2026-07-05): the key now INCLUDES the finding's start line.
+  # Without it, two distinct findings from the same detector on the same element
+  # (e.g. two reentrancy hits in one function) collapse onto one key, so a NEW
+  # one that lands on an existing baseline key is silently suppressed — a
+  # fail-OPEN on a security gate. Keying with the line makes the diff fail-SAFE:
+  # a real code shift may surface a spurious "new" finding, which just blocks
+  # loudly until the maintainer re-freezes the baseline on the blessed commit
+  # (./pre-deploy-audit.sh --freeze-baseline). A false block is acceptable; a
+  # silently-dropped medium+ is not.
   jq -r '
     (.results.detectors // [])[]
     | select(.impact=="High" or .impact=="Medium")
     | [ .impact, .check,
         (.elements[0].source_mapping.filename_relative // "?"),
-        (.elements[0].name // .elements[0].type // "?") ]
+        (.elements[0].name // .elements[0].type // "?"),
+        ((.elements[0].source_mapping.lines // [])[0] | tostring) ]
     | join("|")
   ' "$1" 2>/dev/null | sort -u
 }
@@ -191,11 +201,34 @@ fi
 # ── verdict + STATE write-back ────────────────────────────────────────────────
 WHEN="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 COMMIT="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?')"
+
+# Replace the content between the New-findings markers in STATE.md with $1.
+# Audit LOW (2026-07-05): a CLEAR run must CLEAR stale BLOCKED findings, not
+# leave them lingering — the block is now rewritten every run (CLEAR wipes it,
+# BLOCKED fills it) so STATE.md always reflects the LAST run, not an old failure.
+# Falls back to an append only if the markers are missing.
+write_findings_block() {
+  local body="$1" bodyfile
+  bodyfile="$(mktemp)"
+  printf '%s\n' "$body" > "$bodyfile"
+  if [[ -f "$STATE_FILE" ]] && grep -q '<!-- BEGIN new-findings -->' "$STATE_FILE"; then
+    # Read the (possibly multi-line) body from a file so awk handles newlines.
+    awk -v bf="$bodyfile" '
+      /<!-- BEGIN new-findings -->/ { print; while ((getline l < bf) > 0) print l; close(bf); skip=1; next }
+      /<!-- END new-findings -->/   { skip=0 }
+      !skip { print }
+    ' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+  else
+    { echo ""; cat "$bodyfile"; } >> "$STATE_FILE"
+  fi
+  rm -f "$bodyfile"
+}
+
 echo "════════════════════════════════════════════════════════════"
 if [[ "${#FAILURES[@]}" -eq 0 ]]; then
   echo " VERDICT: CLEAR TO DEPLOY  (all gates green @ $COMMIT)"
   echo "════════════════════════════════════════════════════════════"
-  # log only; leave 'New findings' as the last failing set is cleared
+  write_findings_block "- _none — last run CLEAR @ $COMMIT ($WHEN)_"
   printf -- '- %s · %s · CLEAR (%d gates)\n' "$WHEN" "$COMMIT" "${#PASSES[@]}" >> "$WORK/runlog.tmp" 2>/dev/null || true
   exit 0
 fi
@@ -203,12 +236,9 @@ fi
 echo " VERDICT: BLOCKED — ${#FAILURES[@]} gate(s) failed. Do NOT deploy."
 echo "════════════════════════════════════════════════════════════"
 
-# Write findings into STATE.md's "New findings — needs human" block (between markers if present,
-# else append). L1: surface only. A human reads this, fixes, re-runs.
-{
-  echo ""
-  echo "### $WHEN · BLOCKED @ $COMMIT"
-  for f in "${FAILURES[@]}"; do echo "- ⛔ $f"; done
-} >> "$STATE_FILE"
-echo "Findings appended to: $STATE_FILE"
+# L1: surface only. A human reads this, fixes, re-runs.
+BLOCK="### $WHEN · BLOCKED @ $COMMIT"
+for f in "${FAILURES[@]}"; do BLOCK="$BLOCK"$'\n'"- ⛔ $f"; done
+write_findings_block "$BLOCK"
+echo "Findings written to: $STATE_FILE"
 exit 1

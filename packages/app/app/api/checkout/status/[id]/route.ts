@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { invoices, relayerQueue } from "@/lib/db/schema";
+import { relayerQueue } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { timingSafeEqual } from "node:crypto";
 
@@ -56,15 +56,17 @@ export async function GET(
   }
   const rows = await db
     .select({
-      status:       relayerQueue.status,
-      invoiceId:    relayerQueue.invoiceId,
-      attempts:     relayerQueue.attempts,
-      swapTxHash:   relayerQueue.swapTxHash,
-      settleTxHash: relayerQueue.settleTxHash,
-      refundTxHash: relayerQueue.refundTxHash,
-      lastError:    relayerQueue.lastError,
-      createdAt:    relayerQueue.createdAt,
-      updatedAt:    relayerQueue.updatedAt,
+      status:               relayerQueue.status,
+      invoiceId:            relayerQueue.invoiceId,
+      attempts:             relayerQueue.attempts,
+      swapTxHash:           relayerQueue.swapTxHash,
+      settleTxHash:         relayerQueue.settleTxHash,
+      refundTxHash:         relayerQueue.refundTxHash,
+      lastError:            relayerQueue.lastError,
+      createdAt:            relayerQueue.createdAt,
+      updatedAt:            relayerQueue.updatedAt,
+      statusToken:          relayerQueue.statusToken,
+      statusTokenExpiresAt: relayerQueue.statusTokenExpiresAt,
     })
     .from(relayerQueue)
     .where(eq(relayerQueue.id, id))
@@ -82,25 +84,17 @@ export async function GET(
   // bare status. The hosted checkout poller forwards the token from the
   // submit response on each poll; SDK consumers do the same.
   // Audit 2026-06-11 HIGH-4: header-only — query strings end up in access logs.
+  // 2026-07-05: the token is bound to THIS submission row (fetched above), not
+  // the invoice — so a later submitter on the same invoice can't read it.
   const presented = req.headers.get("x-status-token");
 
-  let tokenOk = false;
-  if (presented) {
-    const inv = (await db
-      .select({
-        statusToken:          invoices.statusToken,
-        statusTokenExpiresAt: invoices.statusTokenExpiresAt,
-      })
-      .from(invoices)
-      .where(eq(invoices.id, row.invoiceId))
-      .limit(1))[0];
-    if (inv?.statusToken &&
-        inv.statusTokenExpiresAt &&
-        inv.statusTokenExpiresAt.getTime() > Date.now() &&
-        tokensEqual(inv.statusToken, presented)) {
-      tokenOk = true;
-    }
-  }
+  const tokenOk = Boolean(
+    presented &&
+    row.statusToken &&
+    row.statusTokenExpiresAt &&
+    row.statusTokenExpiresAt.getTime() > Date.now() &&
+    tokensEqual(row.statusToken, presented),
+  );
 
   if (!tokenOk) {
     // Public minimum: status only. Even submissionId/invoiceId are arguably

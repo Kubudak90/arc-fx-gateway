@@ -1,13 +1,28 @@
 {
   "name": "@arcora/agent-commerce",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "One command to turn an AI agent into an Arcorapay merchant, plus an MCP server it serves — sell from a catalog and invoice in USDC, payable cross-chain from Base.",
   "license": "MIT",
-  "keywords": ["arcorapay", "mcp", "ai-agent", "usdc", "stablecoin", "payments", "crosschain"],
+  "keywords": [
+    "arcorapay",
+    "mcp",
+    "ai-agent",
+    "usdc",
+    "stablecoin",
+    "payments",
+    "crosschain"
+  ],
   "type": "module",
-  "bin": { "arcora-agent-commerce": "./dist/cli.js" },
-  "files": ["dist", "README.md"],
-  "publishConfig": { "access": "public" },
+  "bin": {
+    "arcora-agent-commerce": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "onboard": "tsx src/cli.ts onboard",
     "serve": "tsx src/cli.ts serve",

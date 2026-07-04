@@ -74,7 +74,11 @@ export async function lookupMerchantByApiKey(key: string) {
   const prefix = key.slice(0, PREFIX_LEN);
   const candidates = await db.select().from(merchants).where(eq(merchants.apiKeyPrefix, prefix));
   for (const m of candidates) {
-    if (await verifyApiKey(key, m.apiKeyHash)) return m;
+    // 2026-07-04: deactivated_at existed in the schema but no lookup enforced
+    // it — deactivateMerchant was a UI label, not a kill switch. A deactivated
+    // merchant's keys now authenticate nothing; the SIWE dashboard session is
+    // unaffected, so they still see the "deactivated since X" notice.
+    if (await verifyApiKey(key, m.apiKeyHash)) return m.deactivatedAt ? null : m;
   }
   return null;
 }
@@ -92,7 +96,8 @@ export async function lookupMerchantByPublishableKey(key: string) {
     .from(merchants)
     .where(eq(merchants.publishableKeyPrefix, prefix));
   for (const m of candidates) {
-    if (m.publishableKey && keysEqual(m.publishableKey, key)) return m;
+    // 2026-07-04: same deactivation kill switch as the secret-key path.
+    if (m.publishableKey && keysEqual(m.publishableKey, key)) return m.deactivatedAt ? null : m;
   }
   return null;
 }

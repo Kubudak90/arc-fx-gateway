@@ -195,3 +195,25 @@ describe("publishable api key (AFG-019)", () => {
     expect(await lookupMerchantByPublishableKey(pk)).toBeNull();
   });
 });
+
+// 2026-07-04: deactivated_at must be a kill switch, not a dashboard label —
+// neither key class may authenticate a deactivated merchant.
+describe("deactivated merchant lookups (2026-07-04)", () => {
+  it("secret AND publishable lookups return null once deactivated_at is set", async () => {
+    const ak = generateApiKey();
+    const pk = generatePublishableKey();
+    await db.insert(merchants).values({
+      address: "0x" + "a1".repeat(20),
+      payoutToken: "0x" + "b1".repeat(20),
+      apiKeyHash: await hashApiKey(ak),
+      apiKeyPrefix: ak.slice(0, 12),
+      publishableKey: pk,
+      publishableKeyPrefix: pk.slice(0, 12),
+      webhookSecretEnc: Buffer.alloc(48),
+      webhookSecretIv: Buffer.alloc(12),
+      deactivatedAt: new Date(),
+    });
+    expect(await lookupMerchantByApiKey(ak)).toBeNull();
+    expect(await lookupMerchantByPublishableKey(pk)).toBeNull();
+  });
+});

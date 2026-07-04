@@ -30,6 +30,12 @@ export default function DocsIndex() {
         Swap if needed, and calls <code>settleInvoice</code> on the gateway to deliver the merchant&apos;s preferred
         stablecoin minus the protocol fee.
       </p>
+      <p>
+        A feature-flagged v2 extends this cross-chain without custody: the buyer deposits USDC into a per-chain
+        <code>PaymentEscrow</code> on whatever chain they pay from, and a keeper routes it to Arc over CCTP V2 (the
+        relayer never holds funds). It&apos;s integrated behind <code>V2_ENABLED</code> and rolling out on testnet;
+        the live path today is the custodial gateway described above.
+      </p>
 
       <h2>What you build with Arcora</h2>
       <ul>

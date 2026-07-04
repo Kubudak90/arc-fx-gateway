@@ -28,6 +28,7 @@ const COLUMNS: FooterColumn[] = [
       { label: "GitHub", href: "https://github.com/arcoralabs/arcorapay", external: true },
       { label: "@arcora/sdk", href: "https://www.npmjs.com/package/@arcora/sdk", external: true },
       { label: "@arcora/sdk-react", href: "https://www.npmjs.com/package/@arcora/sdk-react", external: true },
+      { label: "@arcora/agent-commerce", href: "https://www.npmjs.com/package/@arcora/agent-commerce", external: true },
       { label: "Releases", href: "https://github.com/arcoralabs/arcorapay/releases", external: true },
     ],
   },

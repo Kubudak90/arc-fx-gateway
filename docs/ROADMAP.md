@@ -74,8 +74,6 @@ active surface.
 - **Observability + failover maturation.** Multi-relayer with rolling
   failover (today: single-instance relayer on one VPS), longer webhook retry
   policy, deeper health/queue metrics on top of the new health-check cron.
-- **npm publish of `@arcora/sdk` / `@arcora/sdk-react` 1.2.0.** Both are
-  version-synced in-tree; the publish step is pending.
 - **Shopify plugin** — same shape as the WooCommerce one.
 
 ---

@@ -48,6 +48,7 @@ const TRUST_ITEMS = [
   "SIWE merchant auth",
   "Elliptic / TRM screening",
   "WooCommerce plugin",
+  "MCP agent tools",
   "Open-source SDK",
 ];
 
@@ -56,7 +57,7 @@ const STEPS = [
     n: "01",
     title: "Merchant creates an invoice",
     body: "Three-line SDK call or one click in the dashboard. Set the amount, the stablecoin you want to receive, and the success URL — Arcora returns a hosted checkout link.",
-    code: `await Arcora.createInvoice({\n  amountUsdc: 49.99,\n  payInToken: "EURC",\n  successUrl: "...",\n});`,
+    code: `await arcora.createInvoice({\n  amount: "49.99",\n  currency: "EURC",\n  successUrl: "...",\n});`,
   },
   {
     n: "02",
@@ -94,10 +95,16 @@ const ROADMAP_ITEMS: Array<{ tag: string; phase: Phase; title: string; body: str
     body: "Internal-audit findings remediated off-chain, browser-safe publishable keys, rate limiting + SSRF guards, UI v2 redesign — public testnet beta live at arcorapay.xyz.",
   },
   {
+    tag: "agents",
+    phase: "shipped",
+    title: "Agent commerce & MCP",
+    body: "Any MCP-capable agent onboards as a merchant with one npx command — @arcora/agent-commerce provisions a wallet + key and serves Arcora checkout as MCP tools (list_catalog, create_invoice, refunds to the original payer). Published on npm; runs on Arc testnet.",
+  },
+  {
     tag: "v2.0",
     phase: "next",
-    title: "Crosschain checkout via App Kit Bridge",
-    body: "Customer pays USDC from another chain, merchant still settles on Arc. Feature-flagged demo in development against Sepolia / Base Sepolia, CCTP attestation flow.",
+    title: "Crosschain checkout — pay from any chain",
+    body: "Customer pays USDC from another chain, merchant still settles on Arc. Cross-chain pay-in from Base Sepolia is live end-to-end over CCTP; the no-custody, chain-agnostic router — buyer deposits into a per-chain PaymentEscrow, a keeper routes Path A/B/C — is integrated and feature-flagged on testnet.",
   },
   {
     tag: "T-0",
@@ -340,6 +347,62 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Agent commerce ───────────────────────────────────────────────── */}
+      <section className="section">
+        <div className="wrap">
+          <div className="sdk-grid grid items-center" style={{ gridTemplateColumns: "1fr 1fr", gap: 56 }}>
+            <div>
+              <p className="eyebrow eyebrow--acc mb-4">Agent commerce</p>
+              <h2 className="disp mb-4" style={{ fontSize: "clamp(28px, 3.8vw, 44px)" }}>
+                AI agents sell with <em>one command.</em>
+              </h2>
+              <p className="lead mb-6 max-w-[460px] text-[15.5px]">
+                No global install. <code className="mono" style={{ color: "var(--fg-1)" }}>npx @arcora/agent-commerce onboard</code>{" "}
+                provisions a wallet and key; <code className="mono" style={{ color: "var(--fg-1)" }}>serve</code> exposes
+                Arcora checkout as MCP tools — list a catalog, mint an invoice, track settlement, refund the original
+                payer. Works with any MCP-capable agent (Claude, Hermes, custom agents).
+              </p>
+              <div className="flex flex-wrap gap-2.5">
+                <Link href={"/docs/agents" as Route} className="pill pill--acc pill--sm">Read the agent docs →</Link>
+                <a
+                  href="https://www.npmjs.com/package/@arcora/agent-commerce"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pill pill--ghost pill--sm"
+                >
+                  <span className="mono" style={{ color: "var(--fg-3)" }}>npm</span> @arcora/agent-commerce
+                </a>
+              </div>
+            </div>
+            <div className="card p-7" style={{ boxShadow: "var(--elev-2)" }}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="eyebrow">MCP server · stdio</span>
+                <span className="tagchip tagchip--mut">Arc testnet</span>
+              </div>
+              <div className="code-pane px-4 py-3.5">
+                {[
+                  { t: "$ npx -y @arcora/agent-commerce onboard", acc: false },
+                  { t: "$ npx -y @arcora/agent-commerce serve", acc: false },
+                  { t: "", acc: false },
+                  { t: "→ list_catalog", acc: true },
+                  { t: "→ create_invoice(itemId)", acc: true },
+                  { t: "→ get_checkout_status(invoiceId)", acc: true },
+                  { t: "→ refund_invoice(invoiceId)", acc: true },
+                ].map((l, i) => (
+                  <div
+                    key={i}
+                    className="mono text-[12px] leading-[1.9]"
+                    style={{ color: l.acc ? "var(--sage)" : "var(--fg-3)" }}
+                  >
+                    {l.t || " "}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Roadmap ──────────────────────────────────────────────────────── */}
       <section id="roadmap" className="section scroll-mt-20">
         <div className="wrap">
@@ -375,16 +438,20 @@ export default function Home() {
           <div className="mb-2 flex flex-wrap items-baseline gap-3">
             <span className="mono text-[14px] font-semibold tabular-nums">v2.0</span>
             <PhaseBadge phase="next" />
-            <span className="eyebrow ml-auto">In development · Feature-flagged demo</span>
+            <span className="eyebrow ml-auto">Feature-flagged · rolling out on testnet</span>
           </div>
           <h2 className="disp mb-3.5 max-w-[640px]" style={{ fontSize: "clamp(28px, 3.6vw, 38px)" }}>
             Customer pays from anywhere. Merchant settles on Arc.
           </h2>
           <p className="lead mb-9 max-w-[640px] text-[15.5px]">
-            v2.0 wires CCTP into the gateway: a customer with USDC on Ethereum, Arbitrum, Base,
-            Optimism, Polygon, or any other CCTP-supported chain pays as if they were already on
-            Arc. Arcora burns on the source, mints on Arc, runs the merchant&apos;s preferred swap,
-            and emits the same <code className="mono text-[13px]" style={{ color: "var(--sage)" }}>InvoicePaid</code> event the v1 indexer already understands.
+            v2.0 is a no-custody, chain-agnostic router. A customer with USDC on Base Sepolia — and, as more
+            chains light up, any CCTP-supported chain — deposits into a{" "}
+            <code className="mono text-[13px]" style={{ color: "var(--sage)" }}>PaymentEscrow</code> on the chain
+            they&apos;re already on. A keeper picks the route — same-chain, cross-chain USDC, or cross-chain token —
+            over CCTP V2 and settles on Arc, never taking custody of funds; refunds self-route back to the payer on
+            the chain they paid from. Settlement emits the same{" "}
+            <code className="mono text-[13px]" style={{ color: "var(--sage)" }}>InvoicePaid</code> event the v1
+            indexer already understands. Feature-flagged, rolling out on testnet.
           </p>
 
           <div className="card p-7" style={{ boxShadow: "var(--elev-2)" }}>

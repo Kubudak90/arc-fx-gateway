@@ -22,14 +22,21 @@ export default function RestApiDocs() {
       <pre><code>{`POST /api/invoices HTTP/1.1
 Content-Type: application/json
 X-Arcora-Api-Key: ak_live_...
+Idempotency-Key: order-123        # optional — a retried create returns the same invoice
 
 {
-  "amountUsdc":  49.99,
-  "payInToken":  "EURC",
+  "amount":      "49.99",
+  "currency":    "EURC",
   "successUrl":  "https://yourshop.com/order/123/success",
   "cancelUrl":   "https://yourshop.com/order/123/cancel",
   "metadata":    { "orderId": "123" }
 }`}</code></pre>
+      <p>
+        <code>amount</code> is a decimal string in major units (no floats); <code>currency</code> is the merchant payout
+        stablecoin (<code>USDC</code> | <code>EURC</code> | <code>USDT</code>, default <code>USDC</code>) — the buyer
+        always locks USDC. Send an <code>Idempotency-Key</code> header to make a retried create safe. The legacy body{" "}
+        <code>{`{ "amountUsdc": 49.99, "payInToken": "EURC" }`}</code> is still accepted for back-compat.
+      </p>
       <p>
         Routes to the live custody-escrow gateway (<code>ArcFXGateway</code> at{" "}
         <code>0x07BAC123…aE3a3</code>). The legacy <code>?engine=</code> selector is gone

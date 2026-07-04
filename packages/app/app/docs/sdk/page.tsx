@@ -18,11 +18,17 @@ export default function SdkDocs() {
           <tr><th>Package</th><th>Use it for</th><th>Version</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>@arcora/sdk</code></td><td>Browser or server-side invoice creation, hosted-checkout redirect, escrow listing</td><td><code>1.2.0</code></td></tr>
-          <tr><td><code>@arcora/sdk-react</code></td><td>React hook and one-click button that wrap the SDK for embedded checkout</td><td><code>1.2.0</code></td></tr>
+          <tr><td><code>@arcora/sdk</code></td><td>Browser or server-side invoice creation, hosted-checkout redirect, escrow listing, webhook verification</td><td><code>1.4.0</code></td></tr>
+          <tr><td><code>@arcora/sdk-react</code></td><td>React hook and one-click button that wrap the SDK for embedded checkout</td><td><code>1.4.1</code></td></tr>
         </tbody>
       </table>
-      <p>Webhook verification is signature-only and stays out of the SDK on purpose — three lines of <code>crypto.createHmac</code> work in any runtime; see <a href="/docs/webhooks">/docs/webhooks</a> for the snippet.</p>
+      <p>
+        Webhook verification ships in the SDK since <code>1.3.0</code>:{" "}
+        <code>{`import { verifyWebhook } from "@arcora/sdk/webhook"`}</code> enforces the replay window and compares in
+        constant time, and is <strong>fail-closed</strong> — a missing or mismatched signature returns{" "}
+        <code>false</code>. Runtimes without the SDK can reproduce the same HMAC in a few lines of{" "}
+        <code>node:crypto</code>; see <a href="/docs/webhooks">/docs/webhooks</a> for both.
+      </p>
 
       <h2>Two key types — publishable vs secret</h2>
       <table>
@@ -51,16 +57,22 @@ const arcora = new Arcora({
   apiKey:      string,                     // required — publishable pk_live_… in the browser, secret ak_live_… on a server
   environment?: 'testnet' | 'mainnet',    // default 'testnet'; selects the base URL
   baseUrl?:    string,                     // override for self-hosted deployments
+  timeoutMs?:  number,                     // per-request timeout; default 30000 — a hung server rejects with code 'TIMEOUT'
 });`}</code></pre>
       <p>The legacy <code>Arcora.init(...)</code> / <code>Arcora.createInvoice(...)</code> singleton API is still exported for the CDN bundle but tagged <code>@deprecated</code> — use the instance API for any new code so multiple merchants in one process can&apos;t cross-contaminate state.</p>
 
       <h3><code>arcora.createInvoice(params)</code></h3>
       <pre><code>{`const invoice = await arcora.createInvoice({
-  amountUsdc: number,                      // gross amount in USD-equivalent (1 = $1.00)
-  payInToken: 'USDC' | 'EURC',             // what the customer will pay with
+  amount:      string,                     // amount in major units as a DECIMAL STRING, e.g. '49.99' (no floats)
+  currency?:   'USDC' | 'EURC' | 'USDT',   // merchant payout currency; default 'USDC'
+  idempotencyKey?: string,                 // sent as the Idempotency-Key header; a retried create never duplicates
   successUrl:  string,                     // required — http(s) where to send the customer after payment
   cancelUrl?:  string,                     // http(s) — same allowlist + SSRF guard
   metadata?:   Record<string, string>,     // attached to invoice + webhook payloads
+
+  // Deprecated v1 amount form — prefer amount/currency above. The buyer always locks USDC.
+  amountUsdc?: number,                     // @deprecated — gross amount as a number (1 = $1.00)
+  payInToken?: 'USDC' | 'EURC',            // @deprecated — ignored on the v2 path
 });
 
 // Returns:
@@ -68,9 +80,11 @@ const arcora = new Arcora({
 //   url:       'https://arcorapay.xyz/i/0x…',
 //   claimableAt?: '2026-05-20T…' }       // custody escrow — populated once the invoice is paid`}</code></pre>
       <p>
-        Throws <code>ArcoraError</code> with a typed <code>code</code> on validation, network, server, or auth failures.
-        Invalid <code>amountUsdc</code> (non-finite, ≤0) is rejected client-side before the request fires. A missing or
-        non-http(s) <code>successUrl</code> is likewise rejected client-side with <code>INVALID_URL</code>.
+        Supply exactly one amount form — the SDK sends the v2 request when <code>amount</code> is present, otherwise the
+        legacy v1 request. Throws <code>ArcoraError</code> with a typed <code>code</code> on validation, network, server,
+        or auth failures. An <code>amount</code> that isn&apos;t a positive decimal string (and a legacy{" "}
+        <code>amountUsdc</code> that&apos;s non-finite or ≤0) is rejected client-side before the request fires; a missing
+        or non-http(s) <code>successUrl</code> is likewise rejected client-side with <code>INVALID_URL</code>.
       </p>
       <p>
         <strong>Note:</strong> the SDK requires <code>successUrl</code>. Standalone invoices (no redirect — the invoice
@@ -94,12 +108,13 @@ const arcora = new Arcora({
       <pre><code>{`import { Arcora, ArcoraError } from '@arcora/sdk';
 
 try {
-  await arcora.createInvoice({ amountUsdc: 49.99, payInToken: 'EURC', successUrl: '...' });
+  await arcora.createInvoice({ amount: '49.99', currency: 'EURC', successUrl: '...' });
 } catch (e) {
   if (e instanceof ArcoraError) {
     // e.code is one of: 'INVALID_API_KEY' | 'NETWORK' | 'SERVER_ERROR'
     //                   | 'INVALID_URL'    | 'TIMEOUT' | 'NO_SECURE_RANDOM'
-    //                   | 'PUBLISHABLE_KEY_FORBIDDEN' | 'UNKNOWN'
+    //                   | 'PUBLISHABLE_KEY_FORBIDDEN' | 'SECRET_KEY_IN_BROWSER'
+    //                   | 'UNKNOWN'
     // e.retryAfter (seconds) is set on SERVER_ERROR when the server returned Retry-After
   }
 }`}</code></pre>
@@ -116,8 +131,8 @@ function PayButton() {
 
   return (
     <button onClick={() => checkout({
-      amountUsdc: 4.50,
-      payInToken: 'EURC',
+      amount: '4.50',
+      currency: 'EURC',
       successUrl: window.location.origin + '/orders/done',
     })} disabled={loading}>
       {loading ? 'Loading…' : 'Pay €4.50'}
@@ -136,7 +151,7 @@ function PayButton() {
 <CheckoutButton
   apiKey={process.env.NEXT_PUBLIC_ARCORA_PUBLISHABLE_KEY!}
   environment="testnet"
-  invoice={{ amountUsdc: 49.99, payInToken: 'EURC', successUrl: '...' }}
+  invoice={{ amount: '49.99', currency: 'EURC', successUrl: '...' }}
   className="btn-primary"
 >
   Pay $49.99
@@ -147,7 +162,7 @@ function PayButton() {
       <p>
         Full type definitions ship in the package&apos;s <code>dist/index.d.ts</code>: <code>Arcora</code>,
         <code>ArcoraError</code>, <code>CreateInvoiceParams</code>, <code>Invoice</code>, <code>EscrowSummary</code>,
-        <code>InitOptions</code>, <code>Environment</code>, <code>PayInToken</code>. The contract ABI is also
+        <code>InitOptions</code>, <code>Environment</code>, <code>Currency</code>, <code>PayInToken</code>. The contract ABI is also
         re-exported as <code>gatewayAbi</code> / <code>GATEWAY_ABI</code> for callers building their own viem clients.
       </p>
     </DocsShell>

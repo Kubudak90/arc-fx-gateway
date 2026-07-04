@@ -28,6 +28,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
       { href: "/docs/sdk", label: "SDK" },
       { href: "/docs/rest-api", label: "REST API" },
       { href: "/docs/webhooks", label: "Webhooks" },
+      { href: "/docs/agents", label: "Agents & MCP" },
       { href: "/docs/tokens", label: "Token reference" },
       { href: "/docs/errors", label: "Errors" },
     ],

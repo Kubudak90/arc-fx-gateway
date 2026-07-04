@@ -13,10 +13,10 @@ const CODE = `import { Arcora } from '@arcora/sdk';
 
 const arcora = new Arcora({ apiKey: process.env.ARCORA_KEY });
 
-// Create an invoice — customer pays EURC, you settle in your payout stable
+// Create an invoice — you settle in EURC, the buyer always locks USDC
 const invoice = await arcora.createInvoice({
-  amountUsdc: 49.00,
-  payInToken: 'EURC',
+  amount: '49.00',
+  currency: 'EURC',
   successUrl: 'https://shop.example.com/ok',
   metadata: { orderId: 'ord_8124' },
 });

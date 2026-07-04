@@ -289,11 +289,13 @@ X-Arcora-Signature: sha256=<hex>
 
 Verification is three lines of `crypto.createHmac('sha256', secret).update(rawBody)` with a constant-time compare. A WordPress plugin (`arcora-woocommerce`) ships in-tree; Shopify is on the roadmap.
 
+**Agent commerce.** `@arcora/agent-commerce` (published on npm) lets any MCP-capable agent onboard as a merchant with a single `npx … onboard` and then `serve` Arcora checkout as Model Context Protocol tools — `list_catalog`, `create_invoice`, `get_checkout_status`, and `refund_invoice` (refunds return only to the original payer). Testnet, same rails as the hosted checkout.
+
 ---
 
 ## 9. Live deployment
 
-**Status.** v1.2 is the current release. The public testnet beta is live at [arcorapay.xyz](https://arcorapay.xyz), running the UI v2 redesign (deployed 2026-06-10) with terms of service, privacy policy, a `/api/health` uptime endpoint, and ops health monitoring on the off-chain daemons. `@arcora/sdk` and `@arcora/sdk-react` are version-synced at 1.2.0 in-tree; the npm publish of 1.2.0 is pending (1.0.0 is the latest published version).
+**Status.** v1.2 is the current release. The public testnet beta is live at [arcorapay.xyz](https://arcorapay.xyz), running the UI v2 redesign (deployed 2026-06-10) with terms of service, privacy policy, a `/api/health` uptime endpoint, and ops health monitoring on the off-chain daemons. `@arcora/sdk` (1.4.0) and `@arcora/sdk-react` (1.4.1) are published on npm.
 
 **Arc testnet** (chain id 5042002, RPC `https://rpc.testnet.arc.network`, explorer `https://testnet.arcscan.app`):
 

@@ -23,7 +23,7 @@ export default function DeploymentDocs() {
         <tbody>
           <tr><td><code>packages/app</code> (Next.js on Vercel)</td><td>Hosted checkout, merchant dashboard, REST API</td></tr>
           <tr><td><code>packages/contracts</code> (Foundry)</td><td><code>ArcFXGateway</code> — custody-escrow gateway. Live testnet deployment at <code>0x07BAC123…aE3a3</code> (recorded in <code>packages/contracts/deployments/arc-testnet.json</code>); deployed via <code>script/Deploy.s.sol</code></td></tr>
-          <tr><td><code>ops/relayer</code> (single VPS)</td><td>Drains the Permit2 queue, runs <code>kit.swap</code>, calls <code>settleInvoice</code></td></tr>
+          <tr><td><code>ops/relayer</code> (single VPS)</td><td>Drains the Permit2 queue, runs <code>kit.swap</code>, calls <code>settleInvoice</code>. A feature-flagged v2 mode (<code>V2_ENABLED</code>) turns it into a no-custody keeper that only relays CCTP V2 attestations — rolling out on testnet.</td></tr>
           <tr><td><code>ops/indexer</code> (same VPS)</td><td>Watches gateway events, writes invoice status, enqueues webhooks</td></tr>
           <tr><td>Postgres (Supabase or self-hosted)</td><td>Invoices, queue, merchant rows, compliance audit log</td></tr>
         </tbody>

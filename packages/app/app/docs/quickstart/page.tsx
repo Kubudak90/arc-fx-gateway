@@ -37,59 +37,44 @@ npm install @arcora/sdk-react`}</code></pre>
 const arcora = new Arcora({ apiKey: process.env.ARCORA_API_KEY });
 
 const invoice = await arcora.createInvoice({
-  amountUsdc:  49.99,
-  payInToken:  'EURC',
+  amount:      '49.99',
+  currency:    'EURC',
   successUrl:  'https://yourshop.com/order/123/success',
   cancelUrl:   'https://yourshop.com/order/123/cancel',
   metadata:    { orderId: '123' },
+  idempotencyKey: 'order-123',
 });
 
 // Send the customer here:
 console.log(invoice.url);
 // https://arcorapay.xyz/i/0x4f3a...`}</code></pre>
       <p>
-        <code>amountUsdc</code> is the gross amount your customer will pay, denominated in your payout-token&apos;s
-        USD-equivalent. The pay-in token is what the customer pays <em>with</em> — Arcora handles the FX.
+        <code>amount</code> is the gross charge as a decimal string in major units (no floats). <code>currency</code> is
+        the stablecoin you&apos;re paid out in (default <code>USDC</code>) — the buyer always locks USDC and Arcora
+        handles the FX. Pass an <code>idempotencyKey</code> so a retried create never duplicates the invoice.
       </p>
 
       <h2>3. Receive the webhook</h2>
       <p>
         Configure a webhook URL in <code>/m/settings</code>. Every delivery is dual-signed with the secret you set
         there: a legacy <code>X-Arcora-Signature</code> and a timestamp-bound <code>X-Arcora-Signature-V2</code> (paired
-        with <code>X-Arcora-Timestamp</code>) for replay protection. Both header values carry a <code>sha256=</code>{" "}
-        prefix — compare against the whole value. Prefer V2 when present and reject deliveries outside a ±300s window.
-        Verification is plain <code>node:crypto</code> — deliberately not an SDK method, so it works in any runtime
-        (see <Link href={"/docs/webhooks" as Route}>Webhooks</Link> for details).
+        with <code>X-Arcora-Timestamp</code>) for replay protection. The SDK (≥ 1.3.0) ships an official verifier at{" "}
+        <code>@arcora/sdk/webhook</code> that checks the V2 signature in constant time and rejects anything outside a
+        ±300s replay window. It is <strong>fail-closed</strong> — a missing or mismatched signature returns{" "}
+        <code>false</code> rather than throwing (see <Link href={"/docs/webhooks" as Route}>Webhooks</Link> for details).
       </p>
-      <pre><code>{`import { createHmac, timingSafeEqual } from 'node:crypto';
-
-const TOLERANCE_SECONDS = 300; // ±5 min replay window
-
-function safeEqual(a: string, b: string) {
-  const ab = Buffer.from(a), bb = Buffer.from(b);
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
-}
-
-function verifyWebhook(headers: Headers, rawBody: string, secret: string) {
-  const sigV2 = headers.get('x-arcora-signature-v2');
-  const ts    = headers.get('x-arcora-timestamp');
-  if (sigV2 && ts) { // prefer V2: timestamp-bound, replay-protected
-    const n = Number(ts);
-    if (!Number.isFinite(n) || Math.abs(Date.now() / 1000 - n) > TOLERANCE_SECONDS) return false;
-    const expected = 'sha256=' + createHmac('sha256', secret).update(ts + '.' + rawBody).digest('hex');
-    return safeEqual(expected, sigV2);
-  }
-  const sig = headers.get('x-arcora-signature') ?? ''; // legacy fallback (no replay protection)
-  const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
-  return safeEqual(expected, sig);
-}
+      <pre><code>{`import { verifyWebhook } from '@arcora/sdk/webhook';
 
 export async function POST(req: Request) {
   const rawBody = await req.text();
 
-  if (!verifyWebhook(req.headers, rawBody, process.env.ARCORA_WEBHOOK_SECRET!)) {
-    return new Response('Bad signature', { status: 400 });
-  }
+  const ok = verifyWebhook({
+    body:      rawBody,                                        // raw string — never a re-stringified JSON object
+    signature: req.headers.get('x-arcora-signature-v2') ?? '', // timestamp-bound, replay-protected
+    timestamp: req.headers.get('x-arcora-timestamp') ?? '',
+    secret:    process.env.ARCORA_WEBHOOK_SECRET!,
+  });
+  if (!ok) return new Response('Bad signature', { status: 400 }); // fail-closed
 
   const event = JSON.parse(rawBody);
 
@@ -104,6 +89,11 @@ export async function POST(req: Request) {
   }
   return new Response('ok');
 }`}</code></pre>
+      <p>
+        On a runtime without the SDK, reproduce the same check with any HMAC-SHA256 primitive over{" "}
+        <code>&lt;timestamp&gt;.&lt;rawBody&gt;</code> and a constant-time compare — the equivalent{" "}
+        <code>node:crypto</code> snippet is in <Link href={"/docs/webhooks" as Route}>Webhooks</Link>.
+      </p>
 
       <h2>4. Test it</h2>
       <p>

@@ -995,10 +995,20 @@ async function receiveCrosschainMessage(
     logs: receipt.logs,
     strict: false,
   });
-  // Accept the mint if it lands on EITHER the env-derived relayer address OR
-  // the recipient embedded in the stored intent (bytes32 mint_recipient) —
-  // self-heals app/relayer env skew so funds already minted on Arc aren't stranded.
-  const intentRecipient = "0x" + row.mint_recipient.slice(-40);
+  // Audit M1 (2026-07-04): accept the mint ONLY when it lands on the Vault-
+  // derived relayer address — the address this process actually controls.
+  //
+  // The previous `|| to === intentRecipient` (mint_recipient from the DB row)
+  // was a fund-safety hole: settleCrosschainOnArc pays the merchant out of the
+  // relayer's OWN float, so treating a mint that landed on a DB-supplied address
+  // as "received" lets a tampered `mint_recipient` (direct DB edit / MITM — the
+  // same threat model AFG-010 defends for the gateway address) drain the hot
+  // wallet while the CCTP-minted USDC sits in the attacker's address. In correct
+  // operation the app pins the CCTP mintRecipient to NEXT_PUBLIC_RELAYER_ADDRESS,
+  // which the boot parity guard forces to equal RELAYER_ADDR — so the two were
+  // only ever allowed to differ under env skew, which is an incident to resolve
+  // manually (funds recoverable via the stale key), NOT to auto-settle from float.
+  //
   // Audit LOW-5 (2026-06-11): the accepted mint must clear 98% of the
   // source burn (2% CCTP fast-transfer fee tolerance) instead of the old
   // `> 0n` bound, so a dust Transfer in the receipt can never be picked up
@@ -1009,7 +1019,7 @@ async function receiveCrosschainMessage(
     const to = event.args.to?.toLowerCase();
     return event.address.toLowerCase() === row.destination_token.toLowerCase()
       && event.args.from?.toLowerCase() === "0x0000000000000000000000000000000000000000"
-      && (to === RELAYER_ADDR.toLowerCase() || to === intentRecipient)
+      && to === RELAYER_ADDR.toLowerCase()
       && (event.args.value ?? 0n) >= minMint;
   });
   if (!mint?.args.value) {

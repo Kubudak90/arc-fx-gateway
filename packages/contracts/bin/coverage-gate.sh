@@ -55,6 +55,16 @@ awk '
   }
 ' "$LCOV" | {
   read -r LINE_PCT BRANCH_PCT LH LF BRH BRF
+  # Audit M4 (2026-07-04): a vacuous pass guard. If no audit-scope SF line
+  # matched (LF/BRF sum to 0), the awk END defaults the percentages to 100 and
+  # the gate would PASS having measured nothing — e.g. when `forge coverage`
+  # emits the path as `packages/contracts/src/ArcFXGateway.sol` (run from repo
+  # root) or after a remapping change, so the exact `SF:src/ArcFXGateway.sol`
+  # pattern misses. Treat "zero scope lines" as a hard error, never a pass.
+  if [[ "${LF:-0}" -eq 0 || "${BRF:-0}" -eq 0 ]]; then
+    echo "::error::coverage-gate: no audit-scope coverage matched in $LCOV (LF=${LF:-0} BRF=${BRF:-0}) — lcov path drift or empty coverage; refusing to pass vacuously" >&2
+    exit 2
+  fi
   printf "Audit-scope coverage:\n"
   printf "  Lines    : %s%% (%s/%s)  [floor %s · target %s]\n" "$LINE_PCT"   "$LH"  "$LF"  "$LINE_FLOOR"   "$LINE_TARGET"
   printf "  Branches : %s%% (%s/%s)  [floor %s · target %s]\n" "$BRANCH_PCT" "$BRH" "$BRF" "$BRANCH_FLOOR" "$BRANCH_TARGET"

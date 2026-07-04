@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { listCatalogTool, createInvoiceTool, checkoutStatusTool, refundInvoiceTool } from "../src/tools";
 import { buildServer } from "../src/server";
+import { RefundGuard } from "../src/refund-guard";
 
 const fakeItem = { id: "logo-pack", name: "AI Logo Pack", description: "x", priceUsdc: 5, emoji: "🎨" };
 
@@ -79,6 +80,53 @@ describe("refundInvoiceTool", () => {
     const r = await refundInvoiceTool(refunder, { invoiceId: "bad" });
     expect(r.isError).toBe(true);
     expect(r.content[0]!.text).toContain("invalid_invoice_id");
+  });
+});
+
+describe("RefundGuard (Audit M6 — refund authorization boundary)", () => {
+  const ID_A = "0x" + "a".repeat(64);
+  const ID_B = "0x" + "b".repeat(64);
+
+  it("refuses an invoice not created in this session (blocks injected arbitrary ids)", () => {
+    const guard = new RefundGuard();
+    const v = guard.check(ID_A);
+    expect(v.ok).toBe(false);
+    if (!v.ok) expect(v.reason).toContain("not_in_session");
+  });
+
+  it("allows a refund for an invoice this session created", () => {
+    const guard = new RefundGuard();
+    guard.recordCreated(ID_A);
+    expect(guard.check(ID_A)).toEqual({ ok: true });
+  });
+
+  it("matches ids case-insensitively", () => {
+    const guard = new RefundGuard();
+    guard.recordCreated(ID_A.toUpperCase());
+    expect(guard.check(ID_A.toLowerCase()).ok).toBe(true);
+  });
+
+  it("does not consume a rate-limit slot on a refused (not-in-session) check", () => {
+    let t = 1_000;
+    const guard = new RefundGuard({ maxPerWindow: 1, now: () => t });
+    guard.recordCreated(ID_A);
+    // 10 refused attempts for an unknown id must not exhaust the budget...
+    for (let i = 0; i < 10; i++) expect(guard.check(ID_B).ok).toBe(false);
+    // ...the one allowed refund still goes through.
+    expect(guard.check(ID_A).ok).toBe(true);
+  });
+
+  it("rate-limits allowed refunds within the window, then recovers after it passes", () => {
+    let t = 1_000;
+    const guard = new RefundGuard({ maxPerWindow: 2, windowMs: 60_000, now: () => t });
+    guard.recordCreated(ID_A);
+    expect(guard.check(ID_A).ok).toBe(true); // 1
+    expect(guard.check(ID_A).ok).toBe(true); // 2
+    const limited = guard.check(ID_A); // 3 → over limit
+    expect(limited.ok).toBe(false);
+    if (!limited.ok) expect(limited.reason).toContain("rate_limited");
+    t += 60_001; // advance past the window
+    expect(guard.check(ID_A).ok).toBe(true);
   });
 });
 

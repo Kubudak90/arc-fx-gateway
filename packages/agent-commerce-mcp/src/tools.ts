@@ -22,9 +22,13 @@ export async function listCatalogTool(commerce: CommerceLike): Promise<ToolResul
 export async function createInvoiceTool(
   commerce: CommerceLike,
   args: { itemId: string },
+  onCreated?: (invoiceId: string) => void,
 ): Promise<ToolResult> {
   try {
     const r = await commerce.createInvoiceForItem(args.itemId);
+    // Audit M6: record the id so refund_invoice can later authorize a refund
+    // only for invoices this session actually created.
+    onCreated?.(r.invoiceId);
     return {
       content: [
         {

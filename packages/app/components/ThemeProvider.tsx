@@ -7,7 +7,7 @@ export function ThemeProvider({ children, nonce }: { children: ReactNode; nonce?
   return (
     <NextThemeProvider
       attribute="data-theme"
-      defaultTheme="dark"
+      defaultTheme="light"
       enableSystem={false}
       storageKey="arcora-theme"
       disableTransitionOnChange

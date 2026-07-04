@@ -26,7 +26,7 @@
  */
 
 import {
-  createPublicClient, createWalletClient, http, parseAbi, parseEventLogs,
+  createPublicClient, createWalletClient, http, parseAbi, parseEventLogs, pad,
   type Address, type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -35,7 +35,7 @@ import { createViemAdapterFromPrivateKey } from "@circle-fin/adapter-viem-v2";
 import pg from "pg";
 import {
   chainById, parseChainRegistryJson,
-  type ChainRegistry, type CrosschainState,
+  type ChainRegistry, type CctpChainConfig, type CrosschainState,
 } from "@arcora/crosschain-core";
 import { fetchPrivateKeyFromVault } from "./vault-signer";
 import { buildOpsPoolConfig, describeDbTls, assertSecureDbTls } from "./db";
@@ -45,6 +45,9 @@ import { buildSettleArgs, tokenSymbolForArcAddress } from "./arc-settlement";
 import { processCrosschainPayment } from "./crosschain-worker";
 import type { CrosschainPaymentRow, CrosschainWorkerDeps } from "./crosschain-types";
 import { processSettlementsOnce } from "./v2-keeper";
+import { decidePayoutAction } from "./payout-worker";
+import type { CrosschainPayoutRow, PayoutIrisResult } from "./payout-types";
+import { parsePayoutChains, assertEnabledPayoutChains } from "./payout-config";
 
 const RPC           = need("ARC_TESTNET_RPC");
 const PG_URL        = need("POSTGRES_URL_NON_POOLING");
@@ -86,6 +89,37 @@ const CROSSCHAIN_RETRY_MAX_MS  = Number(process.env.CROSSCHAIN_RETRY_MAX_MS ?? "
 // instead of polling forever. Default 2 hours.
 const CROSSCHAIN_ATTESTATION_DEADLINE_MS = Number(process.env.CROSSCHAIN_ATTESTATION_DEADLINE_MS ?? "7200000");
 
+// ── Merchant payout-chain OUT hop (Phase 5) env ─────────────────────
+// SEPARATELY feature-flagged from the IN hop: CROSSCHAIN_ENABLED_PAYOUT_CHAINS
+// is a comma-separated list of TARGET chain ids the relayer will CCTP-bridge a
+// cross-chain merchant's settled Arc USDC to. Empty/unset → the payout worker
+// is DISABLED and the loop behaves EXACTLY as before (zero risk to the live IN
+// hop). The list is validated against the cross-chain registry's enabled chains
+// at boot (every id must be a known, non-Arc chain in the registry), so a
+// typo'd or unconfigured chain fails fast instead of stranding a payout. The
+// payout worker also requires the cross-chain registry + IRIS URL (same deps as
+// the IN hop) — enabling payout chains without CROSSCHAIN_ENABLED is rejected.
+const PAYOUT_ENABLED_CHAINS: ReadonlySet<number> = parsePayoutChains(
+  process.env.CROSSCHAIN_ENABLED_PAYOUT_CHAINS,
+);
+const PAYOUT_ENABLED = PAYOUT_ENABLED_CHAINS.size > 0;
+// The relayer's Arc address IS the sweep address: cross-chain merchants register
+// it as their on-chain payoutAddress, so claim() lands the escrow here in
+// relayer custody before the burn. Derived from the Vault key below
+// (RELAYER_ADDR) — declared there to keep the single-fetch invariant.
+const PAYOUT_MAX_ATTEMPTS = Number(process.env.CROSSCHAIN_PAYOUT_MAX_ATTEMPTS ?? "5");
+const PAYOUT_RETRY_BASE_MS = Number(process.env.CROSSCHAIN_PAYOUT_RETRY_BASE_MS ?? "15000");
+const PAYOUT_RETRY_MAX_MS  = Number(process.env.CROSSCHAIN_PAYOUT_RETRY_MAX_MS ?? "900000");
+const PAYOUT_ATTESTATION_DEADLINE_MS = Number(process.env.CROSSCHAIN_PAYOUT_ATTESTATION_DEADLINE_MS ?? "7200000");
+// IRIS poll cadence for the payout's burn attestation (mirror of the IN hop's
+// 15s re-claim cadence; the wall-clock deadline above bounds the total wait).
+const PAYOUT_ATTESTATION_POLL_MS = Number(process.env.CROSSCHAIN_PAYOUT_ATTESTATION_POLL_MS ?? "15000");
+// Arc's CCTP source domain (the burn happens on Arc). Matches the spike + the
+// IN hop's destination_domain for Arc.
+const ARC_CCTP_DOMAIN = Number(process.env.ARC_CCTP_DOMAIN ?? "26");
+// Arc USDC — the only burn token (USDC-only v1). Lower-cased for compares.
+const ARC_USDC_ADDRESS = (process.env.ARC_USDC_ADDRESS ?? "0x3600000000000000000000000000000000000000").toLowerCase() as Address;
+
 function need(k: string): string {
   const v = process.env[k];
   if (!v) throw new Error(`missing env ${k}`);
@@ -98,12 +132,33 @@ const ERC20 = parseAbi([
   "function balanceOf(address) view returns (uint256)",
   "function approve(address,uint256) returns (bool)",
   "function transfer(address,uint256) returns (bool)",
+  "function allowance(address,address) view returns (uint256)",
 ]);
 
 const GATEWAY_ABI = parseAbi([
   "function settleInvoice(bytes32 globalId, address payer, address payInToken, uint256 amountIn, uint256 grossPayout, bytes32 swapTxHash)",
   "function recordPayerRefund(bytes32 globalId, address payer, address payInToken, uint256 amount, bytes32 reasonHash)",
+  // OUT hop: permissionless escrow claim. For a cross-chain merchant the
+  // on-chain payoutAddress is the relayer sweep address (RELAYER_ADDR), so
+  // claim([globalId]) delivers the merchant's escrowed USDC into relayer
+  // custody on Arc before the burn. escrows() reads the escrowed amount +
+  // claimableAt so the worker knows the burn amount and whether the refund
+  // window has passed.
+  "function claim(bytes32[] globalIds)",
+  "function escrows(bytes32 globalId) view returns (uint256 amount, address payoutToken, uint64 claimableAt)",
 ]);
+
+// CCTP TokenMessenger on Arc — the OUT-hop burn (mirror of spike-arc-to-base-
+// bridge.mjs, which proved this live). depositForBurn(amount, destinationDomain,
+// mintRecipient=pad(merchant.payout_chain_address,32), burnToken=ArcUSDC,
+// destinationCaller=0, maxFee=0, finalityThreshold=2000 [STANDARD]).
+const TOKEN_MESSENGER_ABI = parseAbi([
+  "function depositForBurn(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken,bytes32 destinationCaller,uint256 maxFee,uint32 finalityThreshold)",
+]);
+// STANDARD finality (no fast-transfer fee) — matches the spike + the IN hop's
+// enforced check. maxFee 0 because there is no fee at STANDARD.
+const PAYOUT_BURN_FINALITY_THRESHOLD = 2000;
+const PAYOUT_BURN_MAX_FEE = 0n;
 
 // Permit2 SignatureTransfer surface. The `witness` flavour lets us bind the
 // signed message to the trade context (invoice id + relayer address).
@@ -151,6 +206,21 @@ const adapter = createViemAdapterFromPrivateKey({ privateKey: _relayerKey });
 
 const chain = createPublicClient({ transport: http(RPC) });
 const kit   = new AppKit();
+
+// ── Payout (OUT-hop) boot validation ────────────────────────────────
+// The relayer's Arc signing address is the sweep address for cross-chain
+// merchants (they register it as their on-chain payoutAddress, so claim()
+// delivers their escrow into relayer custody here before the burn).
+const PAYOUT_SWEEP_ADDR: Address = RELAYER_ADDR;
+// The payout worker reuses the IN hop's cross-chain registry + IRIS URL; this
+// fails fast on any enabled payout chain that isn't a known, non-Arc registry
+// chain (or when CROSSCHAIN_ENABLED is off). No-op when no payout chains are
+// enabled. (Pure logic + tests live in payout-config.ts.)
+assertEnabledPayoutChains({
+  enabled: PAYOUT_ENABLED_CHAINS,
+  registry: crosschainRegistry,
+  arcChainId: 5_042_002,
+});
 
 // AFG-011: verify-full TLS (pinned Supabase CA) — no disabled cert checks.
 const _poolCfg = buildOpsPoolConfig(PG_URL);
@@ -1229,6 +1299,472 @@ async function processCrosschainRow(row: CrosschainPaymentRow): Promise<void> {
   log("info", { msg: "crosschain.processed", disposition });
 }
 
+// ── Merchant payout-chain OUT-hop worker wiring (Phase 5) ───────────
+// ADDITIVE + flag-gated by PAYOUT_ENABLED (CROSSCHAIN_ENABLED_PAYOUT_CHAINS).
+// The decision fn (payout-worker.ts) is pure; everything below is the live
+// dependency set: an enqueue scan for claimable cross-chain invoices, a
+// lease-based claim over crosschain_payouts, the Arc claim()/depositForBurn,
+// the IRIS poll, and the receiveMessage on the merchant's TARGET chain (built
+// from the registry's per-chain rpcEnv). Mirrors the IN hop's persist-before-
+// send / lease / retry-budget discipline exactly.
+
+const PAYOUT_LEASE_OWNER = `relayer-payout:${RELAYER_ADDR.toLowerCase()}#${process.pid}`;
+
+/** Per-target-chain wallet+public client cache. receiveMessage is signed on the
+ *  TARGET chain (not Arc), so we build a walletClient/publicClient pair from the
+ *  registry's rpcEnv on first use. The relayer needs a small native-gas balance
+ *  on each enabled target chain (Phase 5C deploy step). */
+const _payoutTargetClients = new Map<number, {
+  cfg: CctpChainConfig;
+  pub: ReturnType<typeof createPublicClient>;
+  wallet: ReturnType<typeof createWalletClient>;
+}>();
+function payoutTargetClients(chainId: number) {
+  const cached = _payoutTargetClients.get(chainId);
+  if (cached) return cached;
+  if (!crosschainRegistry) throw new Error("payout_disabled");
+  const cfg = chainById(crosschainRegistry, chainId);
+  const rpc = process.env[cfg.rpcEnv];
+  if (!rpc) throw new Error(`payout_target_rpc_missing:${cfg.rpcEnv}`);
+  const built = {
+    cfg,
+    pub: createPublicClient({ transport: http(rpc) }),
+    wallet: createWalletClient({ account, transport: http(rpc) }),
+  };
+  _payoutTargetClients.set(chainId, built);
+  return built;
+}
+
+/** Enqueue scan (the chosen hook — Phase 5A). The app server creates IN-hop
+ *  rows inline at /checkout/crosschain/submit, but a payout is triggered by an
+ *  on-chain lifecycle event (the invoice becoming claimable after its refund
+ *  window), so there is no single request to hang an insert on. Instead the
+ *  relayer periodically scans for `paid` invoices of cross-chain-payout
+ *  merchants (payout_chain_id != Arc, with a target address) whose refund
+ *  window has passed and that have no payout row yet, and inserts a `pending`
+ *  one. Idempotent: ON CONFLICT (invoice_id) DO NOTHING + the unique invoice
+ *  index guarantees one payout per invoice. Only enabled payout chains are
+ *  scanned so a merchant configured for a not-yet-enabled chain is left alone.
+ */
+async function enqueueClaimablePayouts(): Promise<number> {
+  const targetIds = [...PAYOUT_ENABLED_CHAINS];
+  if (targetIds.length === 0) return 0;
+  const res = await pool.query(
+    `insert into crosschain_payouts (global_id, invoice_id, merchant_id, payout_chain_id, payout_chain_address, status)
+        select i.id, i.id, m.id, m.payout_chain_id, m.payout_chain_address, 'pending'
+          from invoices i
+          join merchants m on m.id = i.merchant_id
+         where i.status = 'paid'
+           and i.claimable_at is not null
+           and i.claimable_at <= now()
+           and m.payout_chain_id = any($1::int[])
+           and m.payout_chain_address is not null
+           and not exists (select 1 from crosschain_payouts p where p.invoice_id = i.id)
+     on conflict (invoice_id) do nothing
+     returning id`,
+    [targetIds],
+  );
+  return res.rowCount ?? 0;
+}
+
+/** Lease-based claim over the processable payout statuses — mirror of
+ *  claimNextCrosschain. `attempts` increments on every claim so chronically
+ *  stuck rows hit PAYOUT_MAX_ATTEMPTS and surface as terminal failures. */
+async function claimNextPayout(): Promise<CrosschainPayoutRow | null> {
+  const res = await pool.query(
+    `with claimed as (
+       update crosschain_payouts
+          set attempts = attempts + 1,
+              lease_owner = $1,
+              lease_expires_at = now() + ($2 || ' seconds')::interval,
+              updated_at = now()
+        where id = (
+          select id from crosschain_payouts
+           -- Processable (non-terminal) payout statuses — keep in lockstep with
+           -- PAYOUT_STATES in @arcora/crosschain-core/payout-states.
+           where status in ('pending', 'claimed', 'burn_submitted', 'attesting', 'receiving')
+             and next_attempt <= now()
+             and (lease_expires_at is null or lease_expires_at < now())
+           order by next_attempt
+           limit 1
+           for update skip locked
+        )
+        returning *
+     )
+     select * from claimed`,
+    [PAYOUT_LEASE_OWNER, String(LEASE_SECONDS)],
+  );
+  return (res.rows[0] as CrosschainPayoutRow | undefined) ?? null;
+}
+
+// Allowlisted column map for markPayout — SET clauses are built ONLY from these
+// literal names (mirror of CROSSCHAIN_MARK_COLUMNS).
+const PAYOUT_MARK_COLUMNS: ReadonlySet<string> = new Set([
+  "status", "next_attempt", "updated_at", "attempts",
+  "claim_tx", "amount_bridged",
+  "burn_tx_hash", "burn_submitted_at",
+  "cctp_message", "cctp_attestation",
+  "receive_tx_hash", "last_error",
+]);
+
+async function markPayout(
+  id: string,
+  values: Record<string, unknown>,
+  opts?: { releaseLease?: boolean },
+): Promise<void> {
+  const keys = Object.keys(values);
+  for (const k of keys) {
+    if (!PAYOUT_MARK_COLUMNS.has(k)) throw new Error(`payout_mark_unknown_column:${k}`);
+  }
+  const sets = keys.map((k, i) => `${k} = $${i + 2}`);
+  if (opts?.releaseLease !== false) {
+    sets.push("lease_owner = null", "lease_expires_at = null");
+  }
+  if (!keys.includes("updated_at")) sets.push("updated_at = now()");
+  await pool.query(
+    `update crosschain_payouts set ${sets.join(", ")} where id = $1`,
+    [id, ...keys.map((k) => values[k])],
+  );
+}
+
+/** Retry semantics mirror failCrosschain: below the cap, keep the row's CURRENT
+ *  processable status and reschedule with exponential backoff; at/after the cap
+ *  write the terminal payout_failed status for operator triage. Lease released
+ *  either way. */
+async function failPayout(row: CrosschainPayoutRow, error: string): Promise<void> {
+  const code = crosschainErrorCode(error);
+  if (row.attempts >= PAYOUT_MAX_ATTEMPTS) {
+    await pool.query(
+      `update crosschain_payouts
+          set status = 'payout_failed', last_error = $2,
+              lease_owner = null, lease_expires_at = null, updated_at = now()
+        where id = $1`,
+      [row.id, code],
+    );
+    return;
+  }
+  const backoffMs = Math.min(
+    PAYOUT_RETRY_BASE_MS * 2 ** Math.max(row.attempts - 1, 0),
+    PAYOUT_RETRY_MAX_MS,
+  );
+  await pool.query(
+    `update crosschain_payouts
+        set last_error = $2,
+            next_attempt = now() + ($3 || ' milliseconds')::interval,
+            lease_owner = null, lease_expires_at = null, updated_at = now()
+      where id = $1`,
+    [row.id, code, String(backoffMs)],
+  );
+}
+
+/** claim([globalId]) on the Arc gateway. The cross-chain merchant's on-chain
+ *  payoutAddress is the relayer sweep address, so this delivers the escrowed
+ *  USDC into relayer custody. The escrowed amount (read from escrows() before
+ *  the claim) is persisted as amount_bridged — the exact amount the burn will
+ *  move. Resume guard: a persisted claim_tx means a prior attempt already
+ *  broadcast claim(); verify the receipt instead of re-claiming (a second
+ *  claim reverts as already-claimed). */
+async function payoutClaimOnArc(row: CrosschainPayoutRow): Promise<{ claimTx: Hex; amount: bigint }> {
+  const gateway = resolveGateway(null, GATEWAY, GATEWAY_ALLOWLIST);
+  // Escrowed amount is the burn amount. Read it up front (also the amount on a
+  // resume, since claim() leaves the escrow zeroed — so prefer the persisted
+  // amount_bridged when present).
+  const escrow = await chain.readContract({
+    address: gateway, abi: GATEWAY_ABI, functionName: "escrows", args: [row.global_id as Hex],
+  });
+  const escrowAmount = escrow[0] as bigint;
+
+  if (row.claim_tx) {
+    const prior = await chain.waitForTransactionReceipt({ hash: row.claim_tx as Hex, timeout: RECEIPT_TIMEOUT_MS });
+    if (prior.status !== "success") throw new Error(`payout_claim_prior_tx_reverted:${row.claim_tx}`);
+    const amount = row.amount_bridged ? BigInt(row.amount_bridged) : escrowAmount;
+    if (amount <= 0n) throw new Error("payout_claim_amount_zero");
+    return { claimTx: row.claim_tx as Hex, amount };
+  }
+
+  if (escrowAmount <= 0n) {
+    // Escrow already empty + no recorded claim — either already claimed by the
+    // merchant/admin out-of-band or never funded. Operator path.
+    throw new Error("payout_escrow_empty");
+  }
+
+  const claimTx = await wallet.writeContract({
+    chain: undefined, address: gateway, abi: GATEWAY_ABI,
+    functionName: "claim", args: [[row.global_id as Hex]],
+  });
+  // Persist-before-wait: record the broadcast hash so a crash inside the
+  // receipt-await window resumes via the claim_tx guard above (a re-broadcast
+  // would revert as already-claimed).
+  await markPayout(row.id, { claim_tx: claimTx, amount_bridged: escrowAmount.toString() }, { releaseLease: false });
+  const rcpt = await chain.waitForTransactionReceipt({ hash: claimTx, timeout: RECEIPT_TIMEOUT_MS });
+  if (rcpt.status !== "success") throw new Error("payout_claim_reverted");
+  return { claimTx, amount: escrowAmount };
+}
+
+/** approve + depositForBurn the swept Arc USDC on Arc's TokenMessenger to the
+ *  merchant's target domain (mirror of spike-arc-to-base-bridge.mjs, incl. the
+ *  allowance-effective poll for RPC lag). mintRecipient = pad(target addr, 32),
+ *  destinationCaller = 0, maxFee = 0, finalityThreshold = 2000 (STANDARD).
+ *  Resume guard: a persisted burn_tx_hash means the burn already hit the wire —
+ *  verify the receipt rather than re-burning. */
+async function payoutBurnOnArc(row: CrosschainPayoutRow): Promise<{ burnTx: Hex }> {
+  if (!crosschainRegistry) throw new Error("payout_disabled");
+  const destination = chainById(crosschainRegistry, row.payout_chain_id);
+  const tokenMessenger = destination.tokenMessenger;
+
+  if (row.burn_tx_hash) {
+    const prior = await chain.waitForTransactionReceipt({ hash: row.burn_tx_hash as Hex, timeout: RECEIPT_TIMEOUT_MS });
+    if (prior.status !== "success") throw new Error(`payout_burn_prior_tx_reverted:${row.burn_tx_hash}`);
+    return { burnTx: row.burn_tx_hash as Hex };
+  }
+
+  if (!row.amount_bridged) throw new Error("payout_burn_amount_missing");
+  const amount = BigInt(row.amount_bridged);
+  if (amount <= 0n) throw new Error("payout_burn_amount_zero");
+
+  // approve (idempotent — raises allowance to the same value, safe to re-issue
+  // on a resume that crashed before the burn). Then poll until effective (Infura
+  // / RPC read-lag, learned in the IN-hop E2E + the spike).
+  const current = await chain.readContract({
+    address: ARC_USDC_ADDRESS, abi: ERC20, functionName: "allowance", args: [PAYOUT_SWEEP_ADDR, tokenMessenger],
+  });
+  if (current < amount) {
+    const approveTx = await wallet.writeContract({
+      chain: undefined, address: ARC_USDC_ADDRESS, abi: ERC20,
+      functionName: "approve", args: [tokenMessenger, amount],
+    });
+    await chain.waitForTransactionReceipt({ hash: approveTx, timeout: RECEIPT_TIMEOUT_MS });
+  }
+  let eff = await chain.readContract({
+    address: ARC_USDC_ADDRESS, abi: ERC20, functionName: "allowance", args: [PAYOUT_SWEEP_ADDR, tokenMessenger],
+  });
+  for (let i = 0; i < 15 && eff < amount; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    eff = await chain.readContract({
+      address: ARC_USDC_ADDRESS, abi: ERC20, functionName: "allowance", args: [PAYOUT_SWEEP_ADDR, tokenMessenger],
+    });
+  }
+  if (eff < amount) throw new Error("payout_burn_allowance_not_effective");
+
+  const mintRecipient = pad(row.payout_chain_address as Hex, { size: 32 });
+  const burnTx = await wallet.writeContract({
+    chain: undefined, address: tokenMessenger, abi: TOKEN_MESSENGER_ABI,
+    functionName: "depositForBurn",
+    args: [
+      amount,
+      destination.cctpDomain,
+      mintRecipient,
+      ARC_USDC_ADDRESS,
+      ZERO_HASH,                       // destinationCaller = 0 (anyone may receive)
+      PAYOUT_BURN_MAX_FEE,             // maxFee = 0 (STANDARD finality, no fee)
+      PAYOUT_BURN_FINALITY_THRESHOLD,  // 2000 = STANDARD
+    ],
+  });
+  // Persist-before-wait: record burn_tx_hash + burn_submitted_at (the
+  // attestation-deadline anchor) BEFORE awaiting the receipt, so a crash in the
+  // wait re-enters at burn_submitted and resumes via the guard above.
+  await markPayout(row.id, {
+    burn_tx_hash: burnTx,
+    burn_submitted_at: new Date(),
+  }, { releaseLease: false });
+  const rcpt = await chain.waitForTransactionReceipt({ hash: burnTx, timeout: RECEIPT_TIMEOUT_MS });
+  if (rcpt.status !== "success") throw new Error("payout_burn_reverted");
+  return { burnTx };
+}
+
+/** receiveMessage on the merchant's TARGET chain, minting USDC to the merchant's
+ *  external address. Signed by the relayer on the target chain (needs native
+ *  gas there). Resume guard: a persisted receive_tx_hash means a prior attempt
+ *  broadcast it — verify the receipt instead of re-broadcasting (CCTP replay
+ *  protection would revert the duplicate anyway). */
+async function payoutReceiveOnTarget(
+  row: CrosschainPayoutRow,
+  att: PayoutIrisResult,
+  onBroadcast: (txHash: Hex) => Promise<void>,
+): Promise<{ receiveTx: Hex }> {
+  const { cfg, pub, wallet: targetWallet } = payoutTargetClients(row.payout_chain_id);
+
+  if (row.receive_tx_hash) {
+    const prior = await pub.waitForTransactionReceipt({ hash: row.receive_tx_hash as Hex, timeout: RECEIPT_TIMEOUT_MS });
+    if (prior.status !== "success") throw new Error(`payout_receive_prior_tx_reverted:${row.receive_tx_hash}`);
+    return { receiveTx: row.receive_tx_hash as Hex };
+  }
+
+  const receiveTx = await targetWallet.writeContract({
+    chain: undefined,
+    account,
+    ...receiveMessageCall({
+      messageTransmitter: cfg.messageTransmitter,
+      message: att.message as Hex,
+      attestation: att.attestation as Hex,
+    }),
+  });
+  // Persist-before-wait (lease kept — the receipt wait is still in flight).
+  await onBroadcast(receiveTx);
+  const rcpt = await pub.waitForTransactionReceipt({ hash: receiveTx, timeout: RECEIPT_TIMEOUT_MS });
+  if (rcpt.status !== "success") throw new Error("payout_receive_reverted");
+  return { receiveTx };
+}
+
+/** Drive ONE claimed payout row through a single decidePayoutAction step. Each
+ *  branch executes the live action with the IN hop's persist-before-send /
+ *  resume / retry-budget discipline, then transitions the row. The loop
+ *  re-claims for the next step (one on-chain action per claim — same
+ *  single-hot-wallet nonce discipline as the rest of the daemon). */
+async function processPayoutRow(row: CrosschainPayoutRow): Promise<void> {
+  const log = (level: string, fields: Record<string, unknown>) => {
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(), level, payoutId: row.id,
+      invoiceId: row.invoice_id, status: row.status, attempt: row.attempts,
+      payoutChainId: row.payout_chain_id, ...fields,
+    }));
+  };
+  log("info", {
+    msg: "payout.claimed",
+    resume: {
+      claim:       !!row.claim_tx,
+      burn:        !!row.burn_tx_hash,
+      attestation: !!(row.cctp_message && row.cctp_attestation),
+      receive:     !!row.receive_tx_hash,
+    },
+  });
+
+  // Poll IRIS up front ONLY when the decision is going to need it (burn on-chain,
+  // attestation not yet persisted) — mirrors the IN hop fetching the attestation
+  // inside the worker. Avoids an IRIS call on claim/burn passes.
+  let irisResult: PayoutIrisResult | null = null;
+  const needsAttestation =
+    (row.status === "burn_submitted" || row.status === "attesting") &&
+    !(row.cctp_message && row.cctp_attestation);
+  if (needsAttestation && row.burn_tx_hash) {
+    try {
+      irisResult = await fetchIrisAttestation({
+        irisBaseUrl: CCTP_IRIS_API_URL,
+        sourceDomain: ARC_CCTP_DOMAIN,
+        burnTxHash: row.burn_tx_hash as Hex,
+      });
+    } catch (e) {
+      // IRIS hiccup is not a payout failure — reschedule (does not advance the
+      // status) and try again next pass. The wall-clock deadline still bounds it.
+      log("warn", { msg: "payout.iris_error", err: crosschainErrorCode(e instanceof Error ? e.message : String(e)) });
+      await failPayout(row, `iris: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+  }
+
+  const action = decidePayoutAction(row, {
+    now: Date.now(),
+    irisResult,
+    attestationDeadlineMs: PAYOUT_ATTESTATION_DEADLINE_MS,
+    maxAttempts: PAYOUT_MAX_ATTEMPTS,
+  });
+  log("info", { msg: "payout.decided", action });
+
+  try {
+    switch (action) {
+      case "done":
+        // Terminal — already paid_out; release the lease and move on.
+        await markPayout(row.id, { updated_at: new Date() });
+        return;
+
+      case "fail":
+        await failPayout(row, row.last_error ?? "payout_failed_terminal");
+        return;
+
+      case "claim": {
+        const { claimTx, amount } = await payoutClaimOnArc(row);
+        await markPayout(row.id, {
+          claim_tx: claimTx,
+          amount_bridged: amount.toString(),
+          status: "claimed",
+          updated_at: new Date(),
+        });
+        log("info", { msg: "payout.claimed_ok", tx: claimTx, amount: amount.toString() });
+        return;
+      }
+
+      case "burn": {
+        const { burnTx } = await payoutBurnOnArc(row);
+        await markPayout(row.id, {
+          burn_tx_hash: burnTx,
+          status: "burn_submitted",
+          updated_at: new Date(),
+        });
+        log("info", { msg: "payout.burned_ok", tx: burnTx });
+        return;
+      }
+
+      case "await_attestation":
+        // Burn is on-chain; IRIS hasn't attested yet. Keep the row claimable and
+        // come back shortly. attempts resets to 0 — a poll loop is WAITING, not
+        // failing, so it must not consume the retry budget (the wall-clock
+        // deadline in decidePayoutAction bounds the wait). Stamp `attesting` so
+        // a resume knows the burn checkpoint is in.
+        await markPayout(row.id, {
+          status: "attesting",
+          attempts: 0,
+          next_attempt: new Date(Date.now() + PAYOUT_ATTESTATION_POLL_MS),
+          updated_at: new Date(),
+        });
+        log("info", { msg: "payout.await_attestation" });
+        return;
+
+      case "receive": {
+        // Resolve the attestation: persisted (resume) or freshly polled this pass.
+        const att: PayoutIrisResult | null =
+          row.cctp_message && row.cctp_attestation
+            ? { message: row.cctp_message, attestation: row.cctp_attestation }
+            : irisResult;
+        if (!att) throw new Error("payout_receive_no_attestation");
+
+        // Persist the attestation before the receive so a crash inside the
+        // receipt-await window resumes without a fresh IRIS poll. Stamp
+        // `receiving` (mid-flight) + keep the lease.
+        if (!(row.cctp_message && row.cctp_attestation)) {
+          await markPayout(row.id, {
+            cctp_message: att.message,
+            cctp_attestation: att.attestation,
+            status: "receiving",
+            updated_at: new Date(),
+          }, { releaseLease: false });
+        }
+
+        const { receiveTx } = await payoutReceiveOnTarget(row, att, async (txHash) => {
+          // Mid-flight persist (lease kept) so a crash in the receipt wait
+          // doesn't re-broadcast receiveMessage.
+          await markPayout(row.id, {
+            receive_tx_hash: txHash,
+            status: "receiving",
+            updated_at: new Date(),
+          }, { releaseLease: false });
+        });
+        await markPayout(row.id, {
+          receive_tx_hash: receiveTx,
+          status: "paid_out",
+          updated_at: new Date(),
+        });
+        log("info", { msg: "payout.paid_out", tx: receiveTx });
+        return;
+      }
+
+      default: {
+        const _exhaustive: never = action;
+        void _exhaustive;
+        throw new Error(`payout_unknown_action:${action as string}`);
+      }
+    }
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    log("error", {
+      msg: "payout.fail",
+      action,
+      terminal: row.attempts >= PAYOUT_MAX_ATTEMPTS,
+      err: crosschainErrorCode(err),
+    });
+    await failPayout(row, `${action}: ${err}`);
+  }
+}
+
 async function main() {
   console.log(JSON.stringify({
     msg: "relayer.start",
@@ -1239,6 +1775,8 @@ async function main() {
     slippageBps: SLIPPAGE_BPS,
     crosschain: CROSSCHAIN_ENABLED,
     crosschainChains: crosschainRegistry ? [...crosschainRegistry.keys()] : [],
+    payout: PAYOUT_ENABLED,
+    payoutChains: [...PAYOUT_ENABLED_CHAINS],
   }));
 
   // Audit Ops-L-1 (2026-05-24): graceful drain. The previous handler
@@ -1257,15 +1795,40 @@ async function main() {
   process.on("SIGINT",  () => requestShutdown("SIGINT"));
   process.on("SIGTERM", () => requestShutdown("SIGTERM"));
 
+  // Throttle the payout enqueue scan (a DB-only INSERT…SELECT over claimable
+  // invoices) so it runs roughly once a minute instead of every tick. Disabled
+  // entirely when PAYOUT_ENABLED is false.
+  const PAYOUT_ENQUEUE_INTERVAL_MS = Number(process.env.CROSSCHAIN_PAYOUT_ENQUEUE_INTERVAL_MS ?? "60000");
+  let lastPayoutEnqueueAt = 0;
+
   while (!shuttingDown) {
     try {
-      // Cross-chain rows first (feature-flagged), then the Arc-only queue.
-      // Still strictly one row at a time — same single-hot-wallet nonce
-      // discipline as the relayer_queue path.
+      // Cross-chain IN-hop rows first (feature-flagged), then the OUT-hop payout
+      // rows (separately feature-flagged), then the Arc-only queue. Still
+      // strictly one row at a time — same single-hot-wallet nonce discipline as
+      // the relayer_queue path.
       if (CROSSCHAIN_ENABLED) {
         const ccRow = await claimNextCrosschain();
         if (ccRow) {
           await processCrosschainRow(ccRow);
+          continue; // back to the top — drain anything else queued
+        }
+      }
+      // Merchant payout OUT hop (ADDITIVE, flag-gated). With
+      // CROSSCHAIN_ENABLED_PAYOUT_CHAINS unset this whole block is skipped and
+      // the loop is byte-for-byte the pre-Phase-5 behavior.
+      if (PAYOUT_ENABLED) {
+        const nowMs = Date.now();
+        if (nowMs - lastPayoutEnqueueAt >= PAYOUT_ENQUEUE_INTERVAL_MS) {
+          lastPayoutEnqueueAt = nowMs;
+          const enqueued = await enqueueClaimablePayouts();
+          if (enqueued > 0) {
+            console.log(JSON.stringify({ ts: new Date().toISOString(), msg: "payout.enqueued", count: enqueued }));
+          }
+        }
+        const payoutRow = await claimNextPayout();
+        if (payoutRow) {
+          await processPayoutRow(payoutRow);
           continue; // back to the top — drain anything else queued
         }
       }

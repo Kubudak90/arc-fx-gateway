@@ -1,0 +1,24 @@
+{
+  "name": "@arcora/agent-commerce-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "pnpm --filter @arcora/sdk build && vitest run",
+    "typecheck": "pnpm --filter @arcora/sdk build && tsc --noEmit"
+  },
+  "dependencies": {
+    "@arcora/agent-commerce-core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "tsx": "^4.19.0"
+  }
+}

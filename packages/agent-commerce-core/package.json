@@ -1,0 +1,21 @@
+{
+  "name": "@arcora/agent-commerce-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "pnpm --filter @arcora/sdk build && vitest run",
+    "typecheck": "pnpm --filter @arcora/sdk build && tsc --noEmit"
+  },
+  "dependencies": {
+    "@arcora/sdk": "workspace:*",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

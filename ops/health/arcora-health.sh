@@ -176,12 +176,25 @@ queue_check() {
   local sql="select coalesce(extract(epoch from (now() - min(created_at)))::int, 0)
              from relayer_queue where status in ('pending','processing')"
   local age rc=0
+  # Audit M2 (2026-07-04): keep the DB password off argv. `psql "$dsn"` and
+  # `env PGPASSWORD=…` both land the secret in /proc/<pid>/cmdline, which is
+  # world-readable on this multi-tenant box — and this cron runs every 10 min.
+  # Split the password out of the DSN and hand it to psql via an *exported*
+  # PGPASSWORD (inherited through /proc/<pid>/environ, which is 0400 owner-only,
+  # not world-readable) plus a password-less connection URL on argv. The
+  # non-secret PGSSLMODE/PGSSLROOTCERT/PGCONNECT_TIMEOUT stay on the `env` prefix.
+  local dsn_nopass="$dsn"
+  if [[ "$dsn" =~ ^([a-zA-Z]+://[^:/@]+):([^@]*)@(.*)$ ]]; then
+    export PGPASSWORD="${BASH_REMATCH[2]}"
+    dsn_nopass="${BASH_REMATCH[1]}@${BASH_REMATCH[3]}"
+  fi
   # `env` (not bare prefix assignments): the PGSSLROOTCERT word comes from a
   # parameter expansion, which bash would otherwise parse as a command name.
   # `timeout 30` caps a hung connection so a stuck psql can't pile up across
   # overlapping cron runs (flock in the cron line is the other half of this).
   age=$(timeout 30 env PGCONNECT_TIMEOUT=10 PGSSLMODE="$sslmode" ${ca_file:+"PGSSLROOTCERT=$ca_file"} \
-        psql "$dsn" -tAc "$sql" 2>&1) || rc=$?
+        psql "$dsn_nopass" -tAc "$sql" 2>&1) || rc=$?
+  unset PGPASSWORD
   # Temp CA file is cleaned up by the EXIT trap (registered at mktemp time).
 
   if [[ $rc -ne 0 ]]; then

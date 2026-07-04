@@ -62,11 +62,21 @@ fi
 # momentarily sealed, num_uses exhausted) must abort here with the old secret_id
 # untouched — never destroy the one credential the daemon has. This is exactly
 # the 2026-05-12 AppRole-lockout class of failure.
-if ! vault write -format=json auth/approle/login \
-      role_id="$ROLE_ID" secret_id="$NEW_SECRET_ID" >/dev/null 2>&1; then
+#
+# Audit H1 (2026-07-04): the role_id + fresh secret_id must NOT go on the `vault`
+# argv — /proc/<pid>/cmdline is world-readable on this multi-tenant box, so a
+# co-tenant polling /proc during the daily rotation window would capture exactly
+# the AppRole pair that reads the relayer signing key, defeating the rotation.
+# Pass them in a request body file (0600, same secure dir) via `@` instead.
+LOGIN_PAYLOAD=$(mktemp "${ENV_DIR}/.approle-login.XXXXXX")
+chmod 0600 "$LOGIN_PAYLOAD"
+jq -n --arg r "$ROLE_ID" --arg s "$NEW_SECRET_ID" '{role_id:$r,secret_id:$s}' > "$LOGIN_PAYLOAD"
+if ! vault write -format=json auth/approle/login "@$LOGIN_PAYLOAD" >/dev/null 2>&1; then
+  rm -f "$LOGIN_PAYLOAD"
   echo "[rotation] ERROR: new secret_id failed a pre-commit test login — aborting; existing credential left in place" >&2
   exit 5
 fi
+rm -f "$LOGIN_PAYLOAD"
 
 # Atomic env-file rewrite — mktemp in the same directory so the final mv stays
 # on the same filesystem (rename is atomic only within a single fs).

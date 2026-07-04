@@ -9,7 +9,8 @@ import { ArcFXGateway } from "../src/ArcFXGateway.sol";
 /// L2 (nonReentrant on recordPayerRefund).
 ///
 /// Required env vars:
-///   DEPLOYER_PRIVATE_KEY    — uint256 hex
+///   DEPLOYER_PRIVATE_KEY    — uint256 hex (OPTIONAL since 2026-07-05: omit and
+///                             run with --account <keystore> --sender <addr>)
 ///   GATEWAY_OWNER           — DEFAULT_ADMIN_ROLE
 ///   GATEWAY_RELAYER         — RELAYER_ROLE (Vault-derived address)
 ///   PROTOCOL_FEE_BPS        — uint256 (≤ 1000, enforced in constructor)
@@ -20,7 +21,12 @@ import { ArcFXGateway } from "../src/ArcFXGateway.sol";
 ///   SUPPORTED_TOKENS        — comma-separated 0x… addresses (USDC, EURC)
 contract Deploy is Script {
     function run() external returns (ArcFXGateway gw) {
-        uint256 pk          = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        // 2026-07-05 key hygiene: prefer the encrypted Foundry keystore —
+        // `forge script … --account arcora-deployer --sender <addr>` — in which
+        // case DEPLOYER_PRIVATE_KEY stays unset and broadcast uses the unlocked
+        // account. The env var remains a fallback until it is scrubbed
+        // (docs/runbooks/deployer-key-and-safe.md).
+        uint256 pk          = vm.envOr("DEPLOYER_PRIVATE_KEY", uint256(0));
         address owner       = vm.envAddress("GATEWAY_OWNER");
         address relayer_    = vm.envAddress("GATEWAY_RELAYER");
         uint256 feeBps      = vm.envUint("PROTOCOL_FEE_BPS");
@@ -28,7 +34,8 @@ contract Deploy is Script {
         uint64  recoveryDel = uint64(vm.envUint("ADMIN_RECOVERY_DELAY"));
         address[] memory tokens = vm.envOr("SUPPORTED_TOKENS", ",", new address[](0));
 
-        vm.startBroadcast(pk);
+        if (pk != 0) vm.startBroadcast(pk);
+        else vm.startBroadcast();
         gw = new ArcFXGateway(feeBps, refundWin, recoveryDel, owner, relayer_);
         if (tokens.length > 0) {
             // Audit #26: setTokenSupport is onlyRole(DEFAULT_ADMIN_ROLE).

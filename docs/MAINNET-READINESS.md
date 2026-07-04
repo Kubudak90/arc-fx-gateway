@@ -103,6 +103,11 @@ one env-driven module now (item A below) would collapse that to one change.
   (`ROADMAP.md` "Gated on Arc mainnet" → External audit RFP; `LITEPAPER.md:380`).
   The self-audit gate does **not** substitute for it. `deployments/arc-mainnet.json`
   is an explicit null placeholder (`"_status": "not-yet-deployed"`).
+  **RFP drafted 2026-07-05:** `docs/audit/rfp-external-audit.md` — scope, threat
+  model, disclosed coverage gaps, shortlist. Pre-audit blocker it surfaces: the
+  v2 escrow contracts (`PaymentEscrow`/`SettlementReceiver`) still live in the
+  sibling `agent-commerce-v2` repo, not this monorepo — consolidate + tag before
+  kickoff.
 
 **Verdict:** deploy mechanics are ready; the **external audit + mainnet redeploy
 + manifest population** are hard blockers.
@@ -148,15 +153,21 @@ for merchant *signup* is a separate roadmap item, not in this code path.
 
 ### 5. Key management
 
-- **Deployer/admin key plaintext:** `packages/contracts/.env:17` still holds
-  `DEPLOYER_PRIVATE_KEY` in cleartext. The 2026-06-11 remediation plan's Step 5
-  ("move the live admin key out of plaintext … delete the line after V13 deploy",
-  `plans/2026-06-11-security-audit-fixes.md:146-152`) was **not completed** — the
-  line is still there. `Deploy.s.sol:23` reads it via `vm.envUint`.
+- **Deployer/admin key plaintext:** `packages/contracts/.env` holds
+  `DEPLOYER_PRIVATE_KEY` in cleartext (gitignored, never in git history — exposure
+  is the deploy host, not the repo). **Partly addressed 2026-07-05:**
+  `Deploy.s.sol` now reads the key via `vm.envOr(…, 0)` and broadcasts from the
+  encrypted Foundry keystore (`--account arcora-deployer`) when it's unset — an
+  `arcora-deployer` keystore already exists on the box. Remaining: verify the
+  keystore decrypts to `0x26Bf…D8e3`, then scrub the plaintext line. Runbook:
+  `docs/runbooks/deployer-key-and-safe.md` Phase A.
 - **No multisig / timelock in code.** `grep` finds **no Safe/Gnosis/
   `TimelockController`** anywhere; every "multisig" hit is a *doc* promising the
   migration (`ROADMAP.md:91`, `threat-model.md:119` "Mitigation: multisig
-  migration before mainnet"). Admin is a single EOA today.
+  migration before mainnet"). Admin is a single EOA today. Migration steps
+  (grant→verify-from-Safe→revoke-EOA, on Arc's Safe availability) are now
+  written up in `docs/runbooks/deployer-key-and-safe.md` Phase B — still needs
+  signer devices chosen + the Safe deployed.
 - **Relayer key** (`RELAYER_ROLE`): Vault KV-v2 + AppRole, encrypted at rest,
   `secret_id` rotated daily, every read audit-logged — but the key is **held in
   relayer process memory** after fetch (`ops/vault/README.md`, "Audit M1 closure

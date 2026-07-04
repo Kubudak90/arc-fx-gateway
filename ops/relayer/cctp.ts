@@ -33,7 +33,11 @@ export async function fetchIrisAttestation(args: {
   fetchImpl?: typeof fetch;
 }): Promise<IrisAttestation | null> {
   const doFetch = args.fetchImpl ?? fetch;
-  const res = await doFetch(buildIrisMessagesUrl(args));
+  // Audit LOW (2026-07-04): the relayer loop is serial — a stalled IRIS
+  // endpoint without a timeout halts ALL settlement/refund work, not just the
+  // one cross-chain row. 15s is generous (attestation polls normally answer
+  // in <1s) and turns a hang into a retryable per-row error.
+  const res = await doFetch(buildIrisMessagesUrl(args), { signal: AbortSignal.timeout(15_000) });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`iris_request_failed:${res.status}`);
   return parseIrisAttestation(await res.json());

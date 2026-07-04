@@ -23,11 +23,19 @@ import type { NextRequest } from "next/server";
  * spoofed/missing headers is still capped, just collectively.
  */
 export function clientIp(req: NextRequest): string {
-  const vercel = req.headers.get("x-vercel-forwarded-for");
-  if (vercel) return vercel.split(",")[0]!.trim();
-
-  const realIp = req.headers.get("x-real-ip");
-  if (realIp) return realIp.trim();
+  // Audit LOW (2026-07-04): platform-injected headers are only trustworthy ON
+  // that platform. A self-hosted deploy (Caddy etc.) passes client-supplied
+  // x-vercel-forwarded-for / x-real-ip straight through, minting a fresh
+  // rate-limit bucket per spoofed request — so gate them on VERCEL, and let a
+  // self-host that provably strips+sets x-real-ip opt in via TRUST_REAL_IP=1.
+  if (process.env.VERCEL) {
+    const vercel = req.headers.get("x-vercel-forwarded-for");
+    if (vercel) return vercel.split(",")[0]!.trim();
+  }
+  if (process.env.VERCEL || process.env.TRUST_REAL_IP === "1") {
+    const realIp = req.headers.get("x-real-ip");
+    if (realIp) return realIp.trim();
+  }
 
   const xff = req.headers.get("x-forwarded-for");
   if (xff) {

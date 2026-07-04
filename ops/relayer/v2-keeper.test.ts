@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { processRow, type Row, type ChainClient, type V2KeeperDeps } from "./v2-keeper";
+import { processRow, processSettlementsOnce, type Row, type ChainClient, type V2KeeperDeps } from "./v2-keeper";
 
 // Domains in the test: 26 = escrow chain (Arc), 6 = payout chain (Base).
 const ESC = 26;
@@ -23,7 +23,15 @@ function client(domain: number, reads: Record<string, unknown>): ChainClient {
 
 function deps(over: Partial<V2KeeperDeps> = {}): V2KeeperDeps & { pool: { query: ReturnType<typeof vi.fn> } } {
   return {
-    pool: { query: vi.fn(async () => ({ rows: [], rowCount: 1 })) },
+    pool: {
+      query: vi.fn(async () => ({ rows: [], rowCount: 1 })),
+      // processSettlementsOnce takes the keeper advisory lock on a dedicated
+      // connection (2026-07-04); default mock grants it.
+      connect: vi.fn(async () => ({
+        query: vi.fn(async () => ({ rows: [{ ok: true }] })),
+        release: vi.fn(),
+      })),
+    },
     account: {} as never,
     now: () => 2_000_000, // ms → 2000s, well past createdAt+window below
     log: () => {},
@@ -130,5 +138,27 @@ describe("keeper recovery + fallback", () => {
     await processRow(row({ state: "RECEIVE_SENT" }), new Map([[ESC, client(ESC, {})], [PAY, dst]]), d, () => {});
     expect(dst.wallet.writeContract as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
     expect(writtenStates(d.pool)).toContain("SETTLED_FALLBACK_USDC");
+  });
+});
+
+describe("keeper advisory lock (2026-07-04)", () => {
+  it("skips the whole pass when another instance holds the lock", async () => {
+    const release = vi.fn();
+    const lockConn = { query: vi.fn(async () => ({ rows: [{ ok: false }] })), release };
+    const d = deps({ pool: { query: vi.fn(), connect: vi.fn(async () => lockConn) } as never });
+    await processSettlementsOnce(d);
+    // No drain SELECT ran, and the dedicated connection went back to the pool.
+    expect((d.pool.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+    expect(release).toHaveBeenCalled();
+  });
+
+  it("drains and unlocks on the SAME connection when the lock is granted", async () => {
+    const release = vi.fn();
+    const lockConn = { query: vi.fn(async () => ({ rows: [{ ok: true }] })), release };
+    const d = deps({ pool: { query: vi.fn(async () => ({ rows: [] })), connect: vi.fn(async () => lockConn) } as never });
+    await processSettlementsOnce(d);
+    expect((d.pool.query as ReturnType<typeof vi.fn>).mock.calls.some((c) => String(c[0]).includes("FROM settlements"))).toBe(true);
+    expect(lockConn.query.mock.calls.some((c) => String(c[0]).includes("pg_advisory_unlock"))).toBe(true);
+    expect(release).toHaveBeenCalled();
   });
 });

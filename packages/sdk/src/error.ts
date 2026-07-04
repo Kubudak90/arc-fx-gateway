@@ -9,6 +9,8 @@ export type ArcoraErrorCode =
   | "PUBLISHABLE_KEY_FORBIDDEN"
   // Audit 2026-06-11 C-2: a secret (ak_) key was used in a browser context.
   | "SECRET_KEY_IN_BROWSER"
+  // Audit 2026-07-04: a secret (ak_) key would have been sent over plaintext http.
+  | "INSECURE_BASE_URL"
   | "UNKNOWN";
 
 export interface ArcoraErrorOptions {

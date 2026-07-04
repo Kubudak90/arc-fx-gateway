@@ -56,6 +56,11 @@ export async function createInvoiceV2(
   } catch (e) {
     return { http: 400, body: { error: "bad_amount", detail: e instanceof Error ? e.message : String(e) } };
   }
+  // Audit LOW (2026-07-04): bound parity with v1 (App-L-7 floor / Audit M1
+  // ceiling) — at least 1 minor unit, at most $1M per invoice.
+  if (amountMinor < 1n || amountMinor > 1_000_000_000_000n) {
+    return { http: 400, body: { error: "bad_amount", detail: "amount must be between 0.000001 and 1000000" } };
+  }
 
   // Idempotent create: a retried POST with the same key returns the same invoice.
   if (idempotencyKey) {

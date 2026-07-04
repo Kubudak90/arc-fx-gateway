@@ -47,55 +47,66 @@ describe("Commerce.createInvoiceForItem", () => {
   });
 });
 
+// Real invoice refs are bytes32 — the status path validates the shape (2026-07-04).
+const REF = "0x" + "ab".repeat(32);
+
 describe("Commerce.getCheckoutStatus", () => {
   const commerce = new Commerce(config, { createInvoice: vi.fn() });
 
+  it("rejects a malformed LLM-supplied invoiceId without ever fetching (2026-07-04)", async () => {
+    const spy = vi.fn();
+    vi.stubGlobal("fetch", spy);
+    expect(await commerce.getCheckoutStatus("../../admin?x=")).toBe("unknown");
+    expect(await commerce.getCheckoutStatus("0x1")).toBe("unknown");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("maps paid / created / expired", async () => {
     mockFetch(200, { status: "paid" });
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("paid");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("paid");
     mockFetch(200, { status: "created" });
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("created");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("created");
     mockFetch(200, { status: "expired" });
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("expired");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("expired");
   });
 
   it("returns unknown on 404", async () => {
     mockFetch(404, { error: "not_found" });
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("unknown");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("unknown");
   });
 
   it("throws on a 5xx", async () => {
     mockFetch(500, {});
-    await expect(commerce.getCheckoutStatus("0x1")).rejects.toThrow(/status_lookup_failed/);
+    await expect(commerce.getCheckoutStatus(REF)).rejects.toThrow(/status_lookup_failed/);
   });
 
   it("calls the public invoice endpoint", async () => {
     const spy = mockFetch(200, { status: "created" });
-    await commerce.getCheckoutStatus("0xfeed");
-    expect(spy).toHaveBeenCalledWith("https://arcorapay.xyz/api/invoices/0xfeed");
+    await commerce.getCheckoutStatus(REF);
+    expect(spy).toHaveBeenCalledWith(`https://arcorapay.xyz/api/invoices/${REF}`);
   });
 
   it("maps claimed → paid (escrow pulled = success)", async () => {
     mockFetch(200, { status: "claimed" });
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("paid");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("paid");
   });
 
   it("maps refunded → refunded and failed → failed", async () => {
     mockFetch(200, { status: "refunded" });
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("refunded");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("refunded");
     mockFetch(200, { status: "failed" });
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("failed");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("failed");
   });
 
   it("maps recovered / unrecognized / missing status → unknown", async () => {
     mockFetch(200, { status: "recovered" });
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("unknown");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("unknown");
     mockFetch(200, {});
-    expect(await commerce.getCheckoutStatus("0x1")).toBe("unknown");
+    expect(await commerce.getCheckoutStatus(REF)).toBe("unknown");
   });
 
   it("normalizes a network error to status_lookup_failed:network", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("fetch failed"));
-    await expect(commerce.getCheckoutStatus("0x1")).rejects.toThrow(/status_lookup_failed:network/);
+    await expect(commerce.getCheckoutStatus(REF)).rejects.toThrow(/status_lookup_failed:network/);
   });
 });

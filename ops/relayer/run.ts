@@ -701,6 +701,11 @@ async function processOne(row: QueueRow): Promise<void> {
   let swapTxHash:  Hex;
 
   if (sameToken) {
+    // Audit LOW (2026-07-04): the swap path constrains both addresses via
+    // tokenSymbolForArcAddress (throws on unknown); this shortcut skipped it,
+    // so a DB-tampered row could point the later approve() at an arbitrary
+    // token. Constrain this branch identically.
+    tokenSymbolForArcAddress(row.pay_in_token);
     grossPayout = BigInt(row.amount_in);
     swapTxHash  = ZERO_HASH;
     log("info", { msg: "swap.skip", reason: "same-token", grossPayout: grossPayout.toString() });

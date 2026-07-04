@@ -9,9 +9,21 @@ ARCH="$(dpkg --print-architecture)"
 if ! command -v vault >/dev/null 2>&1; then
   echo "[install] downloading vault ${VAULT_VERSION}_linux_${ARCH}…"
   curl -fsSL -o /tmp/vault.zip "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_${ARCH}.zip"
+  # Audit LOW (2026-07-04): this binary guards the relayer signing key — verify
+  # it against HashiCorp's published SHA256SUMS before installing. (For a
+  # stronger chain, also GPG-verify SHA256SUMS.sig against the HashiCorp
+  # release key; checksum-pinning already stops a corrupted/hijacked download.)
+  curl -fsSL -o /tmp/vault.sums "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_SHA256SUMS"
+  expected="$(grep " vault_${VAULT_VERSION}_linux_${ARCH}.zip\$" /tmp/vault.sums | awk '{print $1}')"
+  actual="$(sha256sum /tmp/vault.zip | awk '{print $1}')"
+  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+    echo "[install] SHA256 mismatch for vault.zip (expected=${expected:-<none>} actual=$actual) — aborting" >&2
+    rm -f /tmp/vault.zip /tmp/vault.sums
+    exit 1
+  fi
   unzip -o /tmp/vault.zip -d /usr/local/bin
   chmod +x /usr/local/bin/vault
-  rm -f /tmp/vault.zip
+  rm -f /tmp/vault.zip /tmp/vault.sums
 fi
 
 if ! id vault >/dev/null 2>&1; then
@@ -29,8 +41,10 @@ systemctl daemon-reload
 systemctl enable vault.service
 systemctl start vault.service
 
-# Allow root to use the API
-echo 'export VAULT_ADDR="http://127.0.0.1:8200"' >> /root/.bashrc
+# Allow root to use the API. https + pinned CA — the deployed listener is TLS
+# (config.hcl); an http default here would just teach operators config drift.
+echo 'export VAULT_ADDR="https://127.0.0.1:8200"' >> /root/.bashrc
+echo 'export VAULT_CACERT="/opt/vault/tls/vault.crt"' >> /root/.bashrc
 
 echo
 echo "[install] Vault installed and started."

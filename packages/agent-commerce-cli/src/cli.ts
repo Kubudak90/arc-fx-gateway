@@ -1,14 +1,14 @@
 // packages/agent-commerce-cli/src/cli.ts
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, chmodSync } from "node:fs";
 import { createPublicClient, createWalletClient, http, formatEther } from "viem";
 import { arcTestnet, ARC_RPC, BASE_URL, GATEWAY_ABI, GATEWAY, SERVER_WALLET, ARC_USDC, FAUCET_URL, GAS_FLOOR_WEI, MERCHANT_KEYFILE } from "./constants";
 import { resolveWallet } from "./lib/wallet";
 import { resolveMerchantKey } from "./lib/merchant-key";
 import { waitForGas } from "./lib/gas";
 import { onboardMerchant } from "./lib/onboard";
-import { mcpServerEntry, renderConfigs } from "./lib/config-writer";
+import { mcpServerEntry, renderConfigs, renderConfigsMasked } from "./lib/config-writer";
 
 const USAGE =
   "usage: arcora-agent-commerce <onboard|serve|refund> [--import <key>] [--keyfile <path>] [--payout-chain <id>] [--payout-address <0x…>]\n" +
@@ -109,7 +109,11 @@ async function main() {
   const entry = mcpServerEntry({ apiKey: res.apiKey, baseUrl: BASE_URL });
   const { generic } = renderConfigs(entry);
   const outDir = join(homedir(), ".arcora");
-  writeFileSync(join(outDir, "mcp-config.json"), generic, { mode: 0o600 });
+  const configPath = join(outDir, "mcp-config.json");
+  writeFileSync(configPath, generic, { mode: 0o600 });
+  // Audit LOW (2026-07-04): `mode` only applies on CREATE — a re-onboard onto a
+  // pre-existing world-readable file kept loose perms. Force them, like wallet.ts.
+  chmodSync(configPath, 0o600);
 
   console.log(`\n✓ Live merchant: ${res.merchantAddress}`);
   console.log(`✓ API key: ${res.apiKey.slice(0, 12)}… (full key in ${join(outDir, "mcp-config.json")}, chmod 600)`);
@@ -117,7 +121,10 @@ async function main() {
     console.log(`✓ Payout chain: ${res.payoutChainId}${res.payoutChainAddress ? ` → ${res.payoutChainAddress}` : " (Arc — settle on Arc)"}`);
   }
   console.log(`\nAdd this MCP server to your agent (Hermes / Claude / any MCP host):\n`);
-  console.log(generic);
+  // Audit LOW (2026-07-04): stdout lands in scrollback and CI logs — print the
+  // MASKED config; the real key lives only in the chmod-600 file above.
+  console.log(renderConfigsMasked(entry));
+  console.log(`\n(Full config with the real key: ${configPath})`);
   console.log(`\nThen ask your agent: "what do you sell?" → "buy <item-id>". Buyers can pay in USDC on Arc or bridge from Base.`);
 }
 

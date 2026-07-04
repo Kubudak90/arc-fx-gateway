@@ -6,13 +6,20 @@ function req(headers: Record<string, string>) {
 }
 
 const savedTrust = process.env.TRUST_XFF_HOPS;
+const savedVercel = process.env.VERCEL;
+const savedRealIp = process.env.TRUST_REAL_IP;
 afterEach(() => {
   if (savedTrust === undefined) delete process.env.TRUST_XFF_HOPS;
   else process.env.TRUST_XFF_HOPS = savedTrust;
+  if (savedVercel === undefined) delete process.env.VERCEL;
+  else process.env.VERCEL = savedVercel;
+  if (savedRealIp === undefined) delete process.env.TRUST_REAL_IP;
+  else process.env.TRUST_REAL_IP = savedRealIp;
 });
 
 describe("clientIp (L-4 trust boundary)", () => {
-  it("prefers x-vercel-forwarded-for above everything else", () => {
+  it("prefers x-vercel-forwarded-for above everything else when on Vercel", () => {
+    process.env.VERCEL = "1";
     expect(
       clientIp(req({
         "x-vercel-forwarded-for": "198.51.100.7",
@@ -22,7 +29,25 @@ describe("clientIp (L-4 trust boundary)", () => {
     ).toBe("198.51.100.7");
   });
 
-  it("uses x-real-ip when no vercel header is present", () => {
+  it("ignores a spoofed x-vercel-forwarded-for off Vercel (2026-07-04)", () => {
+    delete process.env.VERCEL;
+    expect(
+      clientIp(req({
+        "x-vercel-forwarded-for": "6.6.6.6",
+        "x-forwarded-for": "9.9.9.9, 70.70.70.70",
+      })),
+    ).toBe("70.70.70.70");
+  });
+
+  it("uses x-real-ip on Vercel when no vercel header is present", () => {
+    process.env.VERCEL = "1";
+    expect(clientIp(req({ "x-real-ip": "203.0.113.9" }))).toBe("203.0.113.9");
+  });
+
+  it("ignores x-real-ip off Vercel unless TRUST_REAL_IP=1 (2026-07-04)", () => {
+    delete process.env.VERCEL;
+    expect(clientIp(req({ "x-real-ip": "203.0.113.9" }))).toBe("unknown");
+    process.env.TRUST_REAL_IP = "1";
     expect(clientIp(req({ "x-real-ip": "203.0.113.9" }))).toBe("203.0.113.9");
   });
 

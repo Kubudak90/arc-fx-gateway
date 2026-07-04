@@ -78,24 +78,55 @@ const ACTIONABLE = ["DEPOSITED", "BURN_SENT", "PAYOUT_FAILED", "RECEIVE_SENT"];
 export async function processSettlementsOnce(deps: V2KeeperDeps): Promise<void> {
   const clients = buildChainClients(deps.account, deps.rpcFor);
   const log = deps.log ?? (() => {});
-  const { rows } = await deps.pool.query<Row>(
-    `SELECT invoice_ref, escrow_id, path, escrow_domain, payout_domain, state, burn_tx
-       FROM settlements WHERE state = ANY($1) AND escrow_id IS NOT NULL`,
-    [ACTIONABLE],
-  );
-  for (const r of rows) {
-    try {
-      await processRow(r, clients, deps, log);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      log(`v2-keeper ${r.invoice_ref} (${r.state}): ${msg}`);
-      await deps.pool.query(`UPDATE settlements SET last_error=$2, updated_at=now() WHERE invoice_ref=$1`, [r.invoice_ref, msg]);
+  // Audit LOW (2026-07-04): the drain had no lease — a second keeper instance
+  // would race the same rows into duplicate settles / nonce collisions. An
+  // advisory lock held on a dedicated connection serializes whole passes; it
+  // auto-releases if the process dies. Row-level SKIP LOCKED is wrong here:
+  // rows are processed across multi-second on-chain calls, far too long to
+  // hold row locks in one transaction.
+  const lockConn = await deps.pool.connect();
+  try {
+    const { rows: [lock] } = await lockConn.query<{ ok: boolean }>(
+      `SELECT pg_try_advisory_lock(hashtext('arcora_v2_keeper')) AS ok`,
+    );
+    if (!lock?.ok) {
+      log("v2-keeper: another instance holds the keeper lock, skipping pass");
+      return;
     }
+    const { rows } = await deps.pool.query<Row>(
+      `SELECT invoice_ref, escrow_id, path, escrow_domain, payout_domain, state, burn_tx
+         FROM settlements WHERE state = ANY($1) AND escrow_id IS NOT NULL`,
+      [ACTIONABLE],
+    );
+    for (const r of rows) {
+      try {
+        await processRow(r, clients, deps, log);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        log(`v2-keeper ${r.invoice_ref} (${r.state}): ${msg}`);
+        await deps.pool.query(`UPDATE settlements SET last_error=$2, updated_at=now() WHERE invoice_ref=$1`, [r.invoice_ref, msg]);
+      }
+    }
+  } finally {
+    // Unlock on the SAME connection that took the lock (advisory locks are
+    // session-scoped), then hand it back to the pool.
+    await lockConn.query(`SELECT pg_advisory_unlock(hashtext('arcora_v2_keeper'))`).catch(() => {});
+    lockConn.release();
   }
 }
 
+// Audit LOW (2026-07-04): column names are interpolated into SQL, so pin them
+// to an allowlist like run.ts's CROSSCHAIN_MARK_COLUMNS — a caller typo or a
+// future refactor must fail loudly, not become an identifier injection.
+const SETTLEMENT_SET_COLUMNS: ReadonlySet<string> = new Set([
+  "settle_tx", "burn_tx", "receive_tx", "recover_tx", "cctp_attestation", "path",
+]);
+
 async function setState(deps: V2KeeperDeps, ref: Hex, state: string, extra: Record<string, unknown> = {}): Promise<void> {
   const cols = Object.keys(extra);
+  for (const c of cols) {
+    if (!SETTLEMENT_SET_COLUMNS.has(c)) throw new Error(`setState: column not allowlisted: ${c}`);
+  }
   const sets = ["state=$2", "updated_at=now()", ...cols.map((c, i) => `${c}=$${i + 3}`)].join(", ");
   await deps.pool.query(`UPDATE settlements SET ${sets} WHERE invoice_ref=$1`, [ref, state, ...cols.map((c) => extra[c])]);
 }

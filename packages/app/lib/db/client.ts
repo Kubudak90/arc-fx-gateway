@@ -54,7 +54,10 @@ export function buildPoolConfig(): { connectionString?: string; ssl?: SslConfig 
       ssl: { rejectUnauthorized: true },
     };
   } catch {
-    return { connectionString: raw };
+    // Audit LOW (2026-07-04): fail closed — an unparseable POSTGRES_URL must
+    // not silently downgrade to plaintext. Anyone needing sslmode=disable has
+    // a parseable URL and never reaches this branch.
+    return { connectionString: raw, ssl: { rejectUnauthorized: true } };
   }
 }
 

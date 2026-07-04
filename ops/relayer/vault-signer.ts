@@ -63,6 +63,12 @@ function assertVaultUrlSafe(vaultUrl: string): void {
   if (u.protocol === "http:" && u.hostname !== "127.0.0.1" && u.hostname !== "localhost") {
     throw new Error(`vault-signer: refusing plaintext HTTP to non-loopback Vault (${u.hostname}); use https`);
   }
+  // Audit LOW (2026-07-04): the deployed Vault is https even on loopback, so
+  // an http:// loopback URL in prod is config drift silently downgrading key
+  // transit. Dev-mode Vault (plain http) must opt in explicitly.
+  if (u.protocol === "http:" && process.env.VAULT_ALLOW_HTTP_LOOPBACK !== "1") {
+    throw new Error("vault-signer: plaintext HTTP to loopback Vault requires VAULT_ALLOW_HTTP_LOOPBACK=1 (dev only); the deployed Vault is https");
+  }
 }
 
 // Audit 2026-05-24 H-1: Vault error response bodies can reference the

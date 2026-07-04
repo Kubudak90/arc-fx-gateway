@@ -53,11 +53,12 @@ describe("buildPoolConfig", () => {
     expect(buildPoolConfig().ssl).toEqual({ rejectUnauthorized: true });
   });
 
-  it("falls back to the raw URL when the connection string isn't a valid URL", () => {
-    // Pool() will surface the eventual parse error; we just don't crash here.
+  it("fails CLOSED (verified TLS) when the connection string isn't a valid URL (2026-07-04)", () => {
+    // Pool() will surface the eventual parse error; until then the config must
+    // not silently downgrade to plaintext.
     process.env.POSTGRES_URL = "not a url";
     const cfg = buildPoolConfig();
     expect(cfg.connectionString).toBe("not a url");
-    expect(cfg.ssl).toBeUndefined();
+    expect(cfg.ssl).toEqual({ rejectUnauthorized: true });
   });
 });

@@ -145,8 +145,10 @@ export function randomNonce(): bigint {
   if (typeof globalThis.crypto?.getRandomValues === "function") {
     globalThis.crypto.getRandomValues(bytes);
   } else {
-    // Fall back to Math.random — fine for testing, never use in production.
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    // Audit LOW (2026-07-04): never degrade to Math.random — a predictable
+    // Permit2 nonce is guessable. Every supported runtime (browsers, Node 18+)
+    // has WebCrypto; anything else must fail loudly.
+    throw new Error("randomNonce: WebCrypto unavailable — cannot generate a secure nonce");
   }
   let n = 0n;
   for (const b of bytes) n = (n << 8n) | BigInt(b);

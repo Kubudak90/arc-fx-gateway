@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { defineChain } from "viem";
 
 export const BASE_URL = "https://arcorapay.xyz";
+/** Pinned into generated MCP configs (Audit LOW 2026-07-04): the config runs
+ * `npx -y` with the merchant secret in env, so it must resolve an EXACT
+ * version, not whatever latest is. Kept in sync with package.json by test. */
+export const PKG_VERSION = "0.1.4";
 /** Default merchant key location. onboard/serve/refund all agree on this path. */
 export const MERCHANT_KEYFILE = join(homedir(), ".arcora", "merchant.key");
 export const ARC_RPC = "https://rpc.testnet.arc.network";

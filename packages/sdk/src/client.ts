@@ -26,7 +26,26 @@ function isHttp(u: string): boolean {
 }
 
 function resolveBaseUrl(opts: InitOptions): string {
-  return opts.baseUrl ?? ENV_BASE_URL[opts.environment ?? "testnet"];
+  const base = opts.baseUrl ?? ENV_BASE_URL[opts.environment ?? "testnet"];
+  // Audit LOW (2026-07-04): every request attaches the API key to whatever
+  // this resolves to — refuse cleartext transport for a SECRET key so a
+  // poisoned/typo'd baseUrl can't exfiltrate it. Loopback stays allowed for
+  // local dev; a malformed URL falls through to fetch's own error path.
+  try {
+    const u = new URL(base);
+    if (
+      u.protocol === "http:" && opts.apiKey?.startsWith("ak_")
+      && u.hostname !== "localhost" && u.hostname !== "127.0.0.1"
+    ) {
+      throw new ArcoraError(
+        "INSECURE_BASE_URL",
+        `refusing to send a secret key (ak_…) over plaintext http to ${u.hostname}; use https`,
+      );
+    }
+  } catch (e) {
+    if (e instanceof ArcoraError) throw e;
+  }
+  return base;
 }
 
 // AFG-019 (2026-06-06): two key classes. A publishable `pk_live_` key is

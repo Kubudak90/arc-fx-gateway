@@ -20,6 +20,11 @@ import { vaultSigner } from "./vault-signer.js";
 const enabled = process.env.VAULT_DEV === "1";
 const itOnDev = enabled ? it : it.skip;
 
+// 2026-07-04: plaintext http to loopback Vault is now dev-opt-in only; the
+// unit tests below all use http://127.0.0.1, so opt the whole file in. The
+// refusal itself is asserted explicitly in its own test.
+process.env.VAULT_ALLOW_HTTP_LOOPBACK = "1";
+
 // ---------------------------------------------------------------------------
 // Unit tests — fetch is mocked, no live Vault needed
 // ---------------------------------------------------------------------------
@@ -79,7 +84,25 @@ describe("vaultSigner (unit, mocked fetch)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("allows plaintext HTTP to localhost (loopback same-box Vault)", async () => {
+  it("refuses plaintext HTTP even to loopback without VAULT_ALLOW_HTTP_LOOPBACK=1 (2026-07-04)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    delete process.env.VAULT_ALLOW_HTTP_LOOPBACK;
+    try {
+      await expect(vaultSigner({
+        vaultUrl: "http://127.0.0.1:8200",
+        roleId:   "role-id",
+        secretId: "secret-id",
+        kvPath:   "secret/data/relayer-v10",
+        kvField:  "privateKey",
+      })).rejects.toThrow(/VAULT_ALLOW_HTTP_LOOPBACK/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      process.env.VAULT_ALLOW_HTTP_LOOPBACK = "1";
+    }
+  });
+
+  it("allows plaintext HTTP to localhost (loopback same-box Vault, dev opt-in)", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
         ok: true,

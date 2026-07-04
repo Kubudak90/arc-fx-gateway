@@ -44,9 +44,13 @@ export class Commerce {
   }
 
   async getCheckoutStatus(invoiceId: string): Promise<CheckoutStatus> {
+    // Audit LOW (2026-07-04): invoiceId is LLM-supplied — interpolating it raw
+    // is a request-forgery primitive (`../`, `?`, `#` rewrite the URL). Pin to
+    // the invoice-ref shape, matching refund.ts.
+    if (!/^0x[0-9a-fA-F]{64}$/.test(invoiceId)) return "unknown";
     let res: Response;
     try {
-      res = await fetch(`${this.config.baseUrl}/api/invoices/${invoiceId}`);
+      res = await fetch(`${this.config.baseUrl}/api/invoices/${encodeURIComponent(invoiceId)}`);
     } catch (cause) {
       throw new Error("status_lookup_failed:network", { cause });
     }

@@ -76,28 +76,44 @@ describe("POST /api/auth/siwe/nonce — rate limit (M9)", () => {
     expect(counts.get("siwe-nonce:203.0.113.5")).toBeUndefined();
   });
 
-  it("prefers x-vercel-forwarded-for over a spoofed x-forwarded-for (L-4)", async () => {
-    const req = new Request("http://localhost/api/auth/siwe/nonce", {
-      method: "POST",
-      headers: {
-        "x-vercel-forwarded-for": "198.51.100.7",
-        "x-forwarded-for": "1.1.1.1, 198.51.100.7",
-        origin: SAME_ORIGIN,
-      },
-    });
-    const res = await POST(req as never);
-    expect(res.status).toBe(200);
-    expect(counts.get("siwe-nonce:198.51.100.7")).toBe(1);
+  it("prefers x-vercel-forwarded-for over a spoofed x-forwarded-for (L-4, on Vercel)", async () => {
+    // 2026-07-04: the vercel header is only honoured ON Vercel, and the XFF
+    // rightmost hop deliberately DIFFERS so this asserts the preference for
+    // real (it used to pass with both values equal, proving nothing).
+    process.env.VERCEL = "1";
+    try {
+      const req = new Request("http://localhost/api/auth/siwe/nonce", {
+        method: "POST",
+        headers: {
+          "x-vercel-forwarded-for": "198.51.100.7",
+          "x-forwarded-for": "1.1.1.1, 203.0.113.99",
+          origin: SAME_ORIGIN,
+        },
+      });
+      const res = await POST(req as never);
+      expect(res.status).toBe(200);
+      expect(counts.get("siwe-nonce:198.51.100.7")).toBe(1);
+      expect(counts.get("siwe-nonce:203.0.113.99")).toBeUndefined();
+    } finally {
+      delete process.env.VERCEL;
+    }
   });
 
-  it("falls back to x-real-ip when x-forwarded-for is missing", async () => {
-    const req = new Request("http://localhost/api/auth/siwe/nonce", {
-      method: "POST",
-      headers: { "x-real-ip": "198.51.100.10", origin: SAME_ORIGIN },
-    });
-    const res = await POST(req as never);
-    expect(res.status).toBe(200);
-    expect(counts.get("siwe-nonce:198.51.100.10")).toBe(1);
+  it("falls back to x-real-ip when x-forwarded-for is missing (on Vercel, 2026-07-04)", async () => {
+    // x-real-ip is platform-injected — clientIp only trusts it on Vercel (or
+    // with an explicit TRUST_REAL_IP=1 self-host opt-in).
+    process.env.VERCEL = "1";
+    try {
+      const req = new Request("http://localhost/api/auth/siwe/nonce", {
+        method: "POST",
+        headers: { "x-real-ip": "198.51.100.10", origin: SAME_ORIGIN },
+      });
+      const res = await POST(req as never);
+      expect(res.status).toBe(200);
+      expect(counts.get("siwe-nonce:198.51.100.10")).toBe(1);
+    } finally {
+      delete process.env.VERCEL;
+    }
   });
 
   it("rejects a request with neither Origin nor Referer with 403 (CRIT-1 fail-closed)", async () => {

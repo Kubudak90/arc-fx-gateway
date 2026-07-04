@@ -34,3 +34,17 @@ export const GATEWAY_ADDRESS: Address =
 
 // Keep GATEWAY alias for call sites that haven't migrated yet.
 export const GATEWAY = GATEWAY_ADDRESS;
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+// 2026-06-18 prod outage: Vercel had GATEWAY_ADDRESS="" (empty string), which
+// `??` does not fall through, so invoices anchored to the zero address — the
+// tx to 0x0 no-ops without reverting, the handler saw a "successful" receipt,
+// and no on-chain invoice existed anywhere. On-chain write paths must resolve
+// the gateway through this guard instead of trusting the module constant.
+export function requireGatewayAddress(): Address {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(GATEWAY_ADDRESS) || GATEWAY_ADDRESS.toLowerCase() === ZERO_ADDRESS) {
+    throw new Error("gateway_unconfigured: GATEWAY_ADDRESS env is unset, empty, or the zero address");
+  }
+  return GATEWAY_ADDRESS;
+}

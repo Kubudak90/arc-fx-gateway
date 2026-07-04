@@ -3,7 +3,7 @@ import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { classifyKey, lookupMerchantByApiKey, lookupMerchantByPublishableKey } from "@/lib/auth/apikey";
 import { GATEWAY_ABI } from "@/lib/chain/gateway-abi";
-import { GATEWAY, getServerWalletClient, publicClient } from "@/lib/chain/client";
+import { getServerWalletClient, publicClient, requireGatewayAddress } from "@/lib/chain/client";
 import { db } from "@/lib/db/client";
 import { invoices, merchants } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -233,8 +233,14 @@ export async function POST(req: NextRequest) {
   }
 
   // All invoices route to GATEWAY — the active custody-escrow gateway
-  // (lib/chain/client.ts reads GATEWAY_ADDRESS from env).
-  const targetGateway: Address = GATEWAY;
+  // (lib/chain/client.ts reads GATEWAY_ADDRESS from env). Fail closed when
+  // the env is unset/empty/zero instead of anchoring to 0x0 (2026-06-18).
+  let targetGateway: Address;
+  try {
+    targetGateway = requireGatewayAddress();
+  } catch {
+    return corsResponse({ error: "gateway_unconfigured" }, { status: 503 });
+  }
 
   // Audit pass 4 (2026-05-04, finding #8): we used to screen
   // `merchant.address` (the identity wallet) but V9 settles to

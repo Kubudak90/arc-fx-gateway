@@ -26,6 +26,7 @@ vi.mock("@/lib/chain/client", () => ({
   getServerWalletClient: vi.fn(),
   GATEWAY: "0xgw",
   POOL: "0xpool",
+  requireGatewayAddress: vi.fn(() => "0xEaE914D53B2895c832dA83419a7687eF7D1d0142"),
 }));
 // In tests we don't want to hit DNS for assertSafePublicUrl. We pass through
 // real assertOriginAllowed (it's a pure string check) but stub the network call.
@@ -107,6 +108,32 @@ describe("POST /api/invoices", () => {
     expect(body.invoiceId).toMatch(/^0x[0-9a-f]{64}$/);
     expect(body.url).toContain(body.invoiceId);
     expect(writeContract).toHaveBeenCalled();
+  });
+
+  // 2026-06-18 outage: GATEWAY_ADDRESS="" anchored invoices to the zero
+  // address; the tx no-oped "successfully" and no on-chain invoice existed.
+  it("returns 503 gateway_unconfigured and never mints when the gateway env is unset/zero", async () => {
+    const apikey = await import("@/lib/auth/apikey");
+    (apikey.lookupMerchantByApiKey as any).mockResolvedValue({
+      id: "00000000-0000-0000-0000-000000000001",
+      address: "0x1111111111111111111111111111111111111111",
+      payoutToken: "0x2222222222222222222222222222222222222222",
+      allowedOrigins: ["https://merchant.example"],
+    });
+    const chain = await import("@/lib/chain/client");
+    (chain.requireGatewayAddress as any).mockImplementationOnce(() => {
+      throw new Error("gateway_unconfigured");
+    });
+    const writeContract = vi.fn();
+    (chain.getServerWalletClient as any).mockResolvedValue({ writeContract });
+
+    const res = await POST(makeReq(
+      { amountUsdc: 1, payInToken: "USDC", successUrl: "https://merchant.example/ok" },
+      { "X-Arcora-Api-Key": "ak_live_good" }
+    ));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("gateway_unconfigured");
+    expect(writeContract).not.toHaveBeenCalled();
   });
 
   it("blocks invoice creation with 403 when merchant payout is sanctioned", async () => {

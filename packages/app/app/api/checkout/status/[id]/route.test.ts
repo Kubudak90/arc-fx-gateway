@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const SUBMISSION_ID = "11111111-2222-3333-4444-555555555555";
+// Must be a valid v4 UUID — the route rejects non-v4 ids with 404 before any DB
+// lookup (UUID_RE guard in route.ts). Group 3 starts with 4, group 4 with 8/9/a/b.
+const SUBMISSION_ID = "11111111-2222-4333-8444-555555555555";
 let queueRows: unknown[] = [];
 let invoiceRows: unknown[] = [];
 let selectCallCount = 0;

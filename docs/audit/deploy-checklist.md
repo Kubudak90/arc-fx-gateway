@@ -72,6 +72,13 @@ forge verify-contract \
 - [ ] `packages/contracts/deployments/arc-testnet.json` `current` block updated (address, `deployedAt`, `deployTx`, `label`, `auditFixesIncluded`)
 - [ ] First token whitelist tx if needed:
       `cast send <gateway> "setTokenSupport(address,bool)" <usdc> true`
+  - [ ] **Exact-transfer-only gate (Audit M3):** confirm the token is
+        exact-transfer — NOT fee-on-transfer, NOT rebasing, no transfer hooks —
+        BEFORE whitelisting. The gateway records `escrow.amount = grossPayout`
+        without measuring the received balance, so a fee-on-transfer/rebasing
+        token over-states escrow and strands funds (proven in
+        `test/gateway/FeeOnTransferPolicy.t.sol`). USDC/EURC qualify; review any
+        new token against this before every `setTokenSupport` tx.
 - [ ] Restart VPS daemons: `systemctl restart arcora-{indexer,relayer,webhooks}`
 - [ ] Indexer caught up on the new address — `indexer_state.last_processed_block` advancing
 - [ ] Smoke pay through `arcorapay.xyz/i/<id>` end-to-end (USDC → USDC at minimum)

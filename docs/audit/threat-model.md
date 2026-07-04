@@ -126,7 +126,7 @@ cannot drain protocol fees; cannot redirect payouts).
 
 | # | Threat | Mitigation |
 |---|---|---|
-| E1 | Whitelisted token has rebase / fee-on-transfer | Whitelist policy: only non-rebasing, non-fee-on-transfer tokens (USDC, EURC, USDT, USDe, DAI, PYUSD all qualify). Documented assumption — review on every new whitelist tx. `withdrawFees` is `nonReentrant` (audit-fix #27) for future-proofing |
+| E1 | Whitelisted token has rebase / fee-on-transfer | Whitelist policy: only non-rebasing, non-fee-on-transfer tokens (USDC, EURC, USDT, USDe, DAI, PYUSD all qualify). Documented assumption — review on every new whitelist tx (Audit M3 adds an explicit gate to `deploy-checklist.md` §4 and a regression guard `test/gateway/FeeOnTransferPolicy.t.sol` proving why: the gateway records `grossPayout` without measuring the received balance). `withdrawFees` is `nonReentrant` (audit-fix #27) for future-proofing |
 | E2 | Token blacklists the gateway | Funds frozen for that token. Out of contract scope; admin runbook responds with pause + investigation |
 | E3 | Token contract upgraded to malicious behaviour | Inherent to most stables (USDC included). Documented assumption |
 
